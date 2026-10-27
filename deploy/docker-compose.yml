@@ -1,0 +1,56 @@
+# UEM stack. Quick start:  cp deploy/.env.example deploy/.env && make up
+name: uem
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: uem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: uem
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uem"]
+      interval: 5s
+      retries: 20
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://uem:${POSTGRES_PASSWORD}@postgres:5432/uem?sslmode=disable
+      UEM_PUBLIC_URL: ${UEM_PUBLIC_URL:-}
+      UEM_TRUST_PROXY: "true"
+      UEM_ALLOW_SIGNUP: ${UEM_ALLOW_SIGNUP:-true}
+      UEM_SECURE_COOKIES: ${UEM_SECURE_COOKIES:-false}
+
+  web:
+    build:
+      context: ../web
+    restart: unless-stopped
+    environment:
+      UEM_API_URL: http://server:8080
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [server, web]
+    ports:
+      - "${UEM_HTTP_PORT:-80}:80"
+      - "${UEM_HTTPS_PORT:-443}:443"
+    environment:
+      UEM_SITE_ADDRESS: ${UEM_SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  pgdata:
+  caddy_data:

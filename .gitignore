@@ -1,0 +1,8 @@
+bin/
+dist/
+deploy/.env
+web/node_modules/
+web/.next/
+*.log
+/server
+/agent

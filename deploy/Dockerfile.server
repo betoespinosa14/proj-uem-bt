@@ -1,0 +1,24 @@
+# Builds the API server and cross-compiles agent binaries for /downloads.
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+ARG VERSION=0.1.0
+RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /out/uem-server ./cmd/server
+RUN set -e; for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do \
+      os=${t%/*}; arch=${t#*/}; ext=; [ "$os" = windows ] && ext=.exe; \
+      CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -ldflags "-s -w -X main.Version=${VERSION}" \
+        -o /out/dist/uem-agent-$os-$arch$ext ./cmd/agent; \
+    done
+
+# Distroless: no shell or package manager, runs as a non-root user.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/uem-server /usr/local/bin/uem-server
+COPY --from=build /out/dist /app/dist
+WORKDIR /app
+ENV UEM_LISTEN=:8080 UEM_AGENT_DIST=/app/dist
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=3s CMD ["/usr/local/bin/uem-server", "healthcheck"]
+ENTRYPOINT ["/usr/local/bin/uem-server"]

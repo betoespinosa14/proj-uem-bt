@@ -48,8 +48,10 @@ Requirements: Go 1.26+, Node 22+, PostgreSQL 16.
 # API server (migrations run automatically on start)
 DATABASE_URL=postgres://uem:uem@localhost:5432/uem?sslmode=disable UEM_AGENT_DIST=dist go run ./cmd/server
 
-# Web console on :3000; /api is proxied to :8080
-cd web && npm install && npm run dev
+# Web console on :3000; /api is proxied to :8080. `next dev` can't proxy
+# WebSockets, so point the live feed straight at the server and allow the origin:
+#   server: UEM_ALLOWED_ORIGINS=localhost:3000
+cd web && npm install && NEXT_PUBLIC_LIVE_URL=ws://localhost:8080/api/live npm run dev
 
 # Agent in the foreground against the local server
 make build-agents
@@ -88,7 +90,7 @@ The integration tests (`internal/server/api/api_test.go`) start the real HTTP se
 | `internal/agent/collect` | Inventory collectors (`*_linux.go`, `*_darwin.go`, `*_windows.go`) |
 | `internal/agent/exec` | Script runner and device actions |
 | `internal/agent/conn` | Connection loop, command execution, blocklist enforcement |
-| `web/` | Next.js console |
+| `web/` | Next.js console (App Router, TanStack Query, live WebSocket cache sync) |
 | `deploy/` | Dockerfile, docker-compose, Caddyfile |
 | `docs/API.md` | REST/WebSocket API contract |
 

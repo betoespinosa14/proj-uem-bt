@@ -365,6 +365,7 @@ export type UserPatch = { name?: string; role?: Role; password?: string };
 
 export const WEBHOOK_EVENTS = [
   "alert.created",
+  "compliance.violation",
   "device.enrolled",
   "device.offline",
   "command.completed",

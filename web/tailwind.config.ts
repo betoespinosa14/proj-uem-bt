@@ -26,7 +26,7 @@ const config: Config = {
       },
       borderRadius: { lg: "0.625rem", md: "0.5rem", sm: "0.375rem" },
       fontFamily: {
-        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        sans: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", "monospace"],
       },
       keyframes: {

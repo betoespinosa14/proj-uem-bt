@@ -421,6 +421,28 @@ func (s *Store) ListSoftware(ctx context.Context, orgID, id string) ([]Software,
 	})
 }
 
+// ListOrgSoftware returns installed software for every device in an org,
+// keyed by device ID.
+func (s *Store) ListOrgSoftware(ctx context.Context, orgID string) (map[string][]Software, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT device_id, name, version, publisher, source, install_date FROM device_software
+		WHERE org_id = $1 ORDER BY lower(name)`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]Software{}
+	for rows.Next() {
+		var id string
+		var sw Software
+		if err := rows.Scan(&id, &sw.Name, &sw.Version, &sw.Publisher, &sw.Source, &sw.InstallDate); err != nil {
+			return nil, err
+		}
+		out[id] = append(out[id], sw)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListTelemetry(ctx context.Context, orgID, id string, since time.Time) ([]TelemetryPoint, error) {
 	// The org check is on the device row; telemetry has no org column of its own.
 	rows, err := s.Pool.Query(ctx, `

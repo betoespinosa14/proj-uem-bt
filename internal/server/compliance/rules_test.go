@@ -29,7 +29,7 @@ func sampleFacts() Facts {
 			Security: protocol.Security{DiskEncrypted: ptr(false), FirewallEnabled: ptr(true)},
 			Hardware: protocol.Hardware{MemoryTotalBytes: 16 << 30},
 		},
-		Software: []string{"Google Chrome", "Zoom Workplace", "uTorrent"},
+		Software: []store.Software{{Name: "Google Chrome"}, {Name: "Zoom Workplace"}, {Name: "uTorrent"}, {Name: "Steam", Publisher: "Valve"}},
 	}
 }
 
@@ -52,6 +52,9 @@ func TestEvalCondition(t *testing.T) {
 		{"last seen within 60m", cond("agent.last_seen_minutes", "lte", 60), true},
 		{"blocked software present", cond("software.installed", "not_contains", "torrent"), false},
 		{"required software present", cond("software.installed", "contains", "chrome"), true},
+		{"no gambling apps", cond("software.gambling", "none_found", nil), true},
+		{"games present", cond("software.games", "none_found", nil), false},
+		{"games present any_found", cond("software.games", "any_found", nil), true},
 		{"tag present", cond("device.tags", "contains", "finance"), true},
 		{"os family case-insensitive", cond("os.family", "eq", "Windows"), true},
 	}
@@ -136,6 +139,54 @@ func TestCompareVersions(t *testing.T) {
 	for _, c := range cases {
 		if got := CompareVersions(c.a, c.b); got != c.want {
 			t.Errorf("CompareVersions(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestClassify(t *testing.T) {
+	cases := []struct {
+		sw   store.Software
+		want string
+	}{
+		{store.Software{Name: "PokerStars"}, FlagGambling},
+		{store.Software{Name: "bet365"}, FlagGambling},
+		{store.Software{Name: "Some Casino Client"}, FlagGambling},
+		{store.Software{Name: "Steam"}, FlagGame},
+		{store.Software{Name: "Epic Games Launcher"}, FlagGame},
+		{store.Software{Name: "League of Legends", Publisher: "Riot Games, Inc"}, FlagGame},
+		{store.Software{Name: "Diablo IV", Publisher: "Blizzard Entertainment"}, FlagGame},
+		{store.Software{Name: "aisleriot", Source: "dpkg"}, FlagGame},
+		{store.Software{Name: "Chess", Source: "apple"}, ""},
+		{store.Software{Name: "Alphabet Toolkit"}, ""},
+		{store.Software{Name: "Microsoft Visual C++ 2015-2022 Redistributable", Publisher: "Microsoft Corporation"}, ""},
+		{store.Software{Name: "Adobe Photoshop 2024"}, ""},
+		{store.Software{Name: "betaflight-configurator"}, ""},
+	}
+	for _, c := range cases {
+		if got := Classify(c.sw); got != c.want {
+			t.Errorf("Classify(%q) = %q, want %q", c.sw.Name, got, c.want)
+		}
+	}
+}
+
+func TestCategory(t *testing.T) {
+	cases := []struct {
+		sw   store.Software
+		want string
+	}{
+		{store.Software{Name: "Contacts", Source: "apple"}, CategorySystem},
+		{store.Software{Name: "Slack", Source: "mac_app_store"}, CategoryThirdParty},
+		{store.Software{Name: "Adobe Photoshop", Source: "identified_developer"}, CategoryThirdParty},
+		{store.Software{Name: "Microsoft Visual C++ 2015-2022 Redistributable (x64)", Publisher: "Microsoft Corporation", Source: "registry"}, CategorySystem},
+		{store.Software{Name: "Microsoft 365 Apps for enterprise - en-us", Publisher: "Microsoft Corporation", Source: "registry"}, CategoryThirdParty},
+		{store.Software{Name: "HP Support Assistant", Publisher: "HP Inc.", Source: "registry"}, CategoryThirdParty},
+		{store.Software{Name: "procps", Publisher: "Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>", Source: "dpkg"}, CategorySystem},
+		{store.Software{Name: "zabbix-agent", Publisher: "Zabbix Packager <info@zabbix.com>", Source: "dpkg"}, CategoryThirdParty},
+		{store.Software{Name: "NewApp", Source: "unknown"}, CategoryThirdParty},
+	}
+	for _, c := range cases {
+		if got := Category(c.sw); got != c.want {
+			t.Errorf("Category(%q) = %q, want %q", c.sw.Name, got, c.want)
 		}
 	}
 }

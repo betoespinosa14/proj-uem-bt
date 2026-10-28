@@ -7,6 +7,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -289,6 +290,16 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 	if d.ComplianceState != "non_compliant" {
 		t.Fatalf("compliance_state = %q", d.ComplianceState)
 	}
+	resp, err = a.http.Get(a.base + "/api/devices/" + dev.DeviceID + "/software.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 2 || rows[0][1] != "name" || rows[1][1] != "curl" || rows[1][4] != "Third-party" {
+		t.Fatalf("software.csv rows = %v, err = %v", rows, err)
+	}
+
 	var alerts struct{ Items []struct{ Severity string } }
 	a.do("GET", "/api/alerts?status=open", nil, 200, &alerts)
 	if len(alerts.Items) != 1 || alerts.Items[0].Severity != "high" {
@@ -338,5 +349,31 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 	// The DB itself refuses to rewrite history.
 	if _, err := e.store.Pool.Exec(ctx, `UPDATE audit_log SET action = 'x' WHERE org_id = $1`, a.orgID); err == nil {
 		t.Fatal("audit_log update was not blocked")
+	}
+}
+
+func TestDeviceExportCSV(t *testing.T) {
+	e := setup(t)
+	a, b := e.signup(t, "ExportA"), e.signup(t, "ExportB")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	e.enroll(t, tok.Token)
+	b.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	e.enroll(t, tok.Token)
+
+	resp, err := a.http.Get(a.base + "/api/devices/export.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/csv") {
+		t.Fatalf("status %d, content-type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	rows, err := csv.NewReader(resp.Body).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0][0] != "name" || rows[1][1] != "test-host" {
+		t.Fatalf("rows = %v", rows) // header + only org A's device
 	}
 }

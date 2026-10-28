@@ -43,7 +43,11 @@ const OP_LABELS: Record<string, string> = {
   not_contains: "does not contain",
   is_true: "is true",
   is_false: "is false",
+  none_found: "none found",
+  any_found: "any found",
 };
+
+const NO_VALUE_OPS: string[] = ["is_true", "is_false", "none_found", "any_found"];
 
 /** Ready-made rules for the most common baselines. */
 const TEMPLATES: { label: string; rule: Partial<RuleInput> }[] = [
@@ -62,6 +66,17 @@ const TEMPLATES: { label: string; rule: Partial<RuleInput> }[] = [
   {
     label: "At least 10% free disk",
     rule: { name: "Low disk space", severity: "medium", conditions: [{ field: "hardware.disk_free_pct", op: "gte", value: 10 }] },
+  },
+  {
+    label: "No gambling apps or games",
+    rule: {
+      name: "No gambling apps or games",
+      severity: "medium",
+      conditions: [
+        { field: "software.gambling", op: "none_found", value: null },
+        { field: "software.games", op: "none_found", value: null },
+      ],
+    },
   },
 ];
 
@@ -100,7 +115,7 @@ export default function CompliancePage() {
 
   const fieldLabel = (name: string) => fields.data?.items.find((f) => f.field === name)?.label ?? name;
   const describe = (c: Condition) =>
-    `${fieldLabel(c.field)} ${OP_LABELS[c.op] ?? c.op}${c.op === "is_true" || c.op === "is_false" ? "" : ` ${String(c.value)}`}`;
+    `${fieldLabel(c.field)} ${OP_LABELS[c.op] ?? c.op}${NO_VALUE_OPS.includes(c.op) ? "" : ` ${String(c.value)}`}`;
 
   return (
     <>
@@ -271,7 +286,7 @@ function RuleDialog({
         match,
         conditions: conditions.map((c) => {
           const f = fieldOf(c.field);
-          if (c.op === "is_true" || c.op === "is_false") return { ...c, value: null };
+          if (NO_VALUE_OPS.includes(c.op)) return { ...c, value: null };
           return { ...c, value: f.type === "number" ? Number(c.value) : String(c.value ?? "") };
         }),
         os_families: osFamilies,
@@ -348,7 +363,7 @@ function RuleDialog({
           <div className="space-y-2">
             {conditions.map((c, i) => {
               const f = fieldOf(c.field);
-              const needsValue = c.op !== "is_true" && c.op !== "is_false";
+              const needsValue = !NO_VALUE_OPS.includes(c.op);
               return (
                 <div key={i} className="grid items-center gap-2 rounded-md border border-border bg-muted/30 p-2 sm:grid-cols-[1.3fr_1fr_1fr_auto]">
                   <Select

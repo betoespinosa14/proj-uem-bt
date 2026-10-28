@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Monitor, Search, UserPlus } from "lucide-react";
+import { ChevronDown, Download, Monitor, Search, UserPlus } from "lucide-react";
 import { api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
 import { useCan } from "@/lib/session";
 import { formatPct, osLabel, relativeTime } from "@/lib/utils";
@@ -86,11 +86,21 @@ function DevicesView() {
         title="Devices"
         description={devices.data ? `${items.length} device${items.length === 1 ? "" : "s"}${filtered ? " match your filters" : ""}` : "All managed endpoints"}
         actions={
-          can("enrollment.write") && (
-            <Button onClick={() => router.push("/enrollment")}>
-              <UserPlus /> Enroll devices
-            </Button>
-          )
+          <>
+            <a
+              href={api.devices.exportUrl(filters)}
+              download
+              title={filtered ? "Export the devices matching your filters" : "Export all devices"}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4"
+            >
+              <Download /> Export CSV
+            </a>
+            {can("enrollment.write") && (
+              <Button onClick={() => router.push("/enrollment")}>
+                <UserPlus /> Enroll devices
+              </Button>
+            )}
+          </>
         }
       />
 

@@ -252,14 +252,10 @@ func (c *Core) EvaluateDevice(ctx context.Context, orgID, deviceID string) error
 	if err != nil {
 		return err
 	}
-	var software []string
+	var software []store.Software
 	if inv != nil {
-		sw, err := c.Store.ListSoftware(ctx, orgID, deviceID)
-		if err != nil {
+		if software, err = c.Store.ListSoftware(ctx, orgID, deviceID); err != nil {
 			return err
-		}
-		for _, s := range sw {
-			software = append(software, s.Name)
 		}
 	}
 	facts := compliance.Facts{Device: dev, Inventory: inv, Software: software, Now: time.Now()}

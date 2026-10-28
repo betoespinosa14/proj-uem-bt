@@ -89,10 +89,12 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/dashboard", s.dashboard)
 
 			r.Get("/devices", s.listDevices)
+			r.Get("/devices/export.csv", s.exportDevices)
 			r.Get("/devices/{id}", s.getDevice)
 			r.With(s.perm(auth.PermDevicesWrite)).Patch("/devices/{id}", s.updateDevice)
 			r.With(s.perm(auth.PermDevicesWrite)).Delete("/devices/{id}", s.retireDevice)
 			r.Get("/devices/{id}/software", s.deviceSoftware)
+			r.Get("/devices/{id}/software.csv", s.exportSoftware)
 			r.Get("/devices/{id}/telemetry", s.deviceTelemetry)
 			r.Get("/devices/{id}/compliance", s.deviceCompliance)
 			r.Get("/devices/{id}/commands", s.deviceCommands)

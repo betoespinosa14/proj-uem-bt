@@ -16,7 +16,7 @@ import (
 type Facts struct {
 	Device    store.Device
 	Inventory *protocol.Inventory
-	Software  []string // installed application names
+	Software  []store.Software
 	Now       time.Time
 }
 
@@ -28,6 +28,7 @@ const (
 	TString  FieldType = "string"
 	TVersion FieldType = "version"
 	TList    FieldType = "list"
+	TFlagged FieldType = "flagged" // apps matching a built-in catalog
 )
 
 var opsByType = map[FieldType][]string{
@@ -36,6 +37,7 @@ var opsByType = map[FieldType][]string{
 	TString:  {"eq", "neq", "contains", "not_contains"},
 	TVersion: {"version_gte", "version_lt", "eq", "neq"},
 	TList:    {"contains", "not_contains"},
+	TFlagged: {"none_found", "any_found"},
 }
 
 // Field describes one inspectable attribute; Get returns nil when unknown.
@@ -121,7 +123,23 @@ var Fields = []Field{
 		if inv(f) == nil {
 			return nil
 		}
-		return f.Software
+		names := make([]string, len(f.Software))
+		for i, s := range f.Software {
+			names[i] = s.Name
+		}
+		return names
+	}},
+	{Name: "software.gambling", Label: "Gambling apps", Type: TFlagged, Get: func(f Facts) any {
+		if inv(f) == nil {
+			return nil
+		}
+		return flagged(f, FlagGambling)
+	}},
+	{Name: "software.games", Label: "Games", Type: TFlagged, Get: func(f Facts) any {
+		if inv(f) == nil {
+			return nil
+		}
+		return flagged(f, FlagGame)
 	}},
 	{Name: "device.tags", Label: "Device tags", Type: TList, Get: func(f Facts) any { return f.Device.Tags }},
 }
@@ -130,6 +148,11 @@ func init() {
 	for i := range Fields {
 		Fields[i].Ops = opsByType[Fields[i].Type]
 	}
+}
+
+// noValue reports whether an operator takes no operand.
+func noValue(op string) bool {
+	return op == "is_true" || op == "is_false" || op == "none_found" || op == "any_found"
 }
 
 func nonEmpty(s string) any {
@@ -161,7 +184,7 @@ func Validate(conds []store.Condition) error {
 		if !contains(f.Ops, c.Op) {
 			return fmt.Errorf("operator %q is not valid for field %q", c.Op, c.Field)
 		}
-		if c.Op == "is_true" || c.Op == "is_false" {
+		if noValue(c.Op) {
 			continue
 		}
 		if _, err := operand(f.Type, c.Value); err != nil {
@@ -237,6 +260,17 @@ func EvalCondition(c store.Condition, facts Facts) ConditionResult {
 		return desc(actual == true)
 	case "is_false":
 		return desc(actual == false)
+	case "none_found", "any_found":
+		found := actual.([]string)
+		detail := fmt.Sprintf("%s: none found", f.Label)
+		if len(found) > 0 {
+			quoted := make([]string, len(found))
+			for i, n := range found {
+				quoted[i] = strconv.Quote(n)
+			}
+			detail = fmt.Sprintf("%s: found %s", f.Label, strings.Join(quoted, ", "))
+		}
+		return ConditionResult{(len(found) == 0) == (c.Op == "none_found"), detail}
 	}
 	want, err := operand(f.Type, c.Value)
 	if err != nil {

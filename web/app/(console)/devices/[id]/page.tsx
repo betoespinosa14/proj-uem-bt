@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   Cpu,
+  Download,
   HardDrive,
   MemoryStick,
   MoreHorizontal,
@@ -21,6 +22,7 @@ import {
   ShieldCheck,
   Terminal,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory } from "@/lib/api";
 import { useCan } from "@/lib/session";
@@ -367,29 +369,69 @@ function Hardware({ inv }: { inv: Inventory | null }) {
 
 function Software({ id }: { id: string }) {
   const [q, setQ] = useState("");
+  const [category, setCategory] = useState<"all" | "system" | "third_party" | "flagged">("all");
   const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceSoftware(id), queryFn: () => api.devices.software(id) });
+  const all = useMemo(() => data?.items ?? [], [data]);
+  const counts = useMemo(() => ({ system: all.filter((s) => s.category === "system").length, third_party: all.filter((s) => s.category === "third_party").length }), [all]);
+  const gambling = all.filter((s) => s.flag === "gambling");
+  const games = all.filter((s) => s.flag === "game");
   const items = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const all = data?.items ?? [];
-    return needle ? all.filter((s) => `${s.name} ${s.publisher}`.toLowerCase().includes(needle)) : all;
-  }, [data, q]);
+    const inCategory = (s: (typeof all)[number]) => category === "all" || (category === "flagged" ? !!s.flag : s.category === category);
+    return all.filter((s) => inCategory(s) && (!needle || `${s.name} ${s.publisher}`.toLowerCase().includes(needle)));
+  }, [all, q, category]);
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-center gap-3 border-b border-border p-3">
+      {(gambling.length > 0 || games.length > 0) && (
+        <div role="alert" className="flex items-start gap-3 border-b border-warning/25 bg-warning/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div className="space-y-0.5">
+            {gambling.length > 0 && (
+              <p>
+                <span className="font-medium">Gambling apps installed ({gambling.length}):</span> {gambling.map((s) => s.name).join(", ")}
+              </p>
+            )}
+            {games.length > 0 && (
+              <p>
+                <span className="font-medium">Games installed ({games.length}):</span> {games.map((s) => s.name).join(", ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
         <div className="relative max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter software" className="pl-8" aria-label="Filter software" />
         </div>
+        <Segmented
+          value={category}
+          onChange={setCategory}
+          options={[
+            { value: "all", label: `All (${all.length})` },
+            { value: "system", label: `System (${counts.system})` },
+            { value: "third_party", label: `Third-party (${counts.third_party})` },
+            ...(gambling.length + games.length > 0 ? [{ value: "flagged" as const, label: `Flagged (${gambling.length + games.length})` }] : []),
+          ]}
+        />
         <span className="text-sm text-muted-foreground tabular">
           {items.length}
-          {data && items.length !== data.items.length ? ` of ${data.items.length}` : ""} applications
+          {items.length !== all.length ? ` of ${all.length}` : ""} applications
         </span>
+        <a
+          href={api.devices.softwareExportUrl(id, { q: q.trim(), category: category === "all" ? "" : category })}
+          download
+          title={items.length !== all.length ? "Export the applications matching your filters" : "Export all applications"}
+          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4"
+        >
+          <Download /> Export CSV
+        </a>
       </div>
       {isLoading ? (
-        <TableSkeleton rows={8} cols={4} />
+        <TableSkeleton rows={8} cols={5} />
       ) : items.length === 0 ? (
-        <EmptyState icon={Search} title={q ? "No matching software" : "No software reported"} />
+        <EmptyState icon={Search} title={q || category !== "all" ? "No matching software" : "No software reported"} />
       ) : (
         <div className="max-h-[36rem] overflow-auto">
           <Table>
@@ -397,6 +439,7 @@ function Software({ id }: { id: string }) {
               <TR>
                 <TH>Name</TH>
                 <TH>Version</TH>
+                <TH>Type</TH>
                 <TH className="hidden md:table-cell">Publisher</TH>
                 <TH className="hidden sm:table-cell">Source</TH>
                 <TH className="hidden lg:table-cell">Installed</TH>
@@ -405,8 +448,18 @@ function Software({ id }: { id: string }) {
             <TBody>
               {items.slice(0, 1000).map((s, i) => (
                 <TR key={`${s.name}-${s.version}-${i}`}>
-                  <TD className="font-medium">{s.name}</TD>
+                  <TD className="font-medium">
+                    {s.name}
+                    {s.flag && (
+                      <Badge variant={s.flag === "gambling" ? "danger" : "warning"} className="ml-2">
+                        {s.flag === "gambling" ? "Gambling" : "Game"}
+                      </Badge>
+                    )}
+                  </TD>
                   <TD className="font-mono text-xs">{s.version}</TD>
+                  <TD>
+                    <Badge variant={s.category === "system" ? "primary" : "outline"}>{s.category === "system" ? "System" : "Third-party"}</Badge>
+                  </TD>
                   <TD className="hidden max-w-[16rem] truncate text-muted-foreground md:table-cell">{s.publisher}</TD>
                   <TD className="hidden sm:table-cell">
                     <Badge variant="neutral">{s.source}</Badge>

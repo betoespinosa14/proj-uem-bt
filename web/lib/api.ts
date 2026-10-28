@@ -137,6 +137,8 @@ export type SoftwareItem = {
   publisher: string;
   source: string;
   install_date: string | null;
+  category: "system" | "third_party";
+  flag?: "gambling" | "game";
 };
 
 export type TelemetryPoint = {
@@ -260,7 +262,9 @@ export type ConditionOp =
   | "contains"
   | "not_contains"
   | "is_true"
-  | "is_false";
+  | "is_false"
+  | "none_found"
+  | "any_found";
 
 export type Condition = { field: string; op: ConditionOp; value: unknown };
 export type Severity = "low" | "medium" | "high" | "critical";
@@ -526,7 +530,10 @@ export const api = {
     update: (id: string, b: { name?: string; group_id?: string | null; tags?: string[] }) =>
       patch<Device>(`/api/devices/${enc(id)}`, b),
     retire: (id: string) => del<Ok>(`/api/devices/${enc(id)}`),
+    exportUrl: (f: DeviceFilters = {}) => withQuery("/api/devices/export.csv", f),
     software: (id: string) => get<Items<SoftwareItem>>(`/api/devices/${enc(id)}/software`),
+    softwareExportUrl: (id: string, f: { q?: string; category?: string } = {}) =>
+      withQuery(`/api/devices/${enc(id)}/software.csv`, f),
     telemetry: (id: string, hours: number) =>
       get<Items<TelemetryPoint>>(`/api/devices/${enc(id)}/telemetry`, { hours }),
     compliance: (id: string) => get<Items<ComplianceResult>>(`/api/devices/${enc(id)}/compliance`),

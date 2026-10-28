@@ -97,6 +97,8 @@ type Software struct {
 	Publisher   string  `json:"publisher"`
 	Source      string  `json:"source"`
 	InstallDate *string `json:"install_date"`
+	Category    string  `json:"category"`       // set by the API from the compliance catalog
+	Flag        string  `json:"flag,omitempty"` // set by the API from the compliance catalog
 }
 
 type TelemetryPoint struct {

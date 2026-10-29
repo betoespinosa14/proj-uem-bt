@@ -210,8 +210,10 @@ func (c *Core) PolicyFor(ctx context.Context, deviceID string) protocol.Policy {
 	if err != nil {
 		apps = []string{}
 	}
+	usage, _ := c.Store.UsageTrackingForDevice(ctx, deviceID) // off on error
 	return protocol.Policy{
 		BlockedApps:          apps,
+		UsageTracking:        usage,
 		TelemetryIntervalSec: int(c.TelemetryInterval.Seconds()),
 		InventoryIntervalSec: int(c.InventoryInterval.Seconds()),
 	}
@@ -221,6 +223,17 @@ func (c *Core) PushPolicy(ctx context.Context, deviceID string) {
 	frame, err := protocol.Encode(protocol.TypePolicy, c.PolicyFor(ctx, deviceID))
 	if err == nil {
 		c.Hub.SendToAgent(deviceID, frame)
+	}
+}
+
+// PushOrgPolicy re-sends policy to every connected device in an org.
+func (c *Core) PushOrgPolicy(ctx context.Context, orgID string) {
+	ids, err := c.Store.OnlineDeviceIDs(ctx, orgID)
+	if err != nil {
+		return
+	}
+	for _, id := range ids {
+		c.PushPolicy(ctx, id)
 	}
 }
 

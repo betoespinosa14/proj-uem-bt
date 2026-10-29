@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const orgCols = `id, name, server_url, usage_tracking, created_at`
+
 const userCols = `id, org_id, email, name, role, password_hash, created_at, last_login_at`
 
 func scanUser(r pgx.Row) (User, error) {
@@ -21,8 +23,8 @@ func (s *Store) CreateOrgWithOwner(ctx context.Context, orgName, name, email, pa
 	var user User
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx,
-			`INSERT INTO organizations (name) VALUES ($1) RETURNING id, name, server_url, created_at`, orgName,
-		).Scan(&org.ID, &org.Name, &org.ServerURL, &org.CreatedAt)
+			`INSERT INTO organizations (name) VALUES ($1) RETURNING `+orgCols, orgName,
+		).Scan(&org.ID, &org.Name, &org.ServerURL, &org.UsageTracking, &org.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -36,17 +38,18 @@ func (s *Store) CreateOrgWithOwner(ctx context.Context, orgName, name, email, pa
 
 func (s *Store) GetOrg(ctx context.Context, orgID string) (Org, error) {
 	var o Org
-	err := s.Pool.QueryRow(ctx, `SELECT id, name, server_url, created_at FROM organizations WHERE id = $1`, orgID).
-		Scan(&o.ID, &o.Name, &o.ServerURL, &o.CreatedAt)
+	err := s.Pool.QueryRow(ctx, `SELECT `+orgCols+` FROM organizations WHERE id = $1`, orgID).
+		Scan(&o.ID, &o.Name, &o.ServerURL, &o.UsageTracking, &o.CreatedAt)
 	return o, mapErr(err)
 }
 
-func (s *Store) UpdateOrg(ctx context.Context, orgID string, name, serverURL *string) (Org, error) {
+func (s *Store) UpdateOrg(ctx context.Context, orgID string, name, serverURL *string, usageTracking *bool) (Org, error) {
 	var o Org
 	err := s.Pool.QueryRow(ctx, `
-		UPDATE organizations SET name = COALESCE($2, name), server_url = COALESCE($3, server_url)
-		WHERE id = $1 RETURNING id, name, server_url, created_at`, orgID, name, serverURL).
-		Scan(&o.ID, &o.Name, &o.ServerURL, &o.CreatedAt)
+		UPDATE organizations SET name = COALESCE($2, name), server_url = COALESCE($3, server_url),
+			usage_tracking = COALESCE($4, usage_tracking)
+		WHERE id = $1 RETURNING `+orgCols, orgID, name, serverURL, usageTracking).
+		Scan(&o.ID, &o.Name, &o.ServerURL, &o.UsageTracking, &o.CreatedAt)
 	return o, mapErr(err)
 }
 

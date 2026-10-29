@@ -8,10 +8,11 @@ import (
 // The JSON shapes here are the API contract documented in docs/API.md.
 
 type Org struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	ServerURL string    `json:"server_url"`
-	CreatedAt time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	ServerURL     string    `json:"server_url"`
+	UsageTracking bool      `json:"usage_tracking"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type User struct {
@@ -92,13 +93,14 @@ type DeviceDetail struct {
 }
 
 type Software struct {
-	Name        string  `json:"name"`
-	Version     string  `json:"version"`
-	Publisher   string  `json:"publisher"`
-	Source      string  `json:"source"`
-	InstallDate *string `json:"install_date"`
-	Category    string  `json:"category"`       // set by the API from the compliance catalog
-	Flag        string  `json:"flag,omitempty"` // set by the API from the compliance catalog
+	Name        string     `json:"name"`
+	Version     string     `json:"version"`
+	Publisher   string     `json:"publisher"`
+	Source      string     `json:"source"`
+	InstallDate *string    `json:"install_date"`
+	LastUsed    *time.Time `json:"last_used"`      // most recent tracked use by any user
+	Category    string     `json:"category"`       // set by the API from the compliance catalog
+	Flag        string     `json:"flag,omitempty"` // set by the API from the compliance catalog
 }
 
 type TelemetryPoint struct {

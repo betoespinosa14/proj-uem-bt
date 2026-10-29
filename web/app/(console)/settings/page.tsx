@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { ErrorState, KeyValues, PageHeader } from "@/components/common";
 import { toast } from "@/components/toast";
 
@@ -33,6 +34,15 @@ export default function SettingsPage() {
       toast.success("Settings saved");
     },
     onError: (e) => toast.error("Couldn't save settings", e),
+  });
+  const tracking = useMutation({
+    mutationFn: (on: boolean) => api.org.update({ usage_tracking: on }),
+    onSuccess: (o) => {
+      qc.setQueryData(qk.org, o);
+      qc.setQueryData<Me>(qk.me, (m) => (m ? { ...m, org: o } : m));
+      toast.success(o.usage_tracking ? "Usage tracking turned on" : "Usage tracking turned off");
+    },
+    onError: (e) => toast.error("Couldn't change usage tracking", e),
   });
   const editable = can("settings.write");
 
@@ -73,6 +83,32 @@ export default function SettingsPage() {
                 </Button>
               </CardFooter>
             )}
+          </Card>
+          <Card className="lg:order-last">
+            <CardHeader>
+              <CardTitle>Application usage tracking</CardTitle>
+              <CardDescription>
+                Records which installed apps each user runs and for how long, for license and subscription audits. Agents check running apps once a minute while this is on.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isLoading || !org ? (
+                <Skeleton className="h-6 w-40" />
+              ) : (
+                <label htmlFor="usage-tracking" className="flex items-center gap-3 text-sm font-medium">
+                  <Switch
+                    id="usage-tracking"
+                    checked={org.usage_tracking}
+                    disabled={!editable || tracking.isPending}
+                    onCheckedChange={(v) => tracking.mutate(v)}
+                  />
+                  {org.usage_tracking ? "On" : "Off"}
+                </label>
+              )}
+              <p className="text-xs text-muted-foreground">
+                This monitors employee activity. Make sure staff have been informed before turning it on. Changes are recorded in the audit log, and usage data is kept for 400 days.
+              </p>
+            </CardContent>
           </Card>
           <Card>
             <CardHeader>

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  AppWindow,
   Bell,
   CalendarClock,
   FileCode2,
@@ -41,6 +42,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/devices", label: "Devices", icon: Monitor },
+      { href: "/usage", label: "App usage", icon: AppWindow },
       { href: "/groups", label: "Groups", icon: FolderTree },
       { href: "/enrollment", label: "Enrollment", icon: UserPlus },
     ],

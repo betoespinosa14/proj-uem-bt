@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, Apple, Monitor, Server, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, Apple, Download, Monitor, Server, X, type LucideIcon } from "lucide-react";
 import type { CommandStatus, ComplianceState, DeviceStatus, Severity } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 import { cn, osLabel, titleCase } from "@/lib/utils";
@@ -232,5 +232,19 @@ export function StatCard({
       <p className="mt-2 text-2xl font-semibold tracking-tight tabular">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </Card>
+  );
+}
+
+/** A download link styled as an outline button, for CSV exports. */
+export function ExportLink({ href, title, className }: { href: string; title?: string; className?: string }) {
+  return (
+    <a
+      href={href}
+      download
+      title={title}
+      className={cn("inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4", className)}
+    >
+      <Download /> Export CSV
+    </a>
   );
 }

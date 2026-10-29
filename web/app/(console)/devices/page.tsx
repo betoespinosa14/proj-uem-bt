@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Download, Monitor, Search, UserPlus } from "lucide-react";
+import { ChevronDown, Monitor, Search, UserPlus } from "lucide-react";
 import { api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
+import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
 import { formatPct, osLabel, relativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { Select } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
-import { ComplianceBadge, EmptyState, ErrorState, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
+import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
 import { CommandDialog } from "@/components/commands";
 
 const BULK_ACTIONS: { type: CommandType; label: string }[] = [
@@ -25,15 +26,6 @@ const BULK_ACTIONS: { type: CommandType; label: string }[] = [
   { type: "lock", label: "Lock screen" },
   { type: "reboot", label: "Reboot…" },
 ];
-
-function useDebounced<T>(value: T, ms = 250): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
 
 export default function DevicesPage() {
   return (
@@ -87,14 +79,7 @@ function DevicesView() {
         description={devices.data ? `${items.length} device${items.length === 1 ? "" : "s"}${filtered ? " match your filters" : ""}` : "All managed endpoints"}
         actions={
           <>
-            <a
-              href={api.devices.exportUrl(filters)}
-              download
-              title={filtered ? "Export the devices matching your filters" : "Export all devices"}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4"
-            >
-              <Download /> Export CSV
-            </a>
+            <ExportLink href={api.devices.exportUrl(filters)} title={filtered ? "Export the devices matching your filters" : "Export all devices"} />
             {can("enrollment.write") && (
               <Button onClick={() => router.push("/enrollment")}>
                 <UserPlus /> Enroll devices

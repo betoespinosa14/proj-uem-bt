@@ -26,7 +26,7 @@ Every authenticated user can perform the read (GET) endpoints below, except the 
 ```ts
 type Me = { user: User; org: Org; permissions: string[] }
 type User = { id; email; name; role: "owner"|"admin"|"helpdesk"|"auditor"; created_at; last_login_at: string|null }
-type Org = { id; name; server_url: string; created_at }
+type Org = { id; name; server_url: string; usage_tracking: boolean; created_at }
 ```
 
 ## Dashboard
@@ -63,10 +63,14 @@ type Inventory = {
 }
 ```
 - `GET /api/devices?q=&status=&os=&compliance=&group_id=` → `{items: Device[]}`
+- `GET /api/devices/export.csv?q=&status=&os=&compliance=&group_id=` → CSV report of the matching devices, including software count and flagged gambling apps/games. Audit-logged as `devices.export`.
 - `GET /api/devices/{id}` → `DeviceDetail`
 - `PATCH /api/devices/{id}` `{name?, group_id?, tags?}` → `Device` (devices.write)
 - `DELETE /api/devices/{id}` → `{ok:true}` (devices.write). This retires the device.
-- `GET /api/devices/{id}/software` → `{items: {name, version, publisher, source, install_date: string|null}[]}`
+- `GET /api/devices/{id}/software` → `{items: {name, version, publisher, source, install_date: string|null, last_used: string|null, category: "system"|"third_party", flag?: "gambling"|"game"}[]}`. `category` and `flag` are computed by the server (`internal/server/compliance/catalog.go`); `last_used` comes from usage tracking.
+- `GET /api/devices/{id}/software.csv?q=&category=system|third_party|flagged` → CSV of the device's installed software. Audit-logged as `device.software.export`.
+- `GET /api/devices/{id}/usage?days=30|90|365` → `{items: UsageRow[]}`, one row per (app, user), most recently used first.
+- `GET /api/devices/{id}/usage.csv?days=` → CSV of the same. Audit-logged as `device.usage.export`.
 - `GET /api/devices/{id}/telemetry?hours=24` → `{items: {ts, cpu_pct, mem_pct, disk_pct, battery_pct: number|null}[]}`
 - `GET /api/devices/{id}/compliance` → `{items: ComplianceResult[]}`
 - `GET /api/devices/{id}/commands` → `{items: Command[]}`
@@ -104,7 +108,7 @@ type Command = { id; device_id; device_name; type: CommandType; payload: object;
 
 ## Compliance
 ```ts
-type Condition = { field: string; op: "eq"|"neq"|"gt"|"gte"|"lt"|"lte"|"version_gte"|"version_lt"|"contains"|"not_contains"|"is_true"|"is_false"; value: any }
+type Condition = { field: string; op: "eq"|"neq"|"gt"|"gte"|"lt"|"lte"|"version_gte"|"version_lt"|"contains"|"not_contains"|"is_true"|"is_false"|"none_found"|"any_found"; value: any }
 type Rule = { id; name; description; enabled: boolean; severity: "low"|"medium"|"high"|"critical";
   os_families: string[];            // empty = all
   group_id: string|null;            // null = all groups
@@ -112,7 +116,9 @@ type Rule = { id; name; description; enabled: boolean; severity: "low"|"medium"|
   actions: { alert: boolean; webhook: boolean; tag: string|null; command: {type, payload}|null };
   created_at; updated_at; violating_devices: number }
 type ComplianceResult = { rule_id; rule_name; severity; passed: boolean; details: string; evaluated_at }
-type Field = { field: string; label: string; type: "bool"|"number"|"string"|"version"|"list"; ops: string[]; unit?: string }
+type Field = { field: string; label: string; type: "bool"|"number"|"string"|"version"|"list"|"flagged"; ops: string[]; unit?: string }
+// "flagged" fields (software.gambling, software.games) take no value: none_found passes when no installed
+// app matches the built-in catalog, any_found when at least one does. Details list the matching apps.
 ```
 - `GET /api/compliance/fields` → `{items: Field[]}`
 - `GET/POST /api/compliance/rules`, `GET/PATCH/DELETE /api/compliance/rules/{id}` (compliance.write)
@@ -121,6 +127,20 @@ type Field = { field: string; label: string; type: "bool"|"number"|"string"|"ver
 ## Scheduled tasks
 `Task = {id, name, enabled, cron: string, target: {group_id: string|null, device_ids: string[], all: boolean}, action: {type: CommandType|"compliance_check", payload}, last_run_at: string|null, next_run_at: string|null, created_at}`
 - `GET/POST /api/tasks`, `PATCH/DELETE /api/tasks/{id}`, `POST /api/tasks/{id}/run` (tasks.write). Cron uses the standard 5-field format in UTC.
+
+## App usage
+Recorded only while the org's `usage_tracking` is on. Agents check running apps once a minute and report every 5 minutes.
+Usage is per user, per device-local day, and kept for 400 days.
+```ts
+type UsageRow = { app: string; user: string; last_used: string; days_used: number; minutes: number }
+type FleetUsageRow = { device_id; device_name; app: string;
+  user: string;               // "" for an installed app with no use in the period
+  installed: boolean;         // false if used but no longer in the installed list
+  last_used: string|null;     // for unused rows: last use ever recorded (null = never)
+  days_used: number; minutes: number }
+```
+- `GET /api/usage?app=&days=30|90|365&unused=true` → `{items: FleetUsageRow[]}` (up to 10,000 rows). With no `app`, it returns only used rows. With `app`, it also returns devices where the app is installed but unused. `unused=true` returns only installed third-party apps with no use in the period.
+- `GET /api/usage/export.csv` (same params) → CSV. Audit-logged as `usage.export`.
 
 ## Alerts
 `Alert = {id, device_id: string|null, device_name: string|null, rule_id: string|null, severity, title, message, status: "open"|"resolved", created_at, resolved_at: string|null}`
@@ -141,7 +161,7 @@ type Field = { field: string; label: string; type: "bool"|"number"|"string"|"ver
 - `GET/POST /api/webhooks`, `PATCH/DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test`
 
 ## Org settings
-- `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?}` (settings.write)
+- `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?, usage_tracking?}` (settings.write). Changing `usage_tracking` re-pushes policy to online agents.
 
 ## Live updates
 `GET /api/live` is a WebSocket on the same origin that authenticates with the session cookie. The server pushes events as `{type, data}` messages:
@@ -151,5 +171,5 @@ type Field = { field: string; label: string; type: "bool"|"number"|"string"|"ver
 
 ## Agent endpoints (used only by the agent)
 - `POST /api/agent/enroll` `{token, facts: {hostname, os_family, os_name, os_version, arch, serial, agent_version}}` → `{device_id, device_secret}`
-- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`.
+- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking`. The agent sends `usage` messages (`{entries: {date, app, user, minutes, last_seen}[]}`), which the server drops while tracking is off.
 - `GET /downloads/uem-agent-<os>-<arch>[.exe]`, `GET /install.sh`, `GET /install.ps1`

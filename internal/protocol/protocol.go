@@ -19,6 +19,7 @@ const (
 	TypeInventory     = "inventory"
 	TypeCommandResult = "command_result"
 	TypeEvent         = "event"
+	TypeUsage         = "usage"
 )
 
 // Message types sent by the server.
@@ -211,6 +212,9 @@ type Software struct {
 	Publisher   string  `json:"publisher"`
 	Source      string  `json:"source"`
 	InstallDate *string `json:"install_date"`
+	// InstallLocation is used by the agent to attribute running processes
+	// to an app; the server doesn't store it.
+	InstallLocation string `json:"install_location,omitempty"`
 }
 
 // Command is pushed from server to agent.
@@ -253,6 +257,21 @@ type Policy struct {
 	BlockedApps          []string `json:"blocked_apps"`
 	TelemetryIntervalSec int      `json:"telemetry_interval_sec"`
 	InventoryIntervalSec int      `json:"inventory_interval_sec"`
+	UsageTracking        bool     `json:"usage_tracking"`
+}
+
+// Usage reports application running time accumulated since the last report.
+type Usage struct {
+	Entries []UsageEntry `json:"entries"`
+}
+
+// UsageEntry is the minutes an app ran for one user on one (device-local) day.
+type UsageEntry struct {
+	Date     string    `json:"date"` // YYYY-MM-DD
+	App      string    `json:"app"`
+	User     string    `json:"user"`
+	Minutes  int       `json:"minutes"`
+	LastSeen time.Time `json:"last_seen"`
 }
 
 // Event is an agent-originated notable occurrence (e.g. a blocked app was killed).

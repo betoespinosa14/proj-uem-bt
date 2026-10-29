@@ -377,3 +377,89 @@ func TestDeviceExportCSV(t *testing.T) {
 		t.Fatalf("rows = %v", rows) // header + only org A's device
 	}
 }
+
+func TestUsageTracking(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Usage")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	dev := e.enroll(t, tok.Token)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(e.srv.URL, "http") + "/api/agent/ws"
+	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Device " + dev.DeviceID + ":" + dev.DeviceSecret}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	send := func(typ string, v any) {
+		f, _ := protocol.Encode(typ, v)
+		if err := c.Write(ctx, websocket.MessageText, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(protocol.TypeHello, protocol.Hello{ProtocolVersion: protocol.Version, AgentVersion: "test"})
+	send(protocol.TypeInventory, protocol.Inventory{OS: protocol.OSInfo{Family: "macos"}, Software: []protocol.Software{
+		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Contacts", Source: "apple"},
+	}})
+	today := time.Now().Format(time.DateOnly)
+	report := protocol.Usage{Entries: []protocol.UsageEntry{{Date: today, App: "Slack", User: "ana", Minutes: 90, LastSeen: time.Now()}}}
+
+	type row struct {
+		App, User string
+		DaysUsed  int `json:"days_used"`
+		Minutes   int
+		Installed bool
+	}
+	var usage struct{ Items []row }
+	poll := func(path string, want func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+			a.do("GET", path, nil, 200, &usage)
+			if want() {
+				return
+			}
+		}
+		t.Fatalf("%s: %+v", path, usage.Items)
+	}
+
+	// Tracking is off by default: reports are dropped.
+	send(protocol.TypeUsage, report)
+	time.Sleep(300 * time.Millisecond)
+	a.do("GET", "/api/devices/"+dev.DeviceID+"/usage", nil, 200, &usage)
+	if len(usage.Items) != 0 {
+		t.Fatalf("usage recorded while tracking off: %+v", usage.Items)
+	}
+
+	var org struct {
+		UsageTracking bool `json:"usage_tracking"`
+	}
+	a.do("PATCH", "/api/org", map[string]any{"usage_tracking": true}, 200, &org)
+	if !org.UsageTracking {
+		t.Fatal("usage_tracking not enabled")
+	}
+	send(protocol.TypeUsage, report)
+	send(protocol.TypeUsage, report) // accumulates into the same day
+	poll("/api/devices/"+dev.DeviceID+"/usage", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].Minutes == 180 && usage.Items[0].DaysUsed == 1 && usage.Items[0].User == "ana"
+	})
+
+	// Fleet: Slack is used; Zoom is installed but unused; Contacts is a system app.
+	poll("/api/usage?app=slack", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].User == "ana" && usage.Items[0].Installed
+	})
+	poll("/api/usage?unused=true", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].App == "Zoom" && usage.Items[0].User == ""
+	})
+
+	resp, err := a.http.Get(a.base + "/api/usage/export.csv?app=slack")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 2 || rows[1][0] != "Slack" || rows[1][6] != "3.0" {
+		t.Fatalf("usage csv = %v, err = %v", rows, err)
+	}
+}

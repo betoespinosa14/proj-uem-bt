@@ -1009,8 +1009,9 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name      *string `json:"name"`
-		ServerURL *string `json:"server_url"`
+		Name          *string `json:"name"`
+		ServerURL     *string `json:"server_url"`
+		UsageTracking *bool   `json:"usage_tracking"`
 	}
 	if err := decode(r, &req); err != nil {
 		fail(w, err)
@@ -1027,12 +1028,15 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	o, err := s.store.UpdateOrg(r.Context(), orgOf(r), req.Name, req.ServerURL)
+	o, err := s.store.UpdateOrg(r.Context(), orgOf(r), req.Name, req.ServerURL, req.UsageTracking)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	s.record(r, "org.update", "org", o.ID, o)
+	if req.UsageTracking != nil {
+		s.core.PushOrgPolicy(r.Context(), o.ID)
+	}
 	writeJSON(w, http.StatusOK, o)
 }
 

@@ -77,12 +77,13 @@ func software(ctx context.Context) []protocol.Software {
 			version, _, _ := sk.GetStringValue("DisplayVersion")
 			publisher, _, _ := sk.GetStringValue("Publisher")
 			date, _, _ := sk.GetStringValue("InstallDate")
+			location, _, _ := sk.GetStringValue("InstallLocation")
 			sk.Close()
 			if name == "" || sys == 1 || seen[name+version] {
 				continue
 			}
 			seen[name+version] = true
-			sw := protocol.Software{Name: name, Version: version, Publisher: publisher, Source: "registry"}
+			sw := protocol.Software{Name: name, Version: version, Publisher: publisher, Source: "registry", InstallLocation: location}
 			if len(date) == 8 {
 				d := date[:4] + "-" + date[4:6] + "-" + date[6:]
 				sw.InstallDate = &d

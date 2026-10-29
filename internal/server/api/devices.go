@@ -204,15 +204,7 @@ func (s *Server) exportSoftware(w http.ResponseWriter, r *http.Request) {
 	needle := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	category := r.URL.Query().Get("category")
 	s.record(r, "device.software.export", "device", dev.ID, map[string]any{"device_name": dev.Name})
-	name := strings.Map(func(c rune) rune {
-		if c == '"' || c == '/' || c == '\\' || c < ' ' {
-			return '_'
-		}
-		return c
-	}, dev.Name)
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="software-%s-%s.csv"`, name, time.Now().UTC().Format("20060102-150405")))
-	cw := csv.NewWriter(w)
+	cw := csvResponse(w, "software-"+fileSafe(dev.Name))
 	_ = cw.Write([]string{"device", "name", "version", "publisher", "type", "flag", "source", "installed"})
 	for _, sw := range list {
 		switch {

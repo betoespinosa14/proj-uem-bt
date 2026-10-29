@@ -6,11 +6,11 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  Activity,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
   Cpu,
-  Download,
   HardDrive,
   MemoryStick,
   MoreHorizontal,
@@ -24,8 +24,8 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory } from "@/lib/api";
-import { useCan } from "@/lib/session";
+import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory, type UsagePeriod } from "@/lib/api";
+import { useCan, useMe } from "@/lib/session";
 import { formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ import {
   ComplianceBadge,
   EmptyState,
   ErrorState,
+  ExportLink,
   KeyValues,
   OsIcon,
   SeverityBadge,
@@ -164,7 +165,7 @@ export default function DevicePage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          {["overview", "hardware", "software", "network", "security", "compliance", "telemetry", "commands"].map((t) => (
+          {["overview", "hardware", "software", "usage", "network", "security", "compliance", "telemetry", "commands"].map((t) => (
             <TabsTrigger key={t} value={t}>
               {titleCase(t)}
             </TabsTrigger>
@@ -178,6 +179,9 @@ export default function DevicePage() {
         </TabsContent>
         <TabsContent value="software">
           <Software id={id} />
+        </TabsContent>
+        <TabsContent value="usage">
+          <Usage id={id} />
         </TabsContent>
         <TabsContent value="network">
           <Network inv={d.inventory} />
@@ -419,17 +423,14 @@ function Software({ id }: { id: string }) {
           {items.length}
           {items.length !== all.length ? ` of ${all.length}` : ""} applications
         </span>
-        <a
+        <ExportLink
           href={api.devices.softwareExportUrl(id, { q: q.trim(), category: category === "all" ? "" : category })}
-          download
           title={items.length !== all.length ? "Export the applications matching your filters" : "Export all applications"}
-          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4"
-        >
-          <Download /> Export CSV
-        </a>
+          className="ml-auto"
+        />
       </div>
       {isLoading ? (
-        <TableSkeleton rows={8} cols={5} />
+        <TableSkeleton rows={8} cols={6} />
       ) : items.length === 0 ? (
         <EmptyState icon={Search} title={q || category !== "all" ? "No matching software" : "No software reported"} />
       ) : (
@@ -443,6 +444,7 @@ function Software({ id }: { id: string }) {
                 <TH className="hidden md:table-cell">Publisher</TH>
                 <TH className="hidden sm:table-cell">Source</TH>
                 <TH className="hidden lg:table-cell">Installed</TH>
+                <TH className="hidden lg:table-cell">Last used</TH>
               </TR>
             </THead>
             <TBody>
@@ -465,11 +467,80 @@ function Software({ id }: { id: string }) {
                     <Badge variant="neutral">{s.source}</Badge>
                   </TD>
                   <TD className="hidden text-muted-foreground lg:table-cell">{s.install_date ? formatDate(s.install_date) : "—"}</TD>
+                  <TD className="hidden text-muted-foreground lg:table-cell" title={s.last_used ? formatDateTime(s.last_used) : undefined}>
+                    {s.last_used ? relativeTime(s.last_used) : "—"}
+                  </TD>
                 </TR>
               ))}
             </TBody>
           </Table>
           {items.length > 1000 && <p className="p-3 text-center text-xs text-muted-foreground">Showing the first 1,000. Refine the filter to see more.</p>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const USAGE_PERIODS = { "30": "30 days", "90": "90 days", "365": "1 year" } as const;
+
+function Usage({ id }: { id: string }) {
+  const { data: me } = useMe();
+  const [period, setPeriod] = useState<keyof typeof USAGE_PERIODS>("30");
+  const days = Number(period) as UsagePeriod;
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceUsage(id, days), queryFn: () => api.devices.usage(id, days) });
+  if (error) return <ErrorState error={error} onRetry={refetch} />;
+  const items = data?.items ?? [];
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
+        <Segmented value={period} onChange={setPeriod} options={Object.entries(USAGE_PERIODS).map(([v, l]) => ({ value: v as keyof typeof USAGE_PERIODS, label: l }))} />
+        <span className="text-sm text-muted-foreground">Apps run by each user, sampled once a minute.</span>
+        <ExportLink href={api.devices.usageExportUrl(id, days)} className="ml-auto" />
+      </div>
+      {isLoading ? (
+        <TableSkeleton rows={6} cols={5} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Activity}
+          title={me?.org.usage_tracking === false ? "Usage tracking is off" : "No app usage recorded in this period"}
+          description={
+            me?.org.usage_tracking === false ? (
+              <>
+                Turn on application usage tracking in <Link href="/settings" className="underline">Settings</Link> to start recording.
+              </>
+            ) : (
+              "Usage appears a few minutes after an app is opened, once the device runs an agent version that supports usage tracking."
+            )
+          }
+        />
+      ) : (
+        <div className="max-h-[36rem] overflow-auto">
+          <Table>
+            <THead className="sticky top-0 bg-card">
+              <TR>
+                <TH>App</TH>
+                <TH>User</TH>
+                <TH>Last used</TH>
+                <TH className="text-right">Days used</TH>
+                <TH className="text-right">Hours</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {items.map((u) => (
+                <TR key={`${u.app}-${u.user}`}>
+                  <TD className="font-medium">{u.app}</TD>
+                  <TD>{u.user}</TD>
+                  <TD className="text-muted-foreground" title={formatDateTime(u.last_used)}>
+                    {relativeTime(u.last_used)}
+                  </TD>
+                  <TD className="text-right tabular">
+                    {u.days_used} / {days}
+                  </TD>
+                  <TD className="text-right tabular">{(u.minutes / 60).toFixed(1)}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
         </div>
       )}
     </Card>

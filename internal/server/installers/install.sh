@@ -1,6 +1,7 @@
 #!/bin/sh
 # UEM agent installer for Linux and macOS.
 # Usage: curl -fsSL https://uem.example.com/install.sh | sudo sh -s -- --server https://uem.example.com --token enr_xxx
+# Re-running it on an enrolled device upgrades the agent and keeps its identity.
 set -eu
 
 SERVER=""
@@ -16,8 +17,8 @@ done
 [ "$(id -u)" -eq 0 ] || { echo "install.sh must run as root (use sudo)" >&2; exit 1; }
 
 case "$(uname -s)" in
-  Linux)  OS=linux ;;
-  Darwin) OS=darwin ;;
+  Linux)  OS=linux;  CONFIG=/etc/uem-agent/agent.json ;;
+  Darwin) OS=darwin; CONFIG="/Library/Application Support/UEM Agent/agent.json" ;;
   *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 case "$(uname -m)" in
@@ -37,8 +38,13 @@ install -m 0755 "$TMP" "$BIN"
 if "$BIN" status >/dev/null 2>&1; then
   "$BIN" stop >/dev/null 2>&1 || true
 fi
-echo "Enrolling with $SERVER..."
-"$BIN" enroll --server "$SERVER" --token "$TOKEN"
+if [ -f "$CONFIG" ]; then
+  echo "Already enrolled: upgrading the agent and keeping this device's identity."
+  "$BIN" uninstall >/dev/null 2>&1 || true # re-registered below
+else
+  echo "Enrolling with $SERVER..."
+  "$BIN" enroll --server "$SERVER" --token "$TOKEN"
+fi
 "$BIN" install
 "$BIN" start
 echo "UEM agent installed and running."

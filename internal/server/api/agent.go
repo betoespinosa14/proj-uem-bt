@@ -221,6 +221,19 @@ func (s *Server) handleAgentMessage(ctx context.Context, dev store.DeviceAuth, e
 		}
 		s.core.PublishDevice(ctx, dev.OrgID, dev.ID)
 
+	case protocol.TypeUsage:
+		var u protocol.Usage
+		if json.Unmarshal(env.Data, &u) != nil {
+			return
+		}
+		// Drop reports from agents that haven't seen tracking switched off yet.
+		if on, err := s.store.UsageTrackingEnabled(ctx, dev.OrgID); err != nil || !on {
+			return
+		}
+		if err := s.store.RecordUsage(ctx, dev.OrgID, dev.ID, u.Entries); err != nil {
+			log.Error("record usage", "err", err)
+		}
+
 	case protocol.TypeCommandResult:
 		var res protocol.CommandResult
 		if json.Unmarshal(env.Data, &res) != nil {

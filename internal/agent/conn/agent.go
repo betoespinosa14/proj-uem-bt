@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,12 +24,15 @@ import (
 	"github.com/uem/uem/internal/agent/collect"
 	"github.com/uem/uem/internal/agent/config"
 	agentexec "github.com/uem/uem/internal/agent/exec"
+	"github.com/uem/uem/internal/agent/usage"
 	"github.com/uem/uem/internal/protocol"
 )
 
 const (
 	heartbeatInterval = 30 * time.Second
 	blocklistInterval = 15 * time.Second
+	usageSampleEvery  = time.Minute
+	usageReportEvery  = 5 // samples between usage reports
 	maxConcurrentCmds = 4
 	maxPendingResults = 200
 )
@@ -50,6 +54,7 @@ type Agent struct {
 
 	cmdSlots chan struct{}
 	refresh  chan struct{}
+	usage    *usage.Tracker
 }
 
 func New(cfg config.Config, version string, log *slog.Logger) *Agent {
@@ -59,12 +64,14 @@ func New(cfg config.Config, version string, log *slog.Logger) *Agent {
 		seen:     map[string]*protocol.CommandResult{},
 		cmdSlots: make(chan struct{}, maxConcurrentCmds),
 		refresh:  make(chan struct{}, 1),
+		usage:    usage.NewTracker(runtime.GOOS),
 	}
 }
 
 // Run connects and reconnects until ctx is cancelled.
 func (a *Agent) Run(ctx context.Context) {
 	go a.enforceBlocklist(ctx)
+	go a.trackUsage(ctx)
 	backoff := time.Second
 	for {
 		start := time.Now()
@@ -187,7 +194,7 @@ func (a *Agent) readLoop(ctx context.Context, c *websocket.Conn) error {
 				a.mu.Lock()
 				a.policy = p
 				a.mu.Unlock()
-				a.log.Info("policy updated", "blocked_apps", len(p.BlockedApps))
+				a.log.Info("policy updated", "blocked_apps", len(p.BlockedApps), "usage_tracking", p.UsageTracking)
 			}
 		}
 	}
@@ -237,6 +244,7 @@ func (a *Agent) sendInventory(ctx context.Context) {
 		return
 	}
 	a.log.Info("inventory collected", "software", len(inv.Software), "took", time.Since(start).Round(time.Millisecond))
+	a.usage.SetSoftware(inv.Software)
 	a.send(protocol.TypeInventory, inv)
 }
 
@@ -434,6 +442,57 @@ func (a *Agent) enforceBlocklist(ctx context.Context) {
 				Kind: "app_blocked", Message: fmt.Sprintf("Blocked application %q was terminated", name),
 				Details: map[string]any{"process": name, "pid": p.Pid, "user": user},
 			})
+		}
+	}
+}
+
+// trackUsage samples running applications once a minute while the policy
+// enables usage tracking, and reports the accumulated minutes periodically.
+// Undelivered minutes are kept and sent after reconnecting.
+func (a *Agent) trackUsage(ctx context.Context) {
+	t := time.NewTicker(usageSampleEvery)
+	defer t.Stop()
+	samples := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if !a.currentPolicy().UsageTracking {
+			a.usage.Reset()
+			samples = 0
+			continue
+		}
+		procs, err := process.ProcessesWithContext(ctx)
+		if err != nil {
+			continue
+		}
+		sample := make([]usage.Proc, 0, len(procs))
+		for _, p := range procs {
+			exe, err := p.ExeWithContext(ctx)
+			if err != nil || exe == "" {
+				continue
+			}
+			user, _ := p.UsernameWithContext(ctx)
+			uid := int64(-1)
+			if uids, err := p.UidsWithContext(ctx); err == nil && len(uids) > 0 {
+				uid = int64(uids[0])
+			}
+			sample = append(sample, usage.Proc{Exe: exe, User: user, UID: uid})
+		}
+		a.usage.Sample(time.Now(), sample)
+		if samples++; samples < usageReportEvery {
+			continue
+		}
+		samples = 0
+		entries := a.usage.Flush()
+		if len(entries) == 0 {
+			continue
+		}
+		f, err := protocol.Encode(protocol.TypeUsage, protocol.Usage{Entries: entries})
+		if err != nil || !a.sendFrame(f) {
+			a.usage.Restore(entries)
 		}
 	}
 }

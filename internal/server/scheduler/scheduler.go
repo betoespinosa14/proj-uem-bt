@@ -192,6 +192,9 @@ func (s *Scheduler) retention(ctx context.Context) {
 	if err := s.core.Store.PurgeTelemetry(ctx, now.Add(-30*24*time.Hour)); err != nil {
 		slog.Error("purge telemetry", "err", err)
 	}
+	if err := s.core.Store.PurgeUsage(ctx, now.AddDate(0, 0, -400)); err != nil {
+		slog.Error("purge usage", "err", err)
+	}
 	if err := s.core.Store.PurgeExpiredSessions(ctx, now); err != nil {
 		slog.Error("purge sessions", "err", err)
 	}

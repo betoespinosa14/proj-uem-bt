@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download, ScrollText, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronRight, ScrollText, ShieldAlert, ShieldCheck } from "lucide-react";
 import { api, qk, type AuditVerify } from "@/lib/api";
 import { formatDateTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { EmptyState, ErrorState, PageHeader } from "@/components/common";
+import { EmptyState, ErrorState, ExportLink, PageHeader } from "@/components/common";
 import { toast } from "@/components/toast";
 
 const ACTION_PREFIXES = [
@@ -68,13 +68,7 @@ export default function AuditPage() {
             <Button variant="outline" loading={verifyM.isPending} onClick={() => verifyM.mutate()}>
               <ShieldCheck /> Verify integrity
             </Button>
-            <a
-              href={api.audit.exportUrl}
-              download
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4"
-            >
-              <Download /> Export CSV
-            </a>
+            <ExportLink href={api.audit.exportUrl} />
           </>
         }
       />

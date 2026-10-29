@@ -8,11 +8,12 @@ import (
 // The JSON shapes here are the API contract documented in docs/API.md.
 
 type Org struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	ServerURL     string    `json:"server_url"`
-	UsageTracking bool      `json:"usage_tracking"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	ServerURL        string    `json:"server_url"`
+	UsageTracking    bool      `json:"usage_tracking"`
+	IdleThresholdSec int       `json:"idle_threshold_sec"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type User struct {

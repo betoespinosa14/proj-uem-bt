@@ -210,10 +210,11 @@ func (c *Core) PolicyFor(ctx context.Context, deviceID string) protocol.Policy {
 	if err != nil {
 		apps = []string{}
 	}
-	usage, _ := c.Store.UsageTrackingForDevice(ctx, deviceID) // off on error
+	usage, idle, _ := c.Store.UsageSettingsForDevice(ctx, deviceID) // off on error
 	return protocol.Policy{
 		BlockedApps:          apps,
 		UsageTracking:        usage,
+		IdleThresholdSec:     idle,
 		TelemetryIntervalSec: int(c.TelemetryInterval.Seconds()),
 		InventoryIntervalSec: int(c.InventoryInterval.Seconds()),
 	}

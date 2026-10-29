@@ -21,6 +21,7 @@ import (
 	"github.com/uem/uem/internal/agent/collect"
 	"github.com/uem/uem/internal/agent/config"
 	"github.com/uem/uem/internal/agent/conn"
+	"github.com/uem/uem/internal/agent/session"
 	"github.com/uem/uem/internal/protocol"
 )
 
@@ -94,6 +95,14 @@ func main() {
 		os.Exit(2)
 	}
 	cmd := os.Args[1]
+	if cmd == "session-probe" {
+		// Started by the agent service inside a user's session; not for direct use.
+		in, out := session.Stdio()
+		if err := session.RunProbe(in, out); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	cfgPath := fs.String("config", config.DefaultPath(), "config file path")
 	server := fs.String("server", "", "UEM server URL (enroll)")

@@ -24,6 +24,7 @@ import (
 	"github.com/uem/uem/internal/agent/collect"
 	"github.com/uem/uem/internal/agent/config"
 	agentexec "github.com/uem/uem/internal/agent/exec"
+	"github.com/uem/uem/internal/agent/session"
 	"github.com/uem/uem/internal/agent/usage"
 	"github.com/uem/uem/internal/protocol"
 )
@@ -72,6 +73,7 @@ func New(cfg config.Config, version string, log *slog.Logger) *Agent {
 func (a *Agent) Run(ctx context.Context) {
 	go a.enforceBlocklist(ctx)
 	go a.trackUsage(ctx)
+	go a.superviseSessions(ctx)
 	backoff := time.Second
 	for {
 		start := time.Now()
@@ -495,6 +497,21 @@ func (a *Agent) trackUsage(ctx context.Context) {
 			a.usage.Restore(entries)
 		}
 	}
+}
+
+// superviseSessions runs a probe in each interactive user session while
+// usage tracking is on, crediting active time to the front app.
+func (a *Agent) superviseSessions(ctx context.Context) {
+	exe, err := os.Executable()
+	if err != nil {
+		a.log.Warn("active usage disabled: can't locate agent binary", "err", err)
+		return
+	}
+	sup := &session.Supervisor{Exe: exe, Log: a.log, OnSample: func(user string, s session.Sample, at time.Time) {
+		p := a.currentPolicy()
+		a.usage.Active(user, s.AppPath, time.Duration(s.IdleMS)*time.Millisecond, seconds(p.IdleThresholdSec, 2*time.Minute), at)
+	}}
+	sup.Run(ctx, func() bool { return a.currentPolicy().UsageTracking })
 }
 
 // normalizeProc makes "Chrome.exe", "chrome" and "/usr/bin/chrome" compare equal.

@@ -24,9 +24,9 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory, type UsagePeriod } from "@/lib/api";
+import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory, type UsageGroup, type UsagePeriod } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
-import { formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { formatBytes, formatDate, formatHours, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -181,7 +181,7 @@ export default function DevicePage() {
           <Software id={id} />
         </TabsContent>
         <TabsContent value="usage">
-          <Usage id={id} />
+          <Usage id={id} os={d.os_family} />
         </TabsContent>
         <TabsContent value="network">
           <Network inv={d.inventory} />
@@ -482,23 +482,29 @@ function Software({ id }: { id: string }) {
 }
 
 const USAGE_PERIODS = { "30": "30 days", "90": "90 days", "365": "1 year" } as const;
+const USAGE_GROUPS = { app: "By app", app_user: "By app and user" } as const;
 
-function Usage({ id }: { id: string }) {
+function Usage({ id, os }: { id: string; os: string }) {
   const { data: me } = useMe();
   const [period, setPeriod] = useState<keyof typeof USAGE_PERIODS>("30");
+  const [group, setGroup] = useState<UsageGroup>("app");
   const days = Number(period) as UsagePeriod;
-  const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceUsage(id, days), queryFn: () => api.devices.usage(id, days) });
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: qk.deviceUsage(id, days, group),
+    queryFn: () => api.devices.usage(id, days, group),
+  });
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   const items = data?.items ?? [];
+  const noActive = os === "linux";
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
+        <Segmented value={group} onChange={setGroup} options={Object.entries(USAGE_GROUPS).map(([v, l]) => ({ value: v as UsageGroup, label: l }))} />
         <Segmented value={period} onChange={setPeriod} options={Object.entries(USAGE_PERIODS).map(([v, l]) => ({ value: v as keyof typeof USAGE_PERIODS, label: l }))} />
-        <span className="text-sm text-muted-foreground">Apps run by each user, sampled once a minute.</span>
-        <ExportLink href={api.devices.usageExportUrl(id, days)} className="ml-auto" />
+        <ExportLink href={api.devices.usageExportUrl(id, days, group)} className="ml-auto" />
       </div>
       {isLoading ? (
-        <TableSkeleton rows={6} cols={5} />
+        <TableSkeleton rows={6} cols={6} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={Activity}
@@ -519,24 +525,32 @@ function Usage({ id }: { id: string }) {
             <THead className="sticky top-0 bg-card">
               <TR>
                 <TH>App</TH>
-                <TH>User</TH>
-                <TH>Last used</TH>
+                <TH>{group === "app" ? "Users" : "User"}</TH>
+                <TH className="text-right" title="In front while the user was typing or using the mouse">
+                  Active
+                </TH>
+                <TH className="text-right" title="Running, whether or not it was being used">
+                  Open
+                </TH>
                 <TH className="text-right">Days used</TH>
-                <TH className="text-right">Hours</TH>
+                <TH>Last used</TH>
               </TR>
             </THead>
             <TBody>
               {items.map((u) => (
                 <TR key={`${u.app}-${u.user}`}>
                   <TD className="font-medium">{u.app}</TD>
-                  <TD>{u.user}</TD>
-                  <TD className="text-muted-foreground" title={formatDateTime(u.last_used)}>
-                    {relativeTime(u.last_used)}
+                  <TD className={group === "app" ? "tabular" : ""}>{group === "app" ? u.users : u.user}</TD>
+                  <TD className="text-right font-medium tabular" title={noActive ? "Active time isn't measured on Linux" : undefined}>
+                    {noActive ? "—" : formatHours(u.active_seconds)}
                   </TD>
+                  <TD className="text-right tabular text-muted-foreground">{formatHours(u.minutes * 60)}</TD>
                   <TD className="text-right tabular">
                     {u.days_used} / {days}
                   </TD>
-                  <TD className="text-right tabular">{(u.minutes / 60).toFixed(1)}</TD>
+                  <TD className="text-muted-foreground" title={formatDateTime(u.last_used)}>
+                    {relativeTime(u.last_used)}
+                  </TD>
                 </TR>
               ))}
             </TBody>

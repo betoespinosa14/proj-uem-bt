@@ -26,7 +26,7 @@ Every authenticated user can perform the read (GET) endpoints below, except the 
 ```ts
 type Me = { user: User; org: Org; permissions: string[] }
 type User = { id; email; name; role: "owner"|"admin"|"helpdesk"|"auditor"; created_at; last_login_at: string|null }
-type Org = { id; name; server_url: string; usage_tracking: boolean; created_at }
+type Org = { id; name; server_url: string; usage_tracking: boolean; idle_threshold_sec: number; created_at }
 ```
 
 ## Dashboard
@@ -69,8 +69,8 @@ type Inventory = {
 - `DELETE /api/devices/{id}` → `{ok:true}` (devices.write). This retires the device.
 - `GET /api/devices/{id}/software` → `{items: {name, version, publisher, source, install_date: string|null, last_used: string|null, category: "system"|"third_party", flag?: "gambling"|"game"}[]}`. `category` and `flag` are computed by the server (`internal/server/compliance/catalog.go`); `last_used` comes from usage tracking.
 - `GET /api/devices/{id}/software.csv?q=&category=system|third_party|flagged` → CSV of the device's installed software. Audit-logged as `device.software.export`.
-- `GET /api/devices/{id}/usage?days=30|90|365` → `{items: UsageRow[]}`, one row per (app, user), most recently used first.
-- `GET /api/devices/{id}/usage.csv?days=` → CSV of the same. Audit-logged as `device.usage.export`.
+- `GET /api/devices/{id}/usage?days=30|90|365&group=app|app_user` → `{items: UsageRow[]}`, most active first. `group=app` (totals per app across users) leaves `user` empty and sets `users`. The default is `app_user`.
+- `GET /api/devices/{id}/usage.csv?days=&group=` → CSV of the same. Audit-logged as `device.usage.export`.
 - `GET /api/devices/{id}/telemetry?hours=24` → `{items: {ts, cpu_pct, mem_pct, disk_pct, battery_pct: number|null}[]}`
 - `GET /api/devices/{id}/compliance` → `{items: ComplianceResult[]}`
 - `GET /api/devices/{id}/commands` → `{items: Command[]}`
@@ -129,18 +129,27 @@ type Field = { field: string; label: string; type: "bool"|"number"|"string"|"ver
 - `GET/POST /api/tasks`, `PATCH/DELETE /api/tasks/{id}`, `POST /api/tasks/{id}/run` (tasks.write). Cron uses the standard 5-field format in UTC.
 
 ## App usage
-Recorded only while the org's `usage_tracking` is on. Agents check running apps once a minute and report every 5 minutes.
-Usage is per user, per device-local day, and kept for 400 days.
+Recorded only while the org's `usage_tracking` is on, per user, per device-local day, and kept for 400 days.
+- **Open time** (`minutes`): the agent checks running apps once a minute.
+- **Active time** (`active_seconds`): a probe in each user session reports the front app and the input idle time every 5 s. Time counts as active while idle time is below the org's `idle_threshold_sec`, and gaps between samples are capped at 10 s. macOS and Windows only.
+- Agents report every 5 minutes.
 ```ts
-type UsageRow = { app: string; user: string; last_used: string; days_used: number; minutes: number }
+type UsageRow = { app: string; user: string; users: number; last_used: string; days_used: number;
+  minutes: number; active_seconds: number }
 type FleetUsageRow = { device_id; device_name; app: string;
   user: string;               // "" for an installed app with no use in the period
   installed: boolean;         // false if used but no longer in the installed list
   last_used: string|null;     // for unused rows: last use ever recorded (null = never)
-  days_used: number; minutes: number }
+  days_used: number; minutes: number; active_seconds: number }
+type FleetAppRow = { app: string; users: number;
+  devices: number;            // devices it was used on in the period
+  installed_on: number;       // devices it is installed on now
+  last_used: string|null; minutes: number; active_seconds: number }
 ```
-- `GET /api/usage?app=&days=30|90|365&unused=true` → `{items: FleetUsageRow[]}` (up to 10,000 rows). With no `app`, it returns only used rows. With `app`, it also returns devices where the app is installed but unused. `unused=true` returns only installed third-party apps with no use in the period.
-- `GET /api/usage/export.csv` (same params) → CSV. Audit-logged as `usage.export`.
+- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
+  - With no `app`, only used rows are returned. With `app`, devices where the app is installed but unused are included too.
+  - `unused=true` returns only installed third-party apps with no use in the period.
+- `GET /api/usage/export.csv` (same params) → CSV with `active_hours` and `open_hours` columns. Audit-logged as `usage.export`.
 
 ## Alerts
 `Alert = {id, device_id: string|null, device_name: string|null, rule_id: string|null, severity, title, message, status: "open"|"resolved", created_at, resolved_at: string|null}`
@@ -161,7 +170,7 @@ type FleetUsageRow = { device_id; device_name; app: string;
 - `GET/POST /api/webhooks`, `PATCH/DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test`
 
 ## Org settings
-- `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?, usage_tracking?}` (settings.write). Changing `usage_tracking` re-pushes policy to online agents.
+- `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?, usage_tracking?, idle_threshold_sec? (60–900)}` (settings.write). Changing `usage_tracking` or `idle_threshold_sec` re-pushes policy to online agents.
 
 ## Live updates
 `GET /api/live` is a WebSocket on the same origin that authenticates with the session cookie. The server pushes events as `{type, data}` messages:
@@ -171,5 +180,5 @@ type FleetUsageRow = { device_id; device_name; app: string;
 
 ## Agent endpoints (used only by the agent)
 - `POST /api/agent/enroll` `{token, facts: {hostname, os_family, os_name, os_version, arch, serial, agent_version}}` → `{device_id, device_secret}`
-- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking`. The agent sends `usage` messages (`{entries: {date, app, user, minutes, last_seen}[]}`), which the server drops while tracking is off.
+- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking` and `idle_threshold_sec`. The agent sends `usage` messages (`{entries: {date, app, user, minutes, active_seconds, last_seen}[]}`), which the server drops while tracking is off.
 - `GET /downloads/uem-agent-<os>-<arch>[.exe]`, `GET /install.sh`, `GET /install.ps1`

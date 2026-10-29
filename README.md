@@ -104,7 +104,7 @@ The integration tests (`internal/server/api/api_test.go`) start the real HTTP se
 | **Telemetry** | CPU, memory, disk and battery every 60 s, kept for 30 days and charted in the console. |
 | **Remote commands** | Run scripts (bash, sh, zsh, PowerShell, cmd) with timeouts, exit codes and captured output. Also reboot, shutdown, lock, show a message, refresh inventory and uninstall the agent. Commands queue while a device is offline and are delivered when it reconnects, and redelivery never re-runs a command. Bulk actions are supported. |
 | **Software insights** | Installed apps are labelled System or Third-party. Gambling apps and games are flagged from a built-in catalog, and a ready-made compliance rule can raise alerts for them. |
-| **App usage tracking** | Opt-in per organization. Records which installed apps each user runs, with last used, days used and hours, for license and subscription audits. Shown per device (Usage tab) and fleet-wide (App usage page), and kept for 400 days. |
+| **App usage tracking** | Opt-in per organization, for license and subscription audits. Records **active time** (the app is in front and the user is typing or using the mouse, within a configurable idle threshold of 1–15 minutes) and **open time** (the app is running), per user and app. Shown per device (Usage tab) and fleet-wide (App usage page), totalled per app across users or broken down by user, with how many devices each app is used on versus installed on. Kept for 400 days. |
 | **Reports** | CSV exports of the device list, a device's installed software, a device's app usage, and fleet app usage. Each one respects the current filters and is audit-logged. |
 | **Script library** | Reusable scripts. A command records the exact script body that ran. |
 | **Compliance engine** | Rules built from 17 fields (encryption, firewall, OS/agent version, check-in age, free disk, RAM, battery health, SSID, installed software, gambling apps, games, tags) combined with all/any. Rules can be scoped by OS and group. When a check can't be verified, it counts as failed. |
@@ -130,7 +130,8 @@ The integration tests (`internal/server/api/api_test.go`) start the real HTTP se
 - The Windows and macOS collectors are cross-compiled and reviewed, but in this milestone they have only been *executed* on Linux. Validate them on real Windows and macOS hosts before relying on them.
 - Some posture data can't be read by a system service: screen-lock state on macOS and Linux, and Wi-Fi SSID on recent macOS (redacted). These fields report unknown.
 - Login rate limits and the live-update hub are in-memory, so run a single server replica (or add a shared store) for now.
-- App usage counts the time an app is *running*, not the time it is in the foreground. On macOS only an app's main process counts; widgets and background helpers don't. Menu-bar and login-item apps still count while they run, so use *days used* as well as hours.
+- Active time comes from a small probe (`uem-agent session-probe`) that the agent starts in each interactive session: the console user on macOS, and the console and Remote Desktop sessions on Windows. It reads only the front app and the time since the last input. It is not available on Linux.
+- Open time counts the time an app is *running*. On macOS only an app's main process counts; widgets and background helpers don't. Menu-bar and login-item apps still count while they run, so active time is the better measure of real use.
 - To upgrade an agent, re-run its install command. An enrolled device keeps its identity. Agents don't update themselves yet.
 - **Lock** on macOS sleeps the display, which locks only if "require password after sleep" is enabled. On Windows it disconnects the console session.
 

@@ -57,6 +57,14 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${m}m`;
 }
 
+/** Usage time as hours and minutes ("163h 20m", "45m"), never days. */
+export function formatHours(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return seconds > 0 && m === 0 ? "<1m" : `${m}m`;
+}
+
 export function formatPct(n: number | null | undefined, digits = 0): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return `${n.toFixed(digits)}%`;

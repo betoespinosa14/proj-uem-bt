@@ -1009,9 +1009,10 @@ func (s *Server) getOrg(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name          *string `json:"name"`
-		ServerURL     *string `json:"server_url"`
-		UsageTracking *bool   `json:"usage_tracking"`
+		Name             *string `json:"name"`
+		ServerURL        *string `json:"server_url"`
+		UsageTracking    *bool   `json:"usage_tracking"`
+		IdleThresholdSec *int    `json:"idle_threshold_sec"`
 	}
 	if err := decode(r, &req); err != nil {
 		fail(w, err)
@@ -1028,15 +1029,20 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	o, err := s.store.UpdateOrg(r.Context(), orgOf(r), req.Name, req.ServerURL, req.UsageTracking)
+	if req.IdleThresholdSec != nil && (*req.IdleThresholdSec < 60 || *req.IdleThresholdSec > 900) {
+		fail(w, badRequest("idle_threshold_sec must be between 60 and 900"))
+		return
+	}
+	o, err := s.store.UpdateOrg(r.Context(), orgOf(r), store.OrgPatch{
+		Name: req.Name, ServerURL: req.ServerURL, UsageTracking: req.UsageTracking, IdleThresholdSec: req.IdleThresholdSec,
+	})
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	s.record(r, "org.update", "org", o.ID, o)
-	if req.UsageTracking != nil {
+	if req.UsageTracking != nil || req.IdleThresholdSec != nil {
 		s.core.PushOrgPolicy(r.Context(), o.ID)
 	}
 	writeJSON(w, http.StatusOK, o)
 }
-

@@ -74,6 +74,18 @@ func (ix *Index) AppFor(exe string) string {
 	return ""
 }
 
+// AppForFront maps the front app reported by the session probe: a bundle
+// path on macOS ("/Applications/Foo.app"), an executable elsewhere.
+func (ix *Index) AppForFront(path string) string {
+	if ix.goos == "darwin" {
+		if !strings.HasSuffix(path, ".app") {
+			return ""
+		}
+		return macApp(path + "/Contents/MacOS/main")
+	}
+	return ix.AppFor(path)
+}
+
 // macApp maps ".../Applications/Foo.app/Contents/MacOS/Foo" to "Foo". Only
 // an app's own main executable under an Applications folder counts: widgets
 // (.appex), XPC services, plug-ins and nested helper apps run without the app
@@ -129,19 +141,25 @@ type key struct{ date, app, user string }
 
 type counter struct {
 	minutes  int
+	active   time.Duration
 	lastSeen time.Time
 }
 
+// maxActiveGap caps the time credited between two probe samples, so sleep,
+// a stalled probe or a lost sample never counts as activity.
+const maxActiveGap = 10 * time.Second
+
 // Tracker accumulates sampled minutes. It is safe for concurrent use.
 type Tracker struct {
-	goos string
-	mu   sync.Mutex
-	ix   *Index
-	data map[key]*counter
+	goos  string
+	mu    sync.Mutex
+	ix    *Index
+	data  map[key]*counter
+	lastP map[string]time.Time // user → time of their previous probe sample
 }
 
 func NewTracker(goos string) *Tracker {
-	return &Tracker{goos: goos, ix: NewIndex(goos, nil), data: map[key]*counter{}}
+	return &Tracker{goos: goos, ix: NewIndex(goos, nil), data: map[key]*counter{}, lastP: map[string]time.Time{}}
 }
 
 // SetSoftware rebuilds the executable → app index from an inventory.
@@ -185,13 +203,50 @@ func (t *Tracker) Sample(now time.Time, procs []Proc) {
 	}
 }
 
+// Active records one probe sample: when the user's last input is more recent
+// than idleAfter, the time since their previous sample (at most
+// maxActiveGap) counts as active use of the front app.
+func (t *Tracker) Active(user, frontPath string, idle, idleAfter time.Duration, now time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	prev, ok := t.lastP[user]
+	t.lastP[user] = now
+	gap := maxActiveGap / 2 // first sample: assume one probe interval
+	if ok {
+		gap = min(now.Sub(prev), maxActiveGap)
+	}
+	if gap <= 0 || idle >= idleAfter || user == "" {
+		return
+	}
+	app := t.ix.AppForFront(frontPath)
+	if app == "" {
+		return
+	}
+	k := key{now.Format(time.DateOnly), app, user}
+	c := t.data[k]
+	if c == nil {
+		if len(t.data) >= maxEntries {
+			return
+		}
+		c = &counter{}
+		t.data[k] = c
+	}
+	c.active += gap
+	if now.After(c.lastSeen) {
+		c.lastSeen = now
+	}
+}
+
 // Flush returns the accumulated entries and clears them.
 func (t *Tracker) Flush() []protocol.UsageEntry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	out := make([]protocol.UsageEntry, 0, len(t.data))
 	for k, c := range t.data {
-		out = append(out, protocol.UsageEntry{Date: k.date, App: k.app, User: k.user, Minutes: c.minutes, LastSeen: c.lastSeen})
+		out = append(out, protocol.UsageEntry{
+			Date: k.date, App: k.app, User: k.user, Minutes: c.minutes,
+			ActiveSeconds: int(c.active.Round(time.Second) / time.Second), LastSeen: c.lastSeen,
+		})
 	}
 	t.data = map[key]*counter{}
 	return out
@@ -212,6 +267,7 @@ func (t *Tracker) Restore(entries []protocol.UsageEntry) {
 			t.data[k] = c
 		}
 		c.minutes += e.Minutes
+		c.active += time.Duration(e.ActiveSeconds) * time.Second
 		if e.LastSeen.After(c.lastSeen) {
 			c.lastSeen = e.LastSeen
 		}
@@ -222,5 +278,6 @@ func (t *Tracker) Restore(entries []protocol.UsageEntry) {
 func (t *Tracker) Reset() {
 	t.mu.Lock()
 	t.data = map[key]*counter{}
+	t.lastP = map[string]time.Time{}
 	t.mu.Unlock()
 }

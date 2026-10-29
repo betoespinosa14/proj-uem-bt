@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ErrorState, KeyValues, PageHeader } from "@/components/common";
 import { toast } from "@/components/toast";
@@ -36,11 +37,17 @@ export default function SettingsPage() {
     onError: (e) => toast.error("Couldn't save settings", e),
   });
   const tracking = useMutation({
-    mutationFn: (on: boolean) => api.org.update({ usage_tracking: on }),
-    onSuccess: (o) => {
+    mutationFn: (b: { usage_tracking?: boolean; idle_threshold_sec?: number }) => api.org.update(b),
+    onSuccess: (o, b) => {
       qc.setQueryData(qk.org, o);
       qc.setQueryData<Me>(qk.me, (m) => (m ? { ...m, org: o } : m));
-      toast.success(o.usage_tracking ? "Usage tracking turned on" : "Usage tracking turned off");
+      toast.success(
+        b.usage_tracking !== undefined
+          ? o.usage_tracking
+            ? "Usage tracking turned on"
+            : "Usage tracking turned off"
+          : `Idle time set to ${o.idle_threshold_sec / 60} min`,
+      );
     },
     onError: (e) => toast.error("Couldn't change usage tracking", e),
   });
@@ -88,25 +95,43 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Application usage tracking</CardTitle>
               <CardDescription>
-                Records which installed apps each user runs and for how long, for license and subscription audits. Agents check running apps once a minute while this is on.
+                Records how much each user actively uses each installed app, for license and subscription audits.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {isLoading || !org ? (
                 <Skeleton className="h-6 w-40" />
               ) : (
-                <label htmlFor="usage-tracking" className="flex items-center gap-3 text-sm font-medium">
-                  <Switch
-                    id="usage-tracking"
-                    checked={org.usage_tracking}
-                    disabled={!editable || tracking.isPending}
-                    onCheckedChange={(v) => tracking.mutate(v)}
-                  />
-                  {org.usage_tracking ? "On" : "Off"}
-                </label>
+                <>
+                  <label htmlFor="usage-tracking" className="flex items-center gap-3 text-sm font-medium">
+                    <Switch
+                      id="usage-tracking"
+                      checked={org.usage_tracking}
+                      disabled={!editable || tracking.isPending}
+                      onCheckedChange={(v) => tracking.mutate({ usage_tracking: v })}
+                    />
+                    {org.usage_tracking ? "On" : "Off"}
+                  </label>
+                  <Field
+                    label="Count as idle after"
+                    htmlFor="idle-after"
+                    hint="Time in front of an app counts as active until this long passes without keyboard or mouse input. Applies from now on."
+                  >
+                    <Select
+                      id="idle-after"
+                      className="w-40"
+                      value={String(org.idle_threshold_sec)}
+                      disabled={!editable || tracking.isPending}
+                      onValueChange={(v) => tracking.mutate({ idle_threshold_sec: Number(v) })}
+                      options={[1, 2, 3, 5, 10, 15].map((m) => ({ value: String(m * 60), label: `${m} minute${m === 1 ? "" : "s"}` }))}
+                    />
+                  </Field>
+                </>
               )}
               <p className="text-xs text-muted-foreground">
-                This monitors employee activity. Make sure staff have been informed before turning it on. Changes are recorded in the audit log, and usage data is kept for 400 days.
+                Agents record which app is in front and the time since the last keyboard or mouse input, plus which apps are open. They never record
+                keystrokes, window titles or screen contents. This is still employee monitoring: inform staff before turning it on. Changes are
+                recorded in the audit log, and usage data is kept for 400 days. Active time isn&apos;t available on Linux.
               </p>
             </CardContent>
           </Card>

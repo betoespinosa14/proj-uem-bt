@@ -404,13 +404,20 @@ func TestUsageTracking(t *testing.T) {
 		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Contacts", Source: "apple"},
 	}})
 	today := time.Now().Format(time.DateOnly)
-	report := protocol.Usage{Entries: []protocol.UsageEntry{{Date: today, App: "Slack", User: "ana", Minutes: 90, LastSeen: time.Now()}}}
+	report := protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: today, App: "Slack", User: "ana", Minutes: 90, ActiveSeconds: 1800, LastSeen: time.Now()},
+		{Date: today, App: "Slack", User: "ben", ActiveSeconds: 600, LastSeen: time.Now()}, // active only: probe saw it, sampler didn't
+	}}
 
 	type row struct {
-		App, User string
-		DaysUsed  int `json:"days_used"`
-		Minutes   int
-		Installed bool
+		App, User     string
+		DaysUsed      int `json:"days_used"`
+		Minutes       int
+		ActiveSeconds int `json:"active_seconds"`
+		Installed     bool
+		Users         int
+		Devices       int
+		InstalledOn   int `json:"installed_on"`
 	}
 	var usage struct{ Items []row }
 	poll := func(path string, want func() bool) {
@@ -442,12 +449,25 @@ func TestUsageTracking(t *testing.T) {
 	send(protocol.TypeUsage, report)
 	send(protocol.TypeUsage, report) // accumulates into the same day
 	poll("/api/devices/"+dev.DeviceID+"/usage", func() bool {
-		return len(usage.Items) == 1 && usage.Items[0].Minutes == 180 && usage.Items[0].DaysUsed == 1 && usage.Items[0].User == "ana"
+		return len(usage.Items) == 2 && usage.Items[0].User == "ana" && usage.Items[0].Minutes == 180 &&
+			usage.Items[0].ActiveSeconds == 3600 && usage.Items[0].DaysUsed == 1 && usage.Items[1].ActiveSeconds == 1200
+	})
+	// Totals per app across users.
+	poll("/api/devices/"+dev.DeviceID+"/usage?group=app", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].User == "" && usage.Items[0].Users == 2 && usage.Items[0].ActiveSeconds == 4800
+	})
+	poll("/api/usage?group=app&app=slack", func() bool {
+		u := usage.Items
+		return len(u) == 1 && u[0].Users == 2 && u[0].Devices == 1 && u[0].InstalledOn == 1 && u[0].ActiveSeconds == 4800 && u[0].Minutes == 180
+	})
+	poll("/api/usage?group=app&unused=true", func() bool {
+		u := usage.Items
+		return len(u) == 1 && u[0].App == "Zoom" && u[0].InstalledOn == 1 && u[0].Devices == 0
 	})
 
 	// Fleet: Slack is used; Zoom is installed but unused; Contacts is a system app.
 	poll("/api/usage?app=slack", func() bool {
-		return len(usage.Items) == 1 && usage.Items[0].User == "ana" && usage.Items[0].Installed
+		return len(usage.Items) == 2 && usage.Items[0].User == "ana" && usage.Items[0].Installed
 	})
 	poll("/api/usage?unused=true", func() bool {
 		return len(usage.Items) == 1 && usage.Items[0].App == "Zoom" && usage.Items[0].User == ""
@@ -459,7 +479,19 @@ func TestUsageTracking(t *testing.T) {
 	}
 	rows, err := csv.NewReader(resp.Body).ReadAll()
 	resp.Body.Close()
-	if err != nil || len(rows) != 2 || rows[1][0] != "Slack" || rows[1][6] != "3.0" {
+	// app, device, user, installed, active_hours, open_hours, ...
+	if err != nil || len(rows) != 3 || rows[0][4] != "active_hours" || rows[1][2] != "ana" || rows[1][4] != "1.00" || rows[1][5] != "3.0" {
 		t.Fatalf("usage csv = %v, err = %v", rows, err)
+	}
+
+	// Idle threshold: 1–15 minutes.
+	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 30}, 400, nil)
+	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 1000}, 400, nil)
+	var org2 struct {
+		IdleThresholdSec int `json:"idle_threshold_sec"`
+	}
+	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 300}, 200, &org2)
+	if org2.IdleThresholdSec != 300 {
+		t.Fatalf("idle_threshold_sec = %d", org2.IdleThresholdSec)
 	}
 }

@@ -40,7 +40,7 @@ export type User = {
   last_login_at: string | null;
 };
 
-export type Org = { id: string; name: string; server_url: string; usage_tracking: boolean; created_at: string };
+export type Org = { id: string; name: string; server_url: string; usage_tracking: boolean; idle_threshold_sec: number; created_at: string };
 
 export type Me = { user: User; org: Org; permissions: string[] };
 
@@ -144,7 +144,19 @@ export type SoftwareItem = {
 
 export type UsagePeriod = 30 | 90 | 365;
 
-export type UsageRow = { app: string; user: string; last_used: string; days_used: number; minutes: number };
+export type UsageGroup = "app" | "app_user";
+
+/** Running time is `minutes`; active (in front, user interacting) time is `active_seconds`. */
+export type UsageRow = {
+  app: string;
+  /** Empty when grouped by app. */
+  user: string;
+  users: number;
+  last_used: string;
+  days_used: number;
+  minutes: number;
+  active_seconds: number;
+};
 
 export type FleetUsageRow = {
   device_id: string;
@@ -157,6 +169,19 @@ export type FleetUsageRow = {
   last_used: string | null;
   days_used: number;
   minutes: number;
+  active_seconds: number;
+};
+
+export type FleetAppRow = {
+  app: string;
+  users: number;
+  /** Devices it was used on in the period. */
+  devices: number;
+  /** Devices it is installed on now. */
+  installed_on: number;
+  last_used: string | null;
+  minutes: number;
+  active_seconds: number;
 };
 
 export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean };
@@ -554,8 +579,10 @@ export const api = {
     software: (id: string) => get<Items<SoftwareItem>>(`/api/devices/${enc(id)}/software`),
     softwareExportUrl: (id: string, f: { q?: string; category?: string } = {}) =>
       withQuery(`/api/devices/${enc(id)}/software.csv`, f),
-    usage: (id: string, days: UsagePeriod) => get<Items<UsageRow>>(`/api/devices/${enc(id)}/usage`, { days }),
-    usageExportUrl: (id: string, days: UsagePeriod) => withQuery(`/api/devices/${enc(id)}/usage.csv`, { days }),
+    usage: (id: string, days: UsagePeriod, group: UsageGroup) =>
+      get<Items<UsageRow>>(`/api/devices/${enc(id)}/usage`, { days, group }),
+    usageExportUrl: (id: string, days: UsagePeriod, group: UsageGroup) =>
+      withQuery(`/api/devices/${enc(id)}/usage.csv`, { days, group }),
     telemetry: (id: string, hours: number) =>
       get<Items<TelemetryPoint>>(`/api/devices/${enc(id)}/telemetry`, { hours }),
     compliance: (id: string) => get<Items<ComplianceResult>>(`/api/devices/${enc(id)}/compliance`),
@@ -625,11 +652,13 @@ export const api = {
   },
   org: {
     get: () => get<Org>("/api/org"),
-    update: (b: { name?: string; server_url?: string; usage_tracking?: boolean }) => patch<Org>("/api/org", b),
+    update: (b: { name?: string; server_url?: string; usage_tracking?: boolean; idle_threshold_sec?: number }) =>
+      patch<Org>("/api/org", b),
   },
   usage: {
-    list: (f: FleetUsageFilters = {}) => get<Items<FleetUsageRow>>("/api/usage", f),
-    exportUrl: (f: FleetUsageFilters = {}) => withQuery("/api/usage/export.csv", f),
+    list: (f: FleetUsageFilters = {}) => get<Items<FleetUsageRow>>("/api/usage", { ...f, group: "app_user" }),
+    byApp: (f: FleetUsageFilters = {}) => get<Items<FleetAppRow>>("/api/usage", { ...f, group: "app" }),
+    exportUrl: (f: FleetUsageFilters = {}, group: UsageGroup = "app_user") => withQuery("/api/usage/export.csv", { ...f, group }),
   },
 };
 
@@ -646,8 +675,8 @@ export const qk = {
   devices: (f?: DeviceFilters) => (f ? (["devices", f] as const) : (["devices"] as const)),
   device: (id: string) => ["device", id] as const,
   deviceSoftware: (id: string) => ["device", id, "software"] as const,
-  deviceUsage: (id: string, days: UsagePeriod) => ["device", id, "usage", days] as const,
-  usage: (f: FleetUsageFilters) => ["usage", f] as const,
+  deviceUsage: (id: string, days: UsagePeriod, group: UsageGroup) => ["device", id, "usage", days, group] as const,
+  usage: (f: FleetUsageFilters, group: UsageGroup) => ["usage", group, f] as const,
   deviceTelemetry: (id: string, hours: number) => ["device", id, "telemetry", hours] as const,
   deviceCompliance: (id: string) => ["device", id, "compliance"] as const,
   deviceCommands: (id: string) => ["device", id, "commands"] as const,

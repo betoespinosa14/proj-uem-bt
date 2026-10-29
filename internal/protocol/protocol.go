@@ -258,6 +258,7 @@ type Policy struct {
 	TelemetryIntervalSec int      `json:"telemetry_interval_sec"`
 	InventoryIntervalSec int      `json:"inventory_interval_sec"`
 	UsageTracking        bool     `json:"usage_tracking"`
+	IdleThresholdSec     int      `json:"idle_threshold_sec"`
 }
 
 // Usage reports application running time accumulated since the last report.
@@ -267,11 +268,14 @@ type Usage struct {
 
 // UsageEntry is the minutes an app ran for one user on one (device-local) day.
 type UsageEntry struct {
-	Date     string    `json:"date"` // YYYY-MM-DD
-	App      string    `json:"app"`
-	User     string    `json:"user"`
-	Minutes  int       `json:"minutes"`
-	LastSeen time.Time `json:"last_seen"`
+	Date    string `json:"date"` // YYYY-MM-DD
+	App     string `json:"app"`
+	User    string `json:"user"`
+	Minutes int    `json:"minutes"`
+	// ActiveSeconds is time the app was in front while the user was
+	// interacting (input within the org's idle threshold).
+	ActiveSeconds int       `json:"active_seconds,omitempty"`
+	LastSeen      time.Time `json:"last_seen"`
 }
 
 // Event is an agent-originated notable occurrence (e.g. a blocked app was killed).

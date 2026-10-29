@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"sync"
@@ -9,6 +10,12 @@ import (
 )
 
 const reconcileEvery = 30 * time.Second
+
+// blindAfter is how many consecutive samples without a front app (about a
+// minute) make the supervisor warn that the probe can't see the front app.
+const blindAfter = 12
+
+var errNoFrontApp = errors.New("session probe reports no front app")
 
 // userSession is one interactive session that should have a probe.
 type userSession struct {
@@ -91,7 +98,17 @@ func (s *Supervisor) start(ctx context.Context, us userSession) {
 	s.mu.Unlock()
 	s.Log.Info("session probe started", "user", us.user)
 	go func() {
-		_ = ReadSamples(h.stdout, func(smp Sample) { s.OnSample(us.user, smp, time.Now()) })
+		blind := 0
+		_ = ReadSamples(h.stdout, func(smp Sample) {
+			if smp.AppPath == "" {
+				if blind++; blind == blindAfter {
+					s.logOnce(us.key+"/front", "active usage can't be measured", errNoFrontApp, "user", us.user)
+				}
+			} else {
+				blind = 0
+			}
+			s.OnSample(us.user, smp, time.Now())
+		})
 		_ = h.wait()
 		s.mu.Lock()
 		if s.running[us.key] == h {

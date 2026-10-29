@@ -42,8 +42,9 @@ func run(ctx context.Context, name string, args ...string) (string, error) {
 }
 
 var (
-	asnRe        = regexp.MustCompile(`ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+:`)
-	bundlePathRe = regexp.MustCompile(`bundle path="([^"]+)"`)
+	asnRe = regexp.MustCompile(`ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+:`)
+	// macOS 14+ prints `bundle path="..."`; macOS 13 prints `"LSBundlePath"="..."`.
+	bundlePathRe = regexp.MustCompile(`(?:bundle path|"LSBundlePath")="([^"]+)"`)
 	hidIdleRe    = regexp.MustCompile(`"HIDIdleTime" = (\d+)`)
 )
 

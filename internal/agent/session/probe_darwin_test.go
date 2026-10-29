@@ -17,6 +17,10 @@ func TestParseDarwin(t *testing.T) {
 	if got := parseBundlePath(info); got != "/Applications/Visual Studio Code.app" {
 		t.Errorf("parseBundlePath = %q", got)
 	}
+	// macOS 13 (Ventura) format, captured from a real device.
+	if got := parseBundlePath(`"LSBundlePath"="/System/Applications/Utilities/Terminal.app"` + "\n"); got != "/System/Applications/Utilities/Terminal.app" {
+		t.Errorf("parseBundlePath(ventura) = %q", got)
+	}
 	if got := parseBundlePath("[ NULL ] bundle path=[ NULL ]"); got != "" {
 		t.Errorf("parseBundlePath(null) = %q", got)
 	}

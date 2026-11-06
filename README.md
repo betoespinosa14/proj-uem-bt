@@ -40,6 +40,37 @@ Enroll a device:
 
 For production, set `UEM_SITE_ADDRESS=uem.example.com`, `UEM_PUBLIC_URL=https://uem.example.com` and `UEM_SECURE_COOKIES=true`. Caddy then obtains a TLS certificate automatically. After creating your organization, set `UEM_ALLOW_SIGNUP=false`.
 
+### Monitoring devices outside the office
+
+Agents only make *outgoing* connections to the server address they know. A device away from the office can report as long as that address is reachable from the internet. Laptops need no VPN and no firewall changes.
+
+**Moving agents to a new address.** Set **Settings → Public server URL** (or `UEM_PUBLIC_URL`) to the new address. Connected agents receive it in their policy and then:
+1. check `<new address>/healthz`;
+2. reconnect to the new address;
+3. save it only once that connection succeeds.
+
+If the address is unreachable or rejects the device, the agent stays on its current address and retries after 10 minutes. A typo can't strand devices. This needs agents built from this version or later. Older agents keep their address until their install command is re-run.
+
+**Running on a single machine behind office port forwarding** (no Docker):
+1. Network admin:
+   - reserve the machine's LAN IP;
+   - forward TCP 80 and 443 from the office's public IP to it (the office needs a public, not CGNAT, IPv4 address);
+   - add a DNS `A` record such as `uem.example.com` → that public IP;
+   - make the name work inside the office too: NAT loopback/hairpin on the router, or an internal DNS record pointing to the LAN IP.
+2. Run Caddy on the machine with the project's Caddyfile:
+   ```sh
+   brew install caddy   # or your OS package manager
+   UEM_SITE_ADDRESS=uem.example.com UEM_SERVER_UPSTREAM=localhost:8080 UEM_WEB_UPSTREAM=localhost:3000 \
+     caddy run --config deploy/Caddyfile
+   ```
+3. Start the server with these variables, and run the console as a production build (`cd web && npm run build && npm run start`):
+   ```sh
+   UEM_PUBLIC_URL=https://uem.example.com UEM_TRUST_PROXY=true UEM_SECURE_COOKIES=true UEM_ALLOW_SIGNUP=false
+   ```
+4. Set **Settings → Public server URL** to `https://uem.example.com` to move existing agents.
+
+The machine must stay awake and online: while it's down, no device can report. Agents reconnect on their own afterwards.
+
 ## Development
 
 Requirements: Go 1.26+, Node 22+, PostgreSQL 16.

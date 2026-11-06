@@ -30,6 +30,9 @@ type Core struct {
 
 	TelemetryInterval time.Duration
 	InventoryInterval time.Duration
+	// PublicURL is the server address agents should use when the org
+	// hasn't set one (UEM_PUBLIC_URL).
+	PublicURL string
 }
 
 // ValidationError is returned for bad client input and maps to HTTP 400.
@@ -210,11 +213,16 @@ func (c *Core) PolicyFor(ctx context.Context, deviceID string) protocol.Policy {
 	if err != nil {
 		apps = []string{}
 	}
-	usage, idle, _ := c.Store.UsageSettingsForDevice(ctx, deviceID) // off on error
+	org, _ := c.Store.OrgSettingsForDevice(ctx, deviceID) // zero values (tracking off) on error
+	serverURL := org.ServerURL
+	if serverURL == "" {
+		serverURL = c.PublicURL
+	}
 	return protocol.Policy{
 		BlockedApps:          apps,
-		UsageTracking:        usage,
-		IdleThresholdSec:     idle,
+		UsageTracking:        org.UsageTracking,
+		IdleThresholdSec:     org.IdleThresholdSec,
+		ServerURL:            strings.TrimRight(serverURL, "/"),
 		TelemetryIntervalSec: int(c.TelemetryInterval.Seconds()),
 		InventoryIntervalSec: int(c.InventoryInterval.Seconds()),
 	}

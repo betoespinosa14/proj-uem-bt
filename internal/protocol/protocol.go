@@ -259,6 +259,9 @@ type Policy struct {
 	InventoryIntervalSec int      `json:"inventory_interval_sec"`
 	UsageTracking        bool     `json:"usage_tracking"`
 	IdleThresholdSec     int      `json:"idle_threshold_sec"`
+	// ServerURL is the address agents should use. When it differs from
+	// theirs, agents check it is reachable and switch to it.
+	ServerURL string `json:"server_url,omitempty"`
 }
 
 // Usage reports application running time accumulated since the last report.

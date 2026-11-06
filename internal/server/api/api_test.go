@@ -495,3 +495,51 @@ func TestUsageTracking(t *testing.T) {
 		t.Fatalf("idle_threshold_sec = %d", org2.IdleThresholdSec)
 	}
 }
+
+func TestPolicyAnnouncesServerURL(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Move")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	dev := e.enroll(t, tok.Token)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(e.srv.URL, "http") + "/api/agent/ws"
+	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Device " + dev.DeviceID + ":" + dev.DeviceSecret}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	f, _ := protocol.Encode(protocol.TypeHello, protocol.Hello{ProtocolVersion: protocol.Version, AgentVersion: "test"})
+	if err := c.Write(ctx, websocket.MessageText, f); err != nil {
+		t.Fatal(err)
+	}
+	// nextPolicy returns the server_url of the next policy frame.
+	nextPolicy := func() string {
+		t.Helper()
+		for {
+			_, data, err := c.Read(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			env, err := protocol.Decode(data)
+			if err != nil || env.Type != protocol.TypePolicy {
+				continue
+			}
+			var p protocol.Policy
+			if err := json.Unmarshal(env.Data, &p); err != nil {
+				t.Fatal(err)
+			}
+			return p.ServerURL
+		}
+	}
+	if got := nextPolicy(); got != "" {
+		t.Fatalf("initial server_url = %q, want empty (no org or public URL set)", got)
+	}
+	// Setting the org's public server URL re-pushes policy to connected agents.
+	a.do("PATCH", "/api/org", map[string]any{"server_url": "https://uem.example.com/"}, 200, nil)
+	if got := nextPolicy(); got != "https://uem.example.com" {
+		t.Fatalf("server_url after update = %q", got)
+	}
+}

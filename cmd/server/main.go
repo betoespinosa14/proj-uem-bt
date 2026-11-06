@@ -95,6 +95,7 @@ func run() error {
 	}
 
 	publicURL := env("UEM_PUBLIC_URL", "")
+	c.PublicURL = publicURL
 	var origins []string
 	if o := os.Getenv("UEM_ALLOWED_ORIGINS"); o != "" {
 		origins = strings.Split(o, ",")

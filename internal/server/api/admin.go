@@ -1041,7 +1041,7 @@ func (s *Server) updateOrg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "org.update", "org", o.ID, o)
-	if req.UsageTracking != nil || req.IdleThresholdSec != nil {
+	if req.UsageTracking != nil || req.IdleThresholdSec != nil || req.ServerURL != nil {
 		s.core.PushOrgPolicy(r.Context(), o.ID)
 	}
 	writeJSON(w, http.StatusOK, o)

@@ -204,13 +204,19 @@ func (s *Store) OnlineDeviceIDs(ctx context.Context, orgID string) ([]string, er
 	})
 }
 
-// UsageSettingsForDevice returns the usage-tracking switch and idle
-// threshold (seconds) of a device's org.
-func (s *Store) UsageSettingsForDevice(ctx context.Context, deviceID string) (bool, int, error) {
-	var on bool
-	var idle int
+// DeviceOrgSettings are the org settings that shape a device's policy.
+type DeviceOrgSettings struct {
+	UsageTracking    bool
+	IdleThresholdSec int
+	ServerURL        string
+}
+
+// OrgSettingsForDevice returns the policy-relevant settings of a device's org.
+func (s *Store) OrgSettingsForDevice(ctx context.Context, deviceID string) (DeviceOrgSettings, error) {
+	var o DeviceOrgSettings
 	err := s.Pool.QueryRow(ctx, `
-		SELECT o.usage_tracking, o.idle_threshold_sec FROM devices d JOIN organizations o ON o.id = d.org_id WHERE d.id = $1`,
-		deviceID).Scan(&on, &idle)
-	return on, idle, mapErr(err)
+		SELECT o.usage_tracking, o.idle_threshold_sec, o.server_url
+		FROM devices d JOIN organizations o ON o.id = d.org_id WHERE d.id = $1`,
+		deviceID).Scan(&o.UsageTracking, &o.IdleThresholdSec, &o.ServerURL)
+	return o, mapErr(err)
 }

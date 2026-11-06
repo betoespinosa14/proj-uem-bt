@@ -180,5 +180,5 @@ type FleetAppRow = { app: string; users: number;
 
 ## Agent endpoints (used only by the agent)
 - `POST /api/agent/enroll` `{token, facts: {hostname, os_family, os_name, os_version, arch, serial, agent_version}}` → `{device_id, device_secret}`
-- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking` and `idle_threshold_sec`. The agent sends `usage` messages (`{entries: {date, app, user, minutes, active_seconds, last_seen}[]}`), which the server drops while tracking is off.
+- `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking`, `idle_threshold_sec` and `server_url` (the org's Public server URL, else `UEM_PUBLIC_URL`). When `server_url` differs from the agent's address, the agent checks `/healthz`, reconnects there, and saves it only after that connection succeeds; otherwise it keeps its address and retries after 10 minutes. The agent sends `usage` messages (`{entries: {date, app, user, minutes, active_seconds, last_seen}[]}`), which the server drops while tracking is off.
 - `GET /downloads/uem-agent-<os>-<arch>[.exe]`, `GET /install.sh`, `GET /install.ps1`

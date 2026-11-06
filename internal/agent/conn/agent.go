@@ -32,6 +32,7 @@ import (
 const (
 	heartbeatInterval = 30 * time.Second
 	blocklistInterval = 15 * time.Second
+	retryMoveAfter    = 10 * time.Minute // after a new server address failed
 	usageSampleEvery  = time.Minute
 	usageReportEvery  = 5 // samples between usage reports
 	maxConcurrentCmds = 4
@@ -46,6 +47,9 @@ type Agent struct {
 
 	// OnUninstall is invoked after an uninstall_agent command is acknowledged.
 	OnUninstall func()
+	// SaveServerURL persists a new server address once the agent has
+	// connected to it. When nil, the agent never changes address.
+	SaveServerURL func(url string) error
 
 	mu      sync.Mutex
 	policy  protocol.Policy
@@ -56,6 +60,12 @@ type Agent struct {
 	cmdSlots chan struct{}
 	refresh  chan struct{}
 	usage    *usage.Tracker
+
+	// Server address changes (guarded by mu).
+	trialURL    string               // new address to use for the next connection, not yet saved
+	checking    bool                 // a new address is being checked
+	failedMoves map[string]time.Time // address → when switching to it last failed
+	endSession  context.CancelFunc   // ends the current connection
 }
 
 func New(cfg config.Config, version string, log *slog.Logger) *Agent {
@@ -66,6 +76,8 @@ func New(cfg config.Config, version string, log *slog.Logger) *Agent {
 		cmdSlots: make(chan struct{}, maxConcurrentCmds),
 		refresh:  make(chan struct{}, 1),
 		usage:    usage.NewTracker(runtime.GOOS),
+
+		failedMoves: map[string]time.Time{},
 	}
 }
 
@@ -85,7 +97,10 @@ func (a *Agent) Run(ctx context.Context) {
 			backoff = time.Second // the session was healthy; reconnect quickly
 		}
 		wait := backoff + time.Duration(rand.Int64N(int64(backoff/2)+1))
-		if errors.Is(err, errUnauthorized) {
+		switch {
+		case errors.Is(err, errMoveFailed), a.hasTrial():
+			wait = 0 // go straight back to the previous address, or on to the new one
+		case errors.Is(err, errUnauthorized):
 			// Retired or credential revoked: retry rarely in case it's transient.
 			wait = 5 * time.Minute
 		}
@@ -99,7 +114,10 @@ func (a *Agent) Run(ctx context.Context) {
 	}
 }
 
-var errUnauthorized = errors.New("server rejected device credentials (device may have been retired)")
+var (
+	errUnauthorized = errors.New("server rejected device credentials (device may have been retired)")
+	errMoveFailed   = errors.New("couldn't connect to the new server address")
+)
 
 func wsURL(server string) string {
 	u := strings.TrimRight(server, "/")
@@ -113,12 +131,17 @@ func wsURL(server string) string {
 }
 
 func (a *Agent) session(ctx context.Context) error {
+	server, trial := a.serverTarget()
 	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	c, resp, err := websocket.Dial(dialCtx, wsURL(a.cfg.ServerURL), &websocket.DialOptions{
+	c, resp, err := websocket.Dial(dialCtx, wsURL(server), &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": {"Device " + a.cfg.DeviceID + ":" + a.cfg.DeviceSecret}},
 	})
 	if err != nil {
+		if trial {
+			a.moveFailed(server, err)
+			return fmt.Errorf("%w: %v", errMoveFailed, err)
+		}
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			return errUnauthorized
 		}
@@ -126,12 +149,16 @@ func (a *Agent) session(ctx context.Context) error {
 	}
 	defer c.CloseNow()
 	c.SetReadLimit(4 << 20)
-	a.log.Info("connected to server", "server", a.cfg.ServerURL)
+	if trial {
+		a.moveSucceeded(server)
+	}
+	a.log.Info("connected to server", "server", server)
 
 	sctx, scancel := context.WithCancel(ctx)
 	defer scancel()
 	out := make(chan []byte, 64)
 	a.mu.Lock()
+	a.endSession = scancel
 	a.out = out
 	pending := a.pending
 	a.pending = nil
@@ -197,6 +224,7 @@ func (a *Agent) readLoop(ctx context.Context, c *websocket.Conn) error {
 				a.policy = p
 				a.mu.Unlock()
 				a.log.Info("policy updated", "blocked_apps", len(p.BlockedApps), "usage_tracking", p.UsageTracking)
+				go a.maybeMove(ctx, p.ServerURL)
 			}
 		}
 	}

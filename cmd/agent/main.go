@@ -57,6 +57,10 @@ func (p *program) Start(s service.Service) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel, p.done = cancel, make(chan struct{})
 	a := conn.New(cfg, Version, slog.Default())
+	a.SaveServerURL = func(url string) error {
+		cfg.ServerURL = url
+		return config.Save(p.cfg, cfg)
+	}
 	if !service.Interactive() {
 		a.OnUninstall = func() { selfUninstall(p.svc, p.cfg) }
 	}

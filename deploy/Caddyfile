@@ -1,14 +1,17 @@
 # Single entry point: the API, agent gateway, downloads and install scripts go
 # to the Go server; everything else is the Next.js console.
 # Set UEM_SITE_ADDRESS to your domain (e.g. uem.example.com) for automatic HTTPS.
+# The upstreams default to the docker-compose service names; when running
+# Caddy directly on the host, set UEM_SERVER_UPSTREAM=localhost:8080 and
+# UEM_WEB_UPSTREAM=localhost:3000.
 {$UEM_SITE_ADDRESS::80} {
 	encode zstd gzip
 
 	@server path /api/* /downloads/* /install.sh /install.ps1 /healthz
 	handle @server {
-		reverse_proxy server:8080
+		reverse_proxy {$UEM_SERVER_UPSTREAM:server:8080}
 	}
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy {$UEM_WEB_UPSTREAM:web:3000}
 	}
 }

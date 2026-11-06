@@ -76,7 +76,7 @@ export default function SettingsPage() {
                   <Field
                     label="Public server URL"
                     htmlFor="ourl"
-                    hint="The address agents use to reach this server, used in install commands. Leave blank to use the address you're browsing from."
+                    hint="The address agents use to reach this server, used in install commands. Changing it moves connected agents: each one checks the new address works before switching, and keeps the old one if it doesn't. Leave blank to use the address you're browsing from."
                   >
                     <Input id="ourl" type="url" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://uem.example.com" />
                   </Field>

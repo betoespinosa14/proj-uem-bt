@@ -104,6 +104,23 @@ The integration tests (`internal/server/api/api_test.go`) start the real HTTP se
 - a full agent WebSocket round-trip: enroll → inventory → compliance violation → alert → command → result;
 - audit-chain verification, plus the database-level block on editing audit rows.
 
+### Versioning and releases
+
+Versions follow **calendar versioning**: `YYYY.MM.N`, where N counts releases within the month from 0.
+For example, `2026.11.0` is the first release of November 2026. Releases are git tags (`v2026.11.0`), and
+[CHANGELOG.md](CHANGELOG.md) lists what each release contains.
+
+```sh
+make version        # the version the next build will report
+make release        # tag the current commit as the next version (the tree must be clean)
+make build-agents   # build the agent downloads with that version
+```
+
+Agents report their version to the server: it's shown on each device, and compliance rules can require
+a minimum, e.g. **Agent version ≥ 2026.11.0**. A build between releases reports e.g. `2026.11.0-3-g60f25a5`
+(3 commits after 2026.11.0, at commit `60f25a5`), with `-dirty` if it had uncommitted changes. Agents don't
+update themselves yet: re-run the install command on a device to upgrade it.
+
 ### Layout
 
 | Path | What |

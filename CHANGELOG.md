@@ -2,7 +2,50 @@
 
 Notable changes to the UEM project, newest first.
 
-## 2026-10-29: Application usage tracking
+Versions use **calendar versioning**: `YYYY.MM.N`, where N counts releases within the month from 0. For
+example, 2026.11.0 is the first release of November 2026. Each release is a git tag (`v2026.11.0`), and agents
+report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
+commits after 2026.11.0, at commit `60f25a5`.
+
+## 2026.11.0 (2026-11-06): Monitoring devices outside the office
+
+Devices now report to Sentinel from anywhere, not just the office network.
+
+### Added
+- **Agents move to a new server address on their own** (`60f25a5`).
+  - The server announces **Settings → Public server URL** in the agent policy.
+  - The agent checks the new address (health check, then a real connection with its credentials) and only
+    saves it once that connection works.
+  - If the address is wrong or unreachable, the agent keeps its current one and retries after 10 minutes.
+  - Future moves, such as to a DNS name or a cloud server, are a Settings change; no reinstall is needed.
+- **Calendar versioning** for agent builds (this release), with `make version` and `make release`.
+
+### Changed
+- `deploy/Caddyfile` upstreams are configurable (`UEM_SERVER_UPSTREAM`, `UEM_WEB_UPSTREAM`), so Caddy can run
+  directly on a host instead of in Docker.
+
+### Deployment (office Mac Mini, not in the repo)
+- **Public address `https://122.49.212.51`**, with a FortiGate port forward of 122.49.212.51:443 to the Mac
+  Mini (192.168.130.7:443).
+  - It uses a separate public IP from the office block because 122.49.212.50 is fully forwarded to the
+    media server.
+  - **Hairpin NAT** lets office devices use the same address, through one VIP on interface "any" and a
+    port1 → port1 policy with NAT.
+- **Caddy** serves HTTPS with a short-lived Let's Encrypt certificate for the IP address, renewed
+  automatically and validated over port 443 (port 80 is not forwarded).
+  - This is temporary: a permanent or cloud setup should use a DNS name.
+- The server runs with sign-up disabled, secure cookies, and trusted proxy headers.
+- The console runs as a production build behind Caddy.
+- **All 4 devices were reinstalled** and connect through the public address.
+  - The iMac was tested on a phone hotspot, including a remote lock.
+
+### Known open items
+- Windows PowerShell 5.1 needs TLS 1.2 enabled for the HTTPS install command. The generated command doesn't
+  do this yet.
+- If an agent can't reach its current address, it doesn't try the announced one. This matters only for
+  laptops, if the hairpin NAT ever breaks.
+
+## 2026.10.2 (2026-10-29): Application usage tracking
 
 Answers the IT audit question "is a subscribed product actually being used, and by whom?"
 
@@ -51,10 +94,15 @@ Answers the IT audit question "is a subscribed product actually being used, and 
 - Windows service accounts (e.g. `QBDataServiceUser28`) are counted as users in open time.
 - Agents still don't update themselves: re-run the install command to upgrade.
 
-## 2026-10-28: Software insights and reports (`b66694a`)
+## 2026.10.1 (2026-10-28): Software insights and reports (`b66694a`)
 
 ### Added
 - Installed apps labelled **System** or **Third-party**, with a filter in the Software tab.
 - **Gambling app and game flagging** from a built-in catalog: badges, a warning banner, and
   `software.gambling` / `software.games` compliance fields with a ready-made rule that raises alerts.
 - **CSV reports**: the device list (respects filters) and a device's installed software.
+
+## 2026.10.0 (2026-10-27): First version (`70a1923`)
+
+The Go server, the cross-platform agent (Windows, macOS, Linux) and the web console: inventory, compliance
+rules and alerts, remote commands and scripts, groups, scheduled tasks, audit log and webhooks.

@@ -33,9 +33,12 @@ type Org = { id; name; server_url: string; usage_tracking: boolean; idle_thresho
 `GET /api/dashboard` →
 ```ts
 { devices_total, online, offline, compliant, non_compliant, unknown, open_alerts: number,
-  by_os: {os_family: string, count: number}[],
+  by_os: {os_family: string, count: number, online: number}[],
+  failing_rules: {rule_id: string, name: string, severity: Severity, devices: number}[],
   recent_alerts: Alert[], recent_commands: Command[] }
 ```
+`failing_rules` lists up to 6 enabled compliance rules that active devices currently fail, most severe first,
+then by number of failing devices.
 
 ## Devices
 ```ts

@@ -1,7 +1,15 @@
 import { cn } from "@/lib/utils";
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-muted", className)} />;
+  return (
+    <div
+      className={cn(
+        "rounded-lg bg-muted bg-[length:200%_100%] motion-safe:animate-shimmer",
+        "bg-[linear-gradient(90deg,transparent_0%,hsl(var(--card)/0.6)_50%,transparent_100%)]",
+        className,
+      )}
+    />
+  );
 }
 
 export function TableSkeleton({ rows = 6, cols = 5 }: { rows?: number; cols?: number }) {

@@ -1,7 +1,7 @@
 /** Product branding. Change it here and it updates everywhere in the UI. */
-export const APP_NAME = "Sentinel UEM";
-export const APP_SHORT_NAME = "Sentinel";
-export const APP_DESCRIPTION = "Unified endpoint management console";
+export const APP_NAME = "BEACON";
+export const APP_SHORT_NAME = "BEACON";
+export const APP_DESCRIPTION = "Business Endpoint Authorization, Configuration and Oversight Network";
 
 /**
  * WebSocket URL for live updates. In production the console and API share an

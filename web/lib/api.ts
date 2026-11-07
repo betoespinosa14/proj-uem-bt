@@ -387,7 +387,9 @@ export type Dashboard = {
   non_compliant: number;
   unknown: number;
   open_alerts: number;
-  by_os: { os_family: string; count: number }[];
+  by_os: { os_family: string; count: number; online: number }[];
+  /** Enabled compliance rules that devices currently fail, most severe first (at most 6). */
+  failing_rules: { rule_id: string; name: string; severity: Severity; devices: number }[];
   recent_alerts: Alert[];
   recent_commands: Command[];
 };

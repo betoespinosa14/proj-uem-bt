@@ -487,11 +487,27 @@ func (s *Store) Dashboard(ctx context.Context, orgID string) (Dashboard, error) 
 		return d, err
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT COALESCE(NULLIF(os_family, ''), 'unknown'), count(*) FROM devices
-		WHERE org_id = $1 AND retired_at IS NULL GROUP BY 1 ORDER BY 2 DESC`, orgID)
+		SELECT COALESCE(NULLIF(os_family, ''), 'unknown'), count(*), count(*) FILTER (WHERE status = 'online')
+		FROM devices WHERE org_id = $1 AND retired_at IS NULL GROUP BY 1 ORDER BY 2 DESC`, orgID)
 	if d.ByOS, err = collect(rows, err, func(r pgx.Rows) (OSCount, error) {
 		var c OSCount
-		return c, r.Scan(&c.OSFamily, &c.Count)
+		return c, r.Scan(&c.OSFamily, &c.Count, &c.Online)
+	}); err != nil {
+		return d, err
+	}
+	// Enabled rules that active devices currently fail: most severe first, then most devices.
+	rows, err = s.Pool.Query(ctx, `
+		SELECT r.id, r.name, r.severity, count(*)
+		FROM compliance_results cr
+		JOIN compliance_rules r ON r.id = cr.rule_id
+		JOIN devices dv ON dv.id = cr.device_id AND dv.retired_at IS NULL
+		WHERE cr.org_id = $1 AND NOT cr.passed AND r.enabled
+		GROUP BY r.id, r.name, r.severity
+		ORDER BY array_position(ARRAY['critical','high','medium','low'], r.severity), count(*) DESC, r.name
+		LIMIT 6`, orgID)
+	if d.FailingRules, err = collect(rows, err, func(r pgx.Rows) (FailingRule, error) {
+		var f FailingRule
+		return f, r.Scan(&f.RuleID, &f.Name, &f.Severity, &f.Devices)
 	}); err != nil {
 		return d, err
 	}

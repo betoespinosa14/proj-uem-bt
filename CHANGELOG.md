@@ -7,6 +7,30 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.1 (2026-11-07): BEACON rebrand
+
+The console is renamed **BEACON** (Business Endpoint Authorization, Configuration and Oversight Network) and
+restyled in the company colors.
+
+### Changed
+- **New look:**
+  - the company logo and teal palette;
+  - Neon Jade (#83FD80) used as a signal color;
+  - the Plus Jakarta Sans font;
+  - a dark icon rail with a collapse control at the bottom;
+  - a rounded frame with a top bar, user menu and live indicator;
+  - outlined cards, with a 1px #2A3B43 border in dark mode;
+  - small transitions between pages.
+- **Dashboard:**
+  - headline numbers beside a device search box;
+  - devices per OS shown as horizontal online/offline bars, each linking to the filtered device list;
+  - a "Failing compliance checks" list replaces the compliance donut.
+- **Tables** are about 20% denser across the console.
+- The devices page accepts `?q=` and `?os=` in the URL.
+
+### Added
+- `/api/dashboard` returns `by_os[].online` and `failing_rules` (see `docs/API.md`).
+
 ## 2026.11.0 (2026-11-06): Monitoring devices outside the office
 
 Devices now report to Sentinel from anywhere, not just the office network.

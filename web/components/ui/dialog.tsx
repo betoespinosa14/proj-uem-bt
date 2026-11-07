@@ -79,7 +79,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative z-10 my-8 flex w-full flex-col rounded-lg border border-border bg-popover text-popover-foreground shadow-xl outline-none animate-zoom-in",
+          "relative z-10 my-8 flex w-full flex-col rounded-2xl border border-border/60 bg-popover text-popover-foreground shadow-lift outline-none motion-safe:animate-zoom-in",
           "max-h-[calc(100vh-4rem)]",
           sizes[size],
           className,

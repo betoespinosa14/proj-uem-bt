@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, Apple, Download, Monitor, Server, X, type LucideIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, Apple, Download, Monitor, Search, Server, X, type LucideIcon } from "lucide-react";
 import type { CommandStatus, ComplianceState, DeviceStatus, Severity } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 import { cn, osLabel, titleCase } from "@/lib/utils";
@@ -9,23 +10,97 @@ import { Badge, type BadgeVariant } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 
+/** The company logo. The PNG is 88×80, so keep it at 40px or smaller. */
+export function BrandMark({ className }: { className?: string }) {
+  // eslint-disable-next-line @next/next/no-img-element -- tiny static logo; next/image adds nothing here
+  return <img src="/logo.png" alt="" width={88} height={80} className={cn("h-8 w-auto select-none", className)} draggable={false} />;
+}
+
+export type HeadlineStat = {
+  label: string;
+  value: React.ReactNode;
+  icon: LucideIcon;
+  tone?: "default" | "brand" | "success" | "danger" | "warning";
+};
+
+const headlineTone = {
+  default: "text-foreground",
+  brand: "text-primary",
+  success: "text-success",
+  danger: "text-destructive",
+  warning: "text-warning",
+};
+
 export function PageHeader({
   title,
   description,
   actions,
+  stats,
+  statsAside,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
+  /** Large headline figures shown under the title. */
+  stats?: HeadlineStat[];
+  /** Shown at the right end of the stats row, e.g. a search box. */
+  statsAside?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+    <div className="mb-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <span className="mb-2.5 block h-1 w-8 rounded-full bg-brand" aria-hidden />
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{title}</h1>
+          {description && <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">{description}</p>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {(stats?.length || statsAside) && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
+          <dl className="flex flex-wrap gap-x-8 gap-y-3">
+            {stats?.map((s) => (
+              <div key={s.label} className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge/70 bg-card text-muted-foreground dark:border-edge">
+                  <s.icon className="h-4 w-4" />
+                </span>
+                <div className="leading-tight">
+                  <dd className={cn("text-xl font-semibold tracking-tight tabular", headlineTone[s.tone ?? "default"])}>{s.value}</dd>
+                  <dt className="text-xs text-muted-foreground">{s.label}</dt>
+                </div>
+              </div>
+            ))}
+          </dl>
+          {statsAside}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Search pill: opens the device list filtered by the typed text. */
+export function DeviceSearch({ className }: { className?: string }) {
+  const router = useRouter();
+  const [q, setQ] = React.useState("");
+  return (
+    <form
+      role="search"
+      className={cn("relative w-full sm:w-72", className)}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const v = q.trim();
+        router.push(v ? `/devices?q=${encodeURIComponent(v)}` : "/devices");
+      }}
+    >
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search devices…"
+        aria-label="Search devices"
+        className="h-11 w-full rounded-full border border-edge/70 bg-card pl-11 pr-4 text-sm shadow-card outline-none transition-all placeholder:text-muted-foreground focus:border-ring/50 focus:ring-2 focus:ring-ring/30"
+      />
+    </form>
   );
 }
 
@@ -44,8 +119,10 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      <div className="mb-3 rounded-full bg-muted p-3">
-        <Icon className="h-5 w-5 text-muted-foreground" />
+      <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
+        <span className="absolute inset-0 rounded-full bg-brand/10" />
+        <span className="absolute inset-2 rounded-full bg-brand/15" />
+        <Icon className="relative h-5 w-5 text-primary" />
       </div>
       <p className="font-medium">{title}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
@@ -128,7 +205,7 @@ export function OsIcon({ os, className }: { os: string; className?: string }) {
 /** Thin usage bar; turns amber/red as it fills. */
 export function UsageBar({ value, className }: { value: number | null | undefined; className?: string }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const color = v >= 90 ? "bg-destructive" : v >= 75 ? "bg-warning" : "bg-primary";
+  const color = v >= 90 ? "bg-destructive" : v >= 75 ? "bg-warning" : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
   return (
     <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
       <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${v}%` }} />
@@ -216,21 +293,21 @@ export function StatCard({
   tone?: "default" | "success" | "danger" | "warning";
 }) {
   const toneClass = {
-    default: "text-primary bg-primary/10",
+    default: "text-primary bg-brand/10",
     success: "text-success bg-success/10",
     danger: "text-destructive bg-destructive/10",
     warning: "text-warning bg-warning/10",
   }[tone];
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <span className={cn("rounded-md p-1.5", toneClass)}>
+    <Card className="p-5 transition-all duration-200 hover:shadow-lift motion-safe:hover:-translate-y-0.5">
+      <div className="flex items-center gap-2.5">
+        <span className={cn("rounded-lg p-2", toneClass)}>
           <Icon className="h-4 w-4" />
         </span>
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
       </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight tabular">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+      <p className="mt-3 text-3xl font-semibold tracking-tight tabular">{value}</p>
+      {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
 }

@@ -256,17 +256,27 @@ type AuditEntry struct {
 type OSCount struct {
 	OSFamily string `json:"os_family"`
 	Count    int    `json:"count"`
+	Online   int    `json:"online"`
+}
+
+// FailingRule is a compliance rule and how many active devices currently fail it.
+type FailingRule struct {
+	RuleID   string `json:"rule_id"`
+	Name     string `json:"name"`
+	Severity string `json:"severity"`
+	Devices  int    `json:"devices"`
 }
 
 type Dashboard struct {
-	DevicesTotal   int       `json:"devices_total"`
-	Online         int       `json:"online"`
-	Offline        int       `json:"offline"`
-	Compliant      int       `json:"compliant"`
-	NonCompliant   int       `json:"non_compliant"`
-	Unknown        int       `json:"unknown"`
-	OpenAlerts     int       `json:"open_alerts"`
-	ByOS           []OSCount `json:"by_os"`
-	RecentAlerts   []Alert   `json:"recent_alerts"`
-	RecentCommands []Command `json:"recent_commands"`
+	DevicesTotal   int           `json:"devices_total"`
+	Online         int           `json:"online"`
+	Offline        int           `json:"offline"`
+	Compliant      int           `json:"compliant"`
+	NonCompliant   int           `json:"non_compliant"`
+	Unknown        int           `json:"unknown"`
+	OpenAlerts     int           `json:"open_alerts"`
+	ByOS           []OSCount     `json:"by_os"`
+	FailingRules   []FailingRule `json:"failing_rules"`
+	RecentAlerts   []Alert       `json:"recent_alerts"`
+	RecentCommands []Command     `json:"recent_commands"`
 }

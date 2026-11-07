@@ -1,4 +1,6 @@
-# Sentinel UEM
+# BEACON
+
+**Business Endpoint Authorization, Configuration and Oversight Network** (formerly "Sentinel UEM").
 
 A self-hostable, multi-tenant **Unified Endpoint Management** platform modeled on the capabilities of Scalefusion. It has three parts:
 

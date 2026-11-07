@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AppWindow,
+  ChevronDown,
   Bell,
   CalendarClock,
   FileCode2,
@@ -15,6 +16,8 @@ import {
   Menu,
   Monitor,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
   ScrollText,
   Settings,
@@ -30,7 +33,9 @@ import { APP_NAME } from "@/lib/config";
 import { onLiveAlert, useLive, useLiveState } from "@/lib/live";
 import { hasPermission, useMe } from "@/lib/session";
 import { cn, titleCase } from "@/lib/utils";
+import { BrandMark } from "./common";
 import { Button } from "./ui/button";
+import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "./ui/dropdown";
 import { Skeleton } from "./ui/skeleton";
 import { toast } from "./toast";
 
@@ -99,7 +104,7 @@ function LiveIndicator() {
       <span
         className={cn(
           "h-2 w-2 rounded-full",
-          state === "open" ? "bg-success" : state === "connecting" ? "animate-pulse bg-warning" : "bg-muted-foreground/50",
+          state === "open" ? "bg-success dark:bg-neon" : state === "connecting" ? "animate-pulse bg-warning" : "bg-muted-foreground/50",
         )}
       />
       {label}
@@ -113,7 +118,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
   const { data: me, isLoading, error } = useMe();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   useLive(!!me);
+
+  // Remember whether the sidebar shows labels. Read after mount so server and client render the same.
+  useEffect(() => {
+    try {
+      setExpanded(localStorage.getItem("sidebar") === "expanded");
+    } catch {
+      /* storage unavailable: start collapsed */
+    }
+  }, []);
+  const toggleExpanded = () => {
+    const next = !expanded;
+    setExpanded(next);
+    try {
+      localStorage.setItem("sidebar", next ? "expanded" : "collapsed");
+    } catch {
+      /* storage unavailable: applies until reload */
+    }
+  };
 
   useEffect(() => setMobileOpen(false), [pathname]);
   useEffect(
@@ -143,83 +167,184 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const sidebar = (
-    <nav className="flex h-full flex-col gap-6 overflow-y-auto px-3 py-4">
-      <Link href="/" className="flex items-center gap-2 px-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <ShieldCheck className="h-4 w-4" />
-        </span>
-        <span className="font-semibold tracking-tight">{APP_NAME}</span>
+  const navGroups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || hasPermission(me, i.perm)) })).filter(
+    (g) => g.items.length > 0,
+  );
+
+  const railTooltip =
+    "pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-popover px-2.5 py-1 text-xs font-medium text-popover-foreground opacity-0 shadow-lift transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100";
+  const railItem = (wide: boolean, active = false) =>
+    cn(
+      "flex items-center rounded-xl text-sm transition-all duration-200",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70",
+      wide ? "w-full gap-3 px-3 py-2.5" : "h-11 w-11 justify-center",
+      active ? "bg-neon/10 font-semibold text-neon" : "text-rail-foreground/60 hover:bg-rail-foreground/5 hover:text-rail-foreground",
+    );
+
+  // `wide` shows labels (expanded sidebar and the mobile drawer). `toggle` adds the collapse/expand button.
+  const rail = (wide: boolean, toggle: boolean) => (
+    <nav className="flex h-full flex-col overflow-y-auto overflow-x-hidden px-3 pb-4 pt-6 text-rail-foreground" aria-label="Main">
+      <Link href="/" className={cn("flex shrink-0 items-center gap-3", wide ? "px-2" : "justify-center")} title={APP_NAME}>
+        <BrandMark className="h-9 shrink-0" />
+        {wide && (
+          <span className="leading-tight">
+            <span className="flex items-center gap-1.5 text-[15px] font-bold tracking-[0.18em]">
+              {APP_NAME}
+              <span className="h-1.5 w-1.5 rounded-full bg-neon" />
+            </span>
+            <span className="block text-[10px] font-medium uppercase tracking-wider text-rail-foreground/50">Endpoint oversight</span>
+          </span>
+        )}
       </Link>
-      {NAV.map((group) => {
-        const items = group.items.filter((i) => !i.perm || hasPermission(me, i.perm));
-        if (!items.length) return null;
-        return (
-          <div key={group.section}>
-            <p className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{group.section}</p>
-            <ul className="space-y-0.5">
-              {items.map((item) => {
-                const active = isActive(pathname, item.href);
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
-                        active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      {/* Groups spread over the rail's height; the spacers shrink to a minimum on short screens, then it scrolls. */}
+      <div className="flex flex-1 flex-col">
+        {navGroups.map((group, gi) => (
+          <div key={group.section} className="contents">
+            <div className={cn("min-h-5 flex-1", gi === 0 ? "max-h-10" : "max-h-14")} aria-hidden />
+            <div>
+              {wide ? (
+                <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-rail-foreground/45">{group.section}</p>
+              ) : (
+                gi > 0 && <div className="mx-auto mb-3 h-px w-8 bg-rail-foreground/10" />
+              )}
+              <ul className={cn("flex flex-col gap-[clamp(4px,0.9vh,10px)]", !wide && "items-center")}>
+                {group.items.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  return (
+                    <li key={item.href} className={cn("group relative", wide && "w-full")}>
+                      {active && (
+                        // 2px marker flush with the rail's left edge: the nav has 12px padding, and
+                        // collapsed icons sit another 8px in.
+                        <span className={cn("absolute top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-r bg-neon", wide ? "-left-3" : "-left-5")} aria-hidden />
                       )}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        aria-label={wide ? undefined : item.label}
+                        className={railItem(wide, active)}
+                      >
+                        <item.icon className="h-5 w-5 shrink-0" />
+                        {wide && item.label}
+                      </Link>
+                      {!wide && (
+                        <span role="tooltip" className={railTooltip}>
+                          {item.label}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
-        );
-      })}
+        ))}
+        <div className="min-h-5 flex-1" aria-hidden />
+      </div>
+      {toggle && (
+        <div className={cn("shrink-0 border-t border-rail-foreground/10 pt-3", !wide && "flex justify-center")}>
+          <div className={cn("group relative", wide && "w-full")}>
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              className={railItem(wide)}
+              aria-label={wide ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {wide ? <PanelLeftClose className="h-5 w-5 shrink-0" /> : <PanelLeftOpen className="h-5 w-5 shrink-0" />}
+              {wide && <span>Collapse</span>}
+            </button>
+            {!wide && (
+              <span role="tooltip" className={railTooltip}>
+                Expand sidebar
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 
   return (
-    <div className="min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-border bg-sidebar lg:block">{sidebar}</aside>
+    <div className="min-h-screen bg-canvas lg:bg-rail lg:bg-none">
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden bg-rail transition-[width] duration-300 lg:block",
+          expanded ? "w-60" : "w-[84px]",
+        )}
+      >
+        {rail(expanded, true)}
+      </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 border-r border-border bg-sidebar shadow-xl animate-fade-in">
-            <Button variant="ghost" size="icon-sm" className="absolute right-2 top-3" onClick={() => setMobileOpen(false)} aria-label="Close menu">
-              <X />
-            </Button>
-            {sidebar}
+          <div className="absolute inset-0 bg-black/50 motion-safe:animate-fade-in" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-64 bg-rail shadow-xl motion-safe:animate-fade-in">
+            <button
+              type="button"
+              className="absolute right-3 top-5 flex h-8 w-8 items-center justify-center rounded-lg text-rail-foreground/60 hover:bg-rail-foreground/10 hover:text-rail-foreground"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            {rail(true, false)}
           </aside>
         </div>
       )}
-      <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur sm:px-6">
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
-            <Menu />
-          </Button>
-          <div className="min-w-0 flex-1 truncate text-sm font-medium">{isLoading ? <Skeleton className="h-4 w-32" /> : me?.org.name}</div>
-          <LiveIndicator />
-          <ThemeToggle />
-          {me && (
-            <div className="flex items-center gap-3 border-l border-border pl-3">
-              <div className="hidden text-right leading-tight sm:block">
-                <p className="text-sm font-medium">{me.user.name || me.user.email}</p>
-                <p className="text-xs text-muted-foreground">{titleCase(me.user.role)}</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={logout} aria-label="Sign out" title="Sign out">
-                <LogOut />
-              </Button>
+      <div className={cn("transition-[padding] duration-300 lg:py-3 lg:pr-3", expanded ? "lg:pl-60" : "lg:pl-[84px]")}>
+        <div className="lg:h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:rounded-[28px] lg:bg-canvas lg:shadow-frame">
+          <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-[hsl(var(--canvas-from)/0.8)] px-4 backdrop-blur-md sm:px-6 lg:px-8">
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
+              <Menu />
+            </Button>
+            <div className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
+              {isLoading ? <Skeleton className="h-4 w-32" /> : me?.org.name}
             </div>
-          )}
-        </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{me ? children : <PageSkeleton />}</main>
+            <div className="ml-auto flex items-center gap-1.5">
+              <LiveIndicator />
+              <ThemeToggle />
+              {me && <UserMenu name={me.user.name || me.user.email} email={me.user.email} role={titleCase(me.user.role)} onLogout={logout} />}
+            </div>
+          </header>
+          <main key={pathname} className="mx-auto max-w-7xl px-4 pb-12 pt-3 sm:px-6 lg:px-8 motion-safe:animate-slide-in">
+            {me ? children : <PageSkeleton />}
+          </main>
+        </div>
       </div>
     </div>
+  );
+}
+
+function initials(name: string) {
+  const parts = name.split(/[\s@._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+function UserMenu({ name, email, role, onLogout }: { name: string; email: string; role: string; onLogout: () => void }) {
+  return (
+    <Dropdown>
+      <DropdownTrigger>
+        <button
+          type="button"
+          className="ml-1 flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          aria-label="Account menu"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-xs font-bold text-rail">
+            {initials(name)}
+          </span>
+          <ChevronDown className="hidden h-4 w-4 text-muted-foreground sm:block" />
+        </button>
+      </DropdownTrigger>
+      <DropdownContent>
+        <div className="px-2 py-2">
+          <p className="truncate text-sm font-semibold">{name}</p>
+          {name !== email && <p className="truncate text-xs text-muted-foreground">{email}</p>}
+          <p className="mt-1 text-xs text-muted-foreground">{role}</p>
+        </div>
+        <DropdownSeparator />
+        <DropdownItem onSelect={onLogout}>
+          <LogOut /> Sign out
+        </DropdownItem>
+      </DropdownContent>
+    </Dropdown>
   );
 }
 

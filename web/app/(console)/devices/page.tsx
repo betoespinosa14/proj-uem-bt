@@ -39,9 +39,14 @@ function DevicesView() {
   const router = useRouter();
   const params = useSearchParams();
   const can = useCan();
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(params.get("q") ?? "");
+  // The top-bar search links here with ?q=; follow it when it changes on this page too.
+  const urlQ = params.get("q");
+  useEffect(() => {
+    if (urlQ !== null) setQ(urlQ);
+  }, [urlQ]);
   const [status, setStatus] = useState("");
-  const [os, setOs] = useState("");
+  const [os, setOs] = useState(params.get("os") ?? "");
   const [compliance, setCompliance] = useState(params.get("compliance") ?? "");
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());

@@ -300,6 +300,25 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 		t.Fatalf("software.csv rows = %v, err = %v", rows, err)
 	}
 
+	// The dashboard lists the failing rule and counts the device as online for its OS.
+	var dash struct {
+		ByOS []struct {
+			OSFamily      string `json:"os_family"`
+			Count, Online int
+		} `json:"by_os"`
+		FailingRules []struct {
+			Name, Severity string
+			Devices        int
+		} `json:"failing_rules"`
+	}
+	a.do("GET", "/api/dashboard", nil, 200, &dash)
+	if len(dash.FailingRules) != 1 || dash.FailingRules[0].Name != "FW" || dash.FailingRules[0].Severity != "high" || dash.FailingRules[0].Devices != 1 {
+		t.Fatalf("dashboard failing_rules = %+v", dash.FailingRules)
+	}
+	if len(dash.ByOS) != 1 || dash.ByOS[0].OSFamily != "linux" || dash.ByOS[0].Count != 1 || dash.ByOS[0].Online != 1 {
+		t.Fatalf("dashboard by_os = %+v", dash.ByOS)
+	}
+
 	var alerts struct{ Items []struct{ Severity string } }
 	a.do("GET", "/api/alerts?status=open", nil, 200, &alerts)
 	if len(alerts.Items) != 1 || alerts.Items[0].Severity != "high" {

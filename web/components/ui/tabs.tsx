@@ -56,7 +56,7 @@ export function TabsList({ className, children }: { className?: string; children
       ref={ref}
       role="tablist"
       onKeyDown={onKeyDown}
-      className={cn("flex items-center gap-1 overflow-x-auto border-b border-border", className)}
+      className={cn("flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-full bg-muted/70 p-1", className)}
     >
       {children}
     </div>
@@ -87,9 +87,9 @@ export function TabsTrigger({
       disabled={disabled}
       onClick={() => t.setValue(value)}
       className={cn(
-        "relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-t-md disabled:opacity-50",
-        active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+        "relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50",
+        active ? "bg-card text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))] dark:shadow-[inset_0_-2px_0_hsl(var(--neon))]" : "text-muted-foreground hover:text-foreground",
         className,
       )}
     >
@@ -106,7 +106,7 @@ export function TabsContent({ value, className, children }: { value: string; cla
       role="tabpanel"
       id={`${t.id}-panel-${value}`}
       aria-labelledby={`${t.id}-tab-${value}`}
-      className={cn("pt-4 animate-fade-in", className)}
+      className={cn("pt-5 motion-safe:animate-fade-in", className)}
     >
       {children}
     </div>
@@ -126,7 +126,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("inline-flex rounded-md border border-border bg-muted/50 p-0.5", className)}>
+    <div className={cn("inline-flex rounded-full bg-muted/70 p-1", className)}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -134,7 +134,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+            "rounded-full px-3 py-1 text-xs font-medium transition-all duration-200",
             value === o.value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
           )}
         >

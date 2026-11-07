@@ -77,7 +77,7 @@ export function DropdownContent({
       role="menu"
       onKeyDown={onKeyDown}
       className={cn(
-        "absolute z-40 mt-1 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg animate-fade-in",
+        "absolute z-40 mt-1.5 min-w-[12rem] overflow-hidden rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground shadow-lift motion-safe:animate-fade-in",
         align === "end" ? "right-0" : "left-0",
         className,
       )}

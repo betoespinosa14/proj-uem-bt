@@ -15,6 +15,13 @@ commits after 2026.11.0, at commit `60f25a5`.
   non-zero offline count is shown in bold.
 - **Devices list: CPU, Mem and Disk each have their own header label**, lined up over their columns, instead of
   one "CPU / Mem / Disk" title that didn't line up with the numbers.
+- **Sidebar:**
+  - Fleet is ordered Dashboard, Devices, Enrollment, Groups, App usage, following the order you work in.
+  - Audit log has a history icon, so it no longer looks like Scripts.
+  - In the collapsed sidebar, the lines between Fleet, Policy and Administration are easier to see, and each
+    icon's tooltip shows its section above the page name.
+  - The green marker for the current page sits 4px left of the highlighted item, in both collapsed and expanded
+    mode, instead of on the screen edge.
 
 ## 2026.11.4 (2026-11-09): App usage dashboard
 

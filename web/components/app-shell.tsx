@@ -11,6 +11,7 @@ import {
   CalendarClock,
   FileCode2,
   FolderTree,
+  History,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -19,7 +20,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
-  ScrollText,
   Settings,
   ShieldCheck,
   Sun,
@@ -47,9 +47,9 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/devices", label: "Devices", icon: Monitor },
-      { href: "/usage", label: "App usage", icon: AppWindow },
-      { href: "/groups", label: "Groups", icon: FolderTree },
       { href: "/enrollment", label: "Enrollment", icon: UserPlus },
+      { href: "/groups", label: "Groups", icon: FolderTree },
+      { href: "/usage", label: "App usage", icon: AppWindow },
     ],
   },
   {
@@ -64,13 +64,20 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Administration",
     items: [
-      { href: "/audit", label: "Audit log", icon: ScrollText, perm: "audit.read" },
+      { href: "/audit", label: "Audit log", icon: History, perm: "audit.read" },
       { href: "/users", label: "Users & roles", icon: Users, perm: "users.write" },
       { href: "/integrations", label: "Integrations", icon: Plug, perm: "webhooks.write" },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
 ];
+
+/**
+ * The current page's marker, the same in collapsed and expanded mode: a neon bar 2px wide and 24px
+ * tall, centered vertically, 4px left of the highlighted item (6px offset minus its 2px width).
+ * Positioned against the item's <li>, which starts where the highlight starts.
+ */
+const ACTIVE_MARKER = "absolute -left-1.5 top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-full bg-neon";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
@@ -205,7 +212,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {wide ? (
                 <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-rail-foreground/45">{group.section}</p>
               ) : (
-                gi > 0 && <div className="mx-auto mb-3 h-px w-8 bg-rail-foreground/10" />
+                gi > 0 && <div className="mx-auto mb-3 h-px w-8 bg-rail-foreground/25" />
               )}
               <ul className={cn("flex flex-col gap-[clamp(4px,0.9vh,10px)]", !wide && "items-center")}>
                 {group.items.map((item) => {
@@ -213,9 +220,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   return (
                     <li key={item.href} className={cn("group relative", wide && "w-full")}>
                       {active && (
-                        // 2px marker flush with the rail's left edge: the nav has 12px padding, and
-                        // collapsed icons sit another 8px in.
-                        <span className={cn("absolute top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-r bg-neon", wide ? "-left-3" : "-left-5")} aria-hidden />
+                        <span className={ACTIVE_MARKER} aria-hidden />
                       )}
                       <Link
                         href={item.href}
@@ -228,6 +233,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       </Link>
                       {!wide && (
                         <span role="tooltip" className={railTooltip}>
+                          {/* The section name keeps Fleet / Policy / Administration one hover away when collapsed. */}
+                          <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground" aria-hidden>
+                            {group.section}
+                          </span>
                           {item.label}
                         </span>
                       )}

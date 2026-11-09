@@ -201,7 +201,14 @@ function DevicesView() {
                   <TH>Status</TH>
                   <TH>Compliance</TH>
                   <TH className="hidden md:table-cell">Group</TH>
-                  <TH className="hidden lg:table-cell">CPU / Mem / Disk</TH>
+                  <TH className="hidden lg:table-cell">
+                    {/* Same grid as the cells below, so each label sits over its own number. */}
+                    <div className="grid w-44 grid-cols-3 gap-2">
+                      <span>CPU</span>
+                      <span>Mem</span>
+                      <span>Disk</span>
+                    </div>
+                  </TH>
                   <TH className="hidden md:table-cell">User</TH>
                   <TH>Last seen</TH>
                 </TR>

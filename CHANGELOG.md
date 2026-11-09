@@ -13,6 +13,8 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **Offline devices stand out on the Dashboard.** In "Devices by operating system", the offline part of each bar
   and its legend dot are now amber (the same color as the Offline headline number) instead of grey, and a
   non-zero offline count is shown in bold.
+- **Devices list: CPU, Mem and Disk each have their own header label**, lined up over their columns, instead of
+  one "CPU / Mem / Disk" title that didn't line up with the numbers.
 
 ## 2026.11.4 (2026-11-09): App usage dashboard
 

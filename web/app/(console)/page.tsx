@@ -79,7 +79,7 @@ export default function DashboardPage() {
             {data && (
               <span className="flex items-center gap-3 text-xs text-muted-foreground">
                 <Legend className="bg-success dark:bg-neon" label="Online" />
-                <Legend className="bg-muted-foreground/30" label="Offline" />
+                <Legend className="bg-warning" label="Offline" />
               </span>
             )}
           </CardHeader>
@@ -221,10 +221,11 @@ function OsBreakdown({ data }: { data: Dashboard }) {
               </span>
               <span className="flex h-2.5 overflow-hidden rounded-full bg-muted" title={`${o.online} online, ${offline} offline`}>
                 <span className="h-full bg-success dark:bg-neon" style={{ width: `${(o.online / max) * 100}%` }} />
-                <span className="h-full bg-muted-foreground/30" style={{ width: `${(offline / max) * 100}%` }} />
+                <span className="h-full bg-warning" style={{ width: `${(offline / max) * 100}%` }} />
               </span>
               <span className="w-32 text-right text-xs text-muted-foreground tabular">
-                <span className="font-semibold text-foreground">{o.online}</span> online · {offline} offline
+                <span className="font-semibold text-foreground">{o.online}</span> online ·{" "}
+                <span className={offline > 0 ? "font-semibold text-foreground" : undefined}>{offline} offline</span>
               </span>
             </Link>
           </li>

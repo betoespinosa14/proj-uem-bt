@@ -7,6 +7,13 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Changed
+- **Offline devices stand out on the Dashboard.** In "Devices by operating system", the offline part of each bar
+  and its legend dot are now amber (the same color as the Offline headline number) instead of grey, and a
+  non-zero offline count is shown in bold.
+
 ## 2026.11.4 (2026-11-09): App usage dashboard
 
 ### Added

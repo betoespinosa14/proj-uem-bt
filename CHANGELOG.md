@@ -7,10 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.2 (2026-11-09): Starts at boot; agents recover quickly after switching networks
 
 ### Added
 - **BEACON starts at boot on the office Mac Mini** (`deploy/macos`, `make deploy-mac`). Postgres, the API server, the console and Caddy run as launchd daemons that start without a login and restart if they crash. This also keeps the IP certificate renewing.
+
+### Fixed
+- **Agents reconnect within about 40 seconds after a device changes networks** (cable to Wi-Fi, office to home).
+  - The agent now pings the server every 30 seconds and drops a connection that doesn't answer within 10 seconds.
+  - Before, a connection that died silently was only noticed when the operating system gave up on it, which takes minutes. The device showed Offline until then.
+  - Only agents installed from this release have the fix.
+
+### Deployment (office FortiGate, not in the repo)
+- **Office Wi-Fi (192.168.131.x) can reach `https://122.49.212.51`.**
+  - It needs a Wi-Fi → port1 policy with destination VIP `UEM-HTTPS-ALL` and NAT, like the wired LAN's policy 39.
+  - Without it, devices on Wi-Fi could open `https://192.168.130.7` but their agents couldn't connect, so they showed Offline.
 
 ## 2026.11.1 (2026-11-07): BEACON rebrand
 

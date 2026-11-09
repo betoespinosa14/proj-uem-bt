@@ -93,9 +93,12 @@ func (f *fakeServer) connections() int {
 	return f.connected
 }
 
-func runAgent(t *testing.T, server string) (*Agent, chan string) {
+func runAgent(t *testing.T, server string, opts ...func(*Agent)) (*Agent, chan string) {
 	a := New(config.Config{ServerURL: server, DeviceID: "dev1", DeviceSecret: "secret1"}, "test",
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	for _, o := range opts {
+		o(a)
+	}
 	saved := make(chan string, 1)
 	a.SaveServerURL = func(u string) error { saved <- u; return nil }
 	ctx, cancel := context.WithCancel(context.Background())

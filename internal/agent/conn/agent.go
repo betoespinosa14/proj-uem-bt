@@ -30,6 +30,12 @@ import (
 )
 
 const (
+	// The agent pings the server this often and drops the connection if no
+	// pong arrives in time. Without this, a connection that died silently (a
+	// laptop switching from cable to Wi-Fi, or leaving the office) is only
+	// noticed when the operating system gives up on it, which takes minutes.
+	pingInterval = 30 * time.Second
+	pingTimeout  = 10 * time.Second
 	heartbeatInterval = 30 * time.Second
 	blocklistInterval = 15 * time.Second
 	retryMoveAfter    = 10 * time.Minute // after a new server address failed
@@ -66,6 +72,8 @@ type Agent struct {
 	checking    bool                 // a new address is being checked
 	failedMoves map[string]time.Time // address → when switching to it last failed
 	endSession  context.CancelFunc   // ends the current connection
+
+	pingEvery, pingWait time.Duration // see pingInterval; shorter in tests
 }
 
 func New(cfg config.Config, version string, log *slog.Logger) *Agent {
@@ -78,6 +86,8 @@ func New(cfg config.Config, version string, log *slog.Logger) *Agent {
 		usage:    usage.NewTracker(runtime.GOOS),
 
 		failedMoves: map[string]time.Time{},
+		pingEvery:   pingInterval,
+		pingWait:    pingTimeout,
 	}
 }
 
@@ -169,9 +179,10 @@ func (a *Agent) session(ctx context.Context) error {
 		a.mu.Unlock()
 	}()
 
-	errc := make(chan error, 2)
+	errc := make(chan error, 3)
 	go func() { errc <- a.writeLoop(sctx, c, out) }()
 	go func() { errc <- a.readLoop(sctx, c) }()
+	go func() { errc <- a.pingLoop(sctx, c) }()
 
 	a.send(protocol.TypeHello, protocol.Hello{
 		ProtocolVersion: protocol.Version, AgentVersion: a.version, Facts: collect.Facts(sctx, a.version),
@@ -196,6 +207,29 @@ func (a *Agent) writeLoop(ctx context.Context, c *websocket.Conn, out <-chan []b
 			cancel()
 			if err != nil {
 				return err
+			}
+		}
+	}
+}
+
+// pingLoop returns an error once the server stops answering pings. The pong
+// is picked up by readLoop, which is always reading.
+func (a *Agent) pingLoop(ctx context.Context, c *websocket.Conn) error {
+	t := time.NewTicker(a.pingEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			pctx, cancel := context.WithTimeout(ctx, a.pingWait)
+			err := c.Ping(pctx)
+			cancel()
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return fmt.Errorf("server stopped answering pings: %w", err)
 			}
 		}
 	}

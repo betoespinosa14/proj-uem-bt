@@ -9,7 +9,7 @@ GO_PKGS := ./cmd/... ./internal/...
 AGENT_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
 TEST_DB ?= postgres://uem:uem@localhost:5432/uem?sslmode=disable
 
-.PHONY: all build server agent build-agents version release test test-unit vet web up down logs clean
+.PHONY: all build server agent build-agents version release test test-unit vet web up down logs clean deploy-mac
 
 all: build
 
@@ -56,6 +56,11 @@ test-unit:
 
 web:
 	cd web && npm ci && npm run build
+
+# Office Mac Mini: build and stage BEACON for the launchd daemons (deploy/macos).
+# Then run: sudo deploy/macos/install.sh --system
+deploy-mac:
+	deploy/macos/install.sh
 
 up:
 	docker compose -f deploy/docker-compose.yml up -d --build

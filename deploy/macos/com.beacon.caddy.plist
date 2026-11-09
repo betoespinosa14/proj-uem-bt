@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.beacon.caddy</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/caddy.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/caddy.log</string>
+	<key>WorkingDirectory</key>
+	<string>__APP__</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- Caddy keeps its certificates under $HOME/Library/Application Support/Caddy. -->
+		<key>HOME</key>
+		<string>__HOME__</string>
+	</dict>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/caddy</string>
+		<string>run</string>
+		<string>--config</string>
+		<string>__APP__/Caddyfile</string>
+		<string>--adapter</string>
+		<string>caddyfile</string>
+	</array>
+</dict>
+</plist>

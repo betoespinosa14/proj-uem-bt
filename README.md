@@ -73,6 +73,16 @@ If the address is unreachable or rejects the device, the agent stays on its curr
 
 The machine must stay awake and online: while it's down, no device can report. Agents reconnect on their own afterwards.
 
+### Starting at boot on the office Mac Mini
+
+On the office Mac Mini, BEACON runs as four launchd daemons: `com.beacon.postgres`, `com.beacon.server`, `com.beacon.web` and `com.beacon.caddy`. They start at boot without anyone logging in, and restart if they crash. They run as your user from a copy in `~/Library/Application Support/BEACON`, because macOS blocks background processes from reading `~/Desktop`.
+
+- **Install or redeploy:** run `make deploy-mac`, then `sudo deploy/macos/install.sh --system`. The first step builds and stages; the second installs the daemons and restarts them on the new build.
+- **Settings:** edit `server.env` (server) or `Caddyfile` in the BEACON folder. Then restart the service, for example `sudo launchctl kickstart -k system/com.beacon.server`.
+- **Status:** `sudo launchctl print system/com.beacon.server`.
+- **Logs:** `~/Library/Logs/BEACON/`.
+- **Stop a service:** `sudo launchctl bootout system/com.beacon.caddy`. It comes back at the next boot unless you also delete its plist from `/Library/LaunchDaemons`.
+
 ## Development
 
 Requirements: Go 1.26+, Node 22+, PostgreSQL 16.

@@ -7,6 +7,11 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Added
+- **BEACON starts at boot on the office Mac Mini** (`deploy/macos`, `make deploy-mac`). Postgres, the API server, the console and Caddy run as launchd daemons that start without a login and restart if they crash. This also keeps the IP certificate renewing.
+
 ## 2026.11.1 (2026-11-07): BEACON rebrand
 
 The console is renamed **BEACON** (Business Endpoint Authorization, Configuration and Oversight Network) and

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.beacon.postgres</string>
+	<key>UserName</key>
+	<string>__USER__</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>StandardOutPath</key>
+	<string>__LOGS__/postgres.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGS__/postgres.log</string>
+	<key>ExitTimeOut</key>
+	<integer>120</integer>
+	<key>WorkingDirectory</key>
+	<string>/opt/homebrew</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>LC_ALL</key>
+		<string>en_US.UTF-8</string>
+		<key>HOME</key>
+		<string>__HOME__</string>
+	</dict>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/opt/postgresql@16/bin/postgres</string>
+		<string>-D</string>
+		<string>/opt/homebrew/var/postgresql@16</string>
+	</array>
+</dict>
+</plist>

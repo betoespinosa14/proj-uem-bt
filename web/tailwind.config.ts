@@ -27,6 +27,7 @@ const config: Config = {
         neon: c("neon"),
         edge: c("edge"),
         rail: { DEFAULT: c("rail"), foreground: c("rail-foreground") },
+        nav: { DEFAULT: c("nav"), foreground: c("nav-foreground"), accent: c("nav-accent") },
         tint: { mint: c("tint-mint"), sky: c("tint-sky"), sand: c("tint-sand") },
       },
       borderRadius: { "2xl": "1.25rem", xl: "1rem", lg: "0.75rem", md: "0.5rem", sm: "0.375rem" },

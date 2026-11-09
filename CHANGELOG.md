@@ -7,7 +7,7 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.5 (2026-11-09): Display polish
 
 ### Changed
 - **Offline devices stand out on the Dashboard.** In "Devices by operating system", the offline part of each bar
@@ -22,6 +22,11 @@ commits after 2026.11.0, at commit `60f25a5`.
     icon's tooltip shows its section above the page name.
   - The green marker for the current page sits 4px left of the highlighted item, in both collapsed and expanded
     mode, instead of on the screen edge.
+  - **Light mode has a light sidebar.** The sidebar and the frame around the page are a soft grey-blue with dark
+    slate text, instead of the dark teal slab. The current page is a white highlight with dark green text and a
+    dark green marker (neon is unreadable on light colors). Dark mode is unchanged, and the login page stays dark.
+  - The section headings and the "Endpoint oversight" line are brighter in both themes, so they meet the 4.5:1
+    contrast minimum.
 
 ## 2026.11.4 (2026-11-09): App usage dashboard
 

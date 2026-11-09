@@ -73,11 +73,12 @@ const NAV: { section: string; items: NavItem[] }[] = [
 ];
 
 /**
- * The current page's marker, the same in collapsed and expanded mode: a neon bar 2px wide and 24px
+ * The current page's marker, the same in collapsed and expanded mode: an accent bar (dark green in
+ * light mode, neon in dark mode) 2px wide and 24px
  * tall, centered vertically, 4px left of the highlighted item (6px offset minus its 2px width).
  * Positioned against the item's <li>, which starts where the highlight starts.
  */
-const ACTIVE_MARKER = "absolute -left-1.5 top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-full bg-neon";
+const ACTIVE_MARKER = "absolute -left-1.5 top-1/2 h-6 w-[2px] -translate-y-1/2 rounded-full bg-nav-accent";
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
@@ -185,21 +186,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       "flex items-center rounded-xl text-sm transition-all duration-200",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70",
       wide ? "w-full gap-3 px-3 py-2.5" : "h-11 w-11 justify-center",
-      active ? "bg-neon/10 font-semibold text-neon" : "text-rail-foreground/60 hover:bg-rail-foreground/5 hover:text-rail-foreground",
+      active
+        ? "bg-card font-semibold text-nav-accent shadow-sm dark:bg-nav-accent/10 dark:shadow-none"
+        : "text-nav-foreground/75 hover:bg-nav-foreground/5 hover:text-nav-foreground",
     );
 
   // `wide` shows labels (expanded sidebar and the mobile drawer). `toggle` adds the collapse/expand button.
   const rail = (wide: boolean, toggle: boolean) => (
-    <nav className="flex h-full flex-col overflow-y-auto overflow-x-hidden px-3 pb-4 pt-6 text-rail-foreground" aria-label="Main">
+    <nav className="flex h-full flex-col overflow-y-auto overflow-x-hidden px-3 pb-4 pt-6 text-nav-foreground" aria-label="Main">
       <Link href="/" className={cn("flex shrink-0 items-center gap-3", wide ? "px-2" : "justify-center")} title={APP_NAME}>
         <BrandMark className="h-9 shrink-0" />
         {wide && (
           <span className="leading-tight">
             <span className="flex items-center gap-1.5 text-[15px] font-bold tracking-[0.18em]">
               {APP_NAME}
-              <span className="h-1.5 w-1.5 rounded-full bg-neon" />
+              <span className="h-1.5 w-1.5 rounded-full bg-nav-accent" />
             </span>
-            <span className="block text-[10px] font-medium uppercase tracking-wider text-rail-foreground/50">Endpoint oversight</span>
+            <span className="block text-[10px] font-medium uppercase tracking-wider text-nav-foreground/70">Endpoint oversight</span>
           </span>
         )}
       </Link>
@@ -210,9 +213,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className={cn("min-h-5 flex-1", gi === 0 ? "max-h-10" : "max-h-14")} aria-hidden />
             <div>
               {wide ? (
-                <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-rail-foreground/45">{group.section}</p>
+                <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-nav-foreground/70">{group.section}</p>
               ) : (
-                gi > 0 && <div className="mx-auto mb-3 h-px w-8 bg-rail-foreground/25" />
+                gi > 0 && <div className="mx-auto mb-3 h-px w-8 bg-nav-foreground/25" />
               )}
               <ul className={cn("flex flex-col gap-[clamp(4px,0.9vh,10px)]", !wide && "items-center")}>
                 {group.items.map((item) => {
@@ -250,7 +253,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="min-h-5 flex-1" aria-hidden />
       </div>
       {toggle && (
-        <div className={cn("shrink-0 border-t border-rail-foreground/10 pt-3", !wide && "flex justify-center")}>
+        <div className={cn("shrink-0 border-t border-nav-foreground/10 pt-3", !wide && "flex justify-center")}>
           <div className={cn("group relative", wide && "w-full")}>
             <button
               type="button"
@@ -273,10 +276,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-canvas lg:bg-rail lg:bg-none">
+    <div className="min-h-screen bg-canvas lg:bg-nav lg:bg-none">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 hidden bg-rail transition-[width] duration-300 lg:block",
+          "fixed inset-y-0 left-0 z-30 hidden bg-nav transition-[width] duration-300 lg:block",
           expanded ? "w-60" : "w-[84px]",
         )}
       >
@@ -285,10 +288,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/50 motion-safe:animate-fade-in" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-64 bg-rail shadow-xl motion-safe:animate-fade-in">
+          <aside className="absolute inset-y-0 left-0 w-64 bg-nav shadow-xl motion-safe:animate-fade-in">
             <button
               type="button"
-              className="absolute right-3 top-5 flex h-8 w-8 items-center justify-center rounded-lg text-rail-foreground/60 hover:bg-rail-foreground/10 hover:text-rail-foreground"
+              className="absolute right-3 top-5 flex h-8 w-8 items-center justify-center rounded-lg text-nav-foreground/60 hover:bg-nav-foreground/10 hover:text-nav-foreground"
               onClick={() => setMobileOpen(false)}
               aria-label="Close menu"
             >
@@ -299,7 +302,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <div className={cn("transition-[padding] duration-300 lg:py-3 lg:pr-3", expanded ? "lg:pl-60" : "lg:pl-[84px]")}>
-        <div className="lg:h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:rounded-[28px] lg:bg-canvas lg:shadow-frame">
+        <div className="lg:h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:rounded-[28px] lg:bg-canvas lg:shadow-lift lg:ring-1 lg:ring-edge dark:lg:shadow-frame dark:lg:ring-0">
           <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-[hsl(var(--canvas-from)/0.8)] px-4 backdrop-blur-md sm:px-6 lg:px-8">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
               <Menu />

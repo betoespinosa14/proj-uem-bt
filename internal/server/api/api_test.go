@@ -562,3 +562,55 @@ func TestPolicyAnnouncesServerURL(t *testing.T) {
 		t.Fatalf("server_url after update = %q", got)
 	}
 }
+
+// A device that switches networks reconnects before the server notices its old
+// connection is gone. A command sent on the old connection must be delivered
+// again on the new one instead of staying "sent" forever.
+func TestCommandOnReplacedConnectionIsRedelivered(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Roaming")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	dev := e.enroll(t, tok.Token)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(e.srv.URL, "http") + "/api/agent/ws"
+	dial := func() *websocket.Conn {
+		c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Device " + dev.DeviceID + ":" + dev.DeviceSecret}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { c.CloseNow() })
+		f, _ := protocol.Encode(protocol.TypeHello, protocol.Hello{ProtocolVersion: protocol.Version, AgentVersion: "test"})
+		if err := c.Write(ctx, websocket.MessageText, f); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	waitCommand := func(c *websocket.Conn, id string) {
+		for {
+			_, data, err := c.Read(ctx)
+			if err != nil {
+				t.Fatalf("waiting for command %s: %v", id, err)
+			}
+			env, _ := protocol.Decode(data)
+			if env.Type != protocol.TypeCommand {
+				continue
+			}
+			var got protocol.Command
+			_ = json.Unmarshal(env.Data, &got)
+			if got.ID == id {
+				return
+			}
+		}
+	}
+
+	old := dial()
+	var cmd idResp
+	a.do("POST", "/api/devices/"+dev.DeviceID+"/commands", map[string]any{"type": "refresh_inventory"}, 201, &cmd)
+	waitCommand(old, cmd.ID) // sent on the old connection, never answered
+
+	// The new connection replaces the old one before the old one is torn down.
+	waitCommand(dial(), cmd.ID)
+}

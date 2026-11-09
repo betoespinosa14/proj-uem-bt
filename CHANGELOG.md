@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.3 (2026-11-09): Commands survive a network switch
+
+### Fixed
+- **A command sent while a device was switching networks stayed "Sent" forever.**
+  - If the device reconnected before the server noticed its old connection was gone, a command sent on the old connection was never delivered again. Seen with a Refresh sent while the iMac moved from Wi-Fi to cable.
+  - The server now re-sends any command still marked sent whenever an agent connects.
+  - The agent recognises commands it already has, so nothing runs twice.
+  - Server-only fix: agents don't need reinstalling.
+
 ## 2026.11.2 (2026-11-09): Starts at boot; agents recover quickly after switching networks
 
 ### Added

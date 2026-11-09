@@ -183,6 +183,14 @@ func (s *Server) handleAgentMessage(ctx context.Context, dev store.DeviceAuth, e
 			log.Error("set online", "err", err)
 		}
 		s.core.PushPolicy(ctx, dev.ID)
+		// Commands still marked sent went out on an earlier connection and may
+		// never have arrived: when a device switches networks, the new
+		// connection can replace the old one before the old one's disconnect
+		// requeues them. Deliver them again; the agent ignores command IDs it
+		// already has and just re-reports their result.
+		if err := s.store.RequeueSent(ctx, dev.ID); err != nil {
+			log.Error("requeue sent commands", "err", err)
+		}
 		s.core.FlushPending(ctx, dev.ID)
 		s.core.PublishDevice(ctx, dev.OrgID, dev.ID)
 

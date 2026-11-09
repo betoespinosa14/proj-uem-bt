@@ -184,7 +184,37 @@ export type FleetAppRow = {
   active_seconds: number;
 };
 
-export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean };
+export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean; group_id?: string };
+type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "group_id">;
+
+export type UsageAppStat = { app: string; active_seconds: number; minutes: number; users: number; devices: number };
+/**
+ * The App usage dashboard. Use is split per (device, app, user): foreground if
+ * someone was active in it at least once in the period, background-only
+ * otherwise. Open time and the app/user lists count foreground use only.
+ */
+export type UsageSummary = {
+  totals: {
+    active_seconds: number;
+    open_minutes: number;
+    apps_used: number;
+    active_users: number;
+    devices: number;
+    background_minutes: number;
+    background_apps: number;
+    /** Rows in `background` that are third-party software rather than system processes. */
+    background_third_party: number;
+    unused_apps: number;
+  };
+  /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
+  daily: { day: string; active_seconds: number; minutes: number; devices: number }[];
+  top_apps: UsageAppStat[];
+  idle_apps: UsageAppStat[];
+  top_users: { user: string; active_seconds: number; open_minutes: number; apps: number; devices: number; device_names: string[] }[];
+  background: { app: string; device_id: string; device_name: string; user: string; minutes: number; third_party: boolean }[];
+  /** Apps marked as infrastructure: open by design, left out of open totals and idle ranking. */
+  infrastructure: UsageAppStat[];
+};
 
 export type TelemetryPoint = {
   ts: string;
@@ -555,6 +585,7 @@ const get = <T>(path: string, query?: Query) => request<T>("GET", withQuery(path
 const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {});
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 
 const enc = encodeURIComponent;
 
@@ -661,6 +692,12 @@ export const api = {
     list: (f: FleetUsageFilters = {}) => get<Items<FleetUsageRow>>("/api/usage", { ...f, group: "app_user" }),
     byApp: (f: FleetUsageFilters = {}) => get<Items<FleetAppRow>>("/api/usage", { ...f, group: "app" }),
     exportUrl: (f: FleetUsageFilters = {}, group: UsageGroup = "app_user") => withQuery("/api/usage/export.csv", { ...f, group }),
+    summary: (f: SummaryFilters = {}) => get<UsageSummary>("/api/usage/summary", f),
+    /** One row per unused third-party app per device, for license reclamation. */
+    reclaimUrl: (f: SummaryFilters = {}) => withQuery("/api/usage/reclaim.csv", f),
+    infrastructure: () => get<Items<{ app: string; created_at: string }>>("/api/usage/infrastructure"),
+    markInfrastructure: (app: string) => put<void>("/api/usage/infrastructure", { app }),
+    unmarkInfrastructure: (app: string) => del<void>(withQuery("/api/usage/infrastructure", { app })),
   },
 };
 
@@ -679,6 +716,8 @@ export const qk = {
   deviceSoftware: (id: string) => ["device", id, "software"] as const,
   deviceUsage: (id: string, days: UsagePeriod, group: UsageGroup) => ["device", id, "usage", days, group] as const,
   usage: (f: FleetUsageFilters, group: UsageGroup) => ["usage", group, f] as const,
+  usageSummary: (f: SummaryFilters) => ["usage", "summary", f] as const,
+  usageInfrastructure: ["usage", "infrastructure"] as const,
   deviceTelemetry: (id: string, hours: number) => ["device", id, "telemetry", hours] as const,
   deviceCompliance: (id: string) => ["device", id, "compliance"] as const,
   deviceCommands: (id: string) => ["device", id, "commands"] as const,

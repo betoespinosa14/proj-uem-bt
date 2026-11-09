@@ -38,14 +38,17 @@ stage() {
   (cd "$REPO/web" && npm run build)
 
   echo "==> Staging into $APP"
-  mkdir -p "$APP/bin" "$APP/dist" "$APP/web" "$LOGS" "$RENDERED"
+  mkdir -p "$APP/bin" "$APP/dist" "$APP/web.next" "$LOGS" "$RENDERED"
   # Copy then rename, so a running server keeps its old binary until restarted.
   cp "$REPO/bin/uem-server" "$APP/bin/.uem-server.new"
   mv -f "$APP/bin/.uem-server.new" "$APP/bin/uem-server"
   rsync -a --delete "$REPO/dist/" "$APP/dist/"
-  rsync -a --delete "$REPO/web/.next/standalone/" "$APP/web/"
-  rsync -a --delete "$REPO/web/.next/static/" "$APP/web/.next/static/"
-  rsync -a --delete "$REPO/web/public/" "$APP/web/public/"
+  # The console is staged beside the running one and swapped in by --system
+  # right before the restart: replacing the files under a running console
+  # breaks its pages (it keeps serving HTML that names the old files).
+  rsync -a --delete "$REPO/web/.next/standalone/" "$APP/web.next/"
+  rsync -a --delete "$REPO/web/.next/static/" "$APP/web.next/.next/static/"
+  rsync -a --delete "$REPO/web/public/" "$APP/web.next/public/"
 
   # The Caddyfile and server settings are machine config, not code: create
   # them once and leave them alone afterwards.
@@ -87,6 +90,15 @@ EOF
 
 loaded() { launchctl print "system/com.beacon.$1" >/dev/null 2>&1; }
 
+# Put a staged console in place (the previous one is kept as web.prev).
+swap_web() {
+  [[ -d "$APP/web.next" ]] || return 0
+  rm -rf "$APP/web.prev"
+  if [[ -d "$APP/web" ]]; then mv "$APP/web" "$APP/web.prev"; fi
+  mv "$APP/web.next" "$APP/web"
+  echo "==> Console updated (previous kept in web.prev)"
+}
+
 wait_port_free() {
   for _ in $(seq 1 30); do
     lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 || return 0
@@ -117,6 +129,7 @@ install_system() {
 
   for l in "${LABELS[@]}"; do
     dst="/Library/LaunchDaemons/com.beacon.$l.plist"
+    if [[ $l == web ]]; then swap_web; fi
     if loaded "$l" && cmp -s "$RENDERED/com.beacon.$l.plist" "$dst"; then
       # Unchanged daemon: restart it on the new build (Postgres is left running).
       if [[ $l != postgres ]]; then

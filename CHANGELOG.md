@@ -7,6 +7,30 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.4 (2026-11-09): App usage dashboard
+
+### Added
+- **A Dashboard view on App usage**, next to the existing table. It opens first and remembers your last choice.
+  - **Headline numbers:**
+    - active time;
+    - share of open time actually used;
+    - apps used;
+    - active users;
+    - **Installed, not used**, with a "Review list" action.
+  - **Active hours per day:** days with no data are shaded, and a "First report" marker shows where reporting began.
+  - **Top apps and top users** by active time. Users show which machine they used; there's no percentage score next to people. Clicking an app opens the table filtered to it.
+  - **Active vs open:** apps people used, sorted by idle hours.
+  - **Running in the background, never used:** processes nobody touched (daemons, helpers, remote-access hosts, service accounts), with a "Third-party only" switch.
+- **Background-only processes are kept out of usage numbers.** A (device, app, user) with no active time in the period is listed separately instead of inflating open time. This applies to bash and systemd on Linux, Adobe helpers, drivers, and apps under service accounts.
+- **Mark as infrastructure:** admins can mark apps that are open by design, such as Parsec, so their open time isn't ranked as idle. Restore puts them back.
+- **License reclaim export** (`/api/usage/reclaim.csv`): one row per unused third-party app per device, with publisher, version, device user and last use.
+- **Group filter on App usage:** it narrows the dashboard, the table and every export to one device group, e.g. a single department.
+- An **Infrastructure** badge marks those apps in the App usage table.
+- API: `/api/usage/summary` and `/api/usage/infrastructure`. Migration `00004` adds the infrastructure list.
+
+### Fixed
+- **Deploying no longer breaks the running console.** The new console is staged beside the live one and swapped in at the restart. Before, the pages lost their styling until the restart.
+
 ## 2026.11.3 (2026-11-09): Commands survive a network switch
 
 ### Fixed

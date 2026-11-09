@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -81,14 +82,25 @@ func thirdParty[T any](list []T, sw func(T) store.Software) []T {
 	return out
 }
 
-func fleetFilter(r *http.Request) (int, store.FleetUsageFilter) {
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// fleetFilter parses the App usage filters: ?days=, ?app=, ?unused=true and
+// ?group_id= (only devices in that group).
+func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
 	days, since := usagePeriod(r)
 	q := r.URL.Query()
-	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Unused: q.Get("unused") == "true"}
+	group := strings.TrimSpace(q.Get("group_id"))
+	if group != "" && !uuidRe.MatchString(group) {
+		return days, store.FleetUsageFilter{}, badRequest("group_id must be a group ID")
+	}
+	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Unused: q.Get("unused") == "true", GroupID: group}, nil
 }
 
 func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
-	_, f := fleetFilter(r)
+	_, f, err := fleetFilter(r)
+	if err != nil {
+		return nil, err
+	}
 	list, err := s.store.FleetUsage(r.Context(), orgOf(r), f)
 	if err != nil || !f.Unused {
 		return list, err
@@ -99,7 +111,10 @@ func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
 }
 
 func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
-	_, f := fleetFilter(r)
+	_, f, err := fleetFilter(r)
+	if err != nil {
+		return nil, err
+	}
 	list, err := s.store.FleetUsageByApp(r.Context(), orgOf(r), f)
 	if err != nil || !f.Unused {
 		return list, err
@@ -107,6 +122,42 @@ func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
 	return thirdParty(list, func(u store.FleetAppRow) store.Software {
 		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
 	}), nil
+}
+
+// usageSummary serves the App usage dashboard: the same period and app
+// search as the table, totalled.
+func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
+	_, f, err := fleetFilter(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sum, err := s.store.UsageSummary(r.Context(), orgOf(r), f)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	// Same rule as the table's "Not used" view: installed third-party apps
+	// with no use in the period.
+	f.Unused = true
+	unused, err := s.store.FleetUsageByApp(r.Context(), orgOf(r), f)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sum.Totals.UnusedApps = len(thirdParty(unused, func(u store.FleetAppRow) store.Software {
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
+	}))
+	// System processes (bash, systemd, OS built-ins) vs vendor software, by
+	// the same rule the "Not used" list uses.
+	for i := range sum.Background {
+		b := &sum.Background[i]
+		b.ThirdParty = compliance.Category(store.Software{Name: b.App, Publisher: b.Publisher, Source: b.Source}) == compliance.CategoryThirdParty
+		if b.ThirdParty {
+			sum.Totals.BackgroundThirdParty++
+		}
+	}
+	writeJSON(w, http.StatusOK, sum)
 }
 
 func (s *Server) listFleetUsage(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +171,12 @@ func (s *Server) listFleetUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) exportFleetUsage(w http.ResponseWriter, r *http.Request) {
-	days, _ := fleetFilter(r)
-	audit := map[string]any{"days": days, "app": r.URL.Query().Get("app"), "by_app": byApp(r)}
+	days, f, err := fleetFilter(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	audit := map[string]any{"days": days, "app": f.App, "group_id": f.GroupID, "by_app": byApp(r)}
 	if byApp(r) {
 		list, err := s.fleetUsageByApp(r)
 		if err != nil {
@@ -181,4 +236,79 @@ func fileSafe(name string) string {
 		}
 		return c
 	}, name)
+}
+
+func (s *Server) listInfrastructure(w http.ResponseWriter, r *http.Request) {
+	list, err := s.store.InfrastructureApps(r.Context(), orgOf(r))
+	items(w, list, err)
+}
+
+// markInfrastructure marks an app as infrastructure (open by design, e.g. a
+// remote-access host) so App usage stops ranking its open time as idle.
+func (s *Server) markInfrastructure(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		App string `json:"app"`
+	}
+	if err := decode(r, &req); err != nil {
+		fail(w, err)
+		return
+	}
+	app := strings.TrimSpace(req.App)
+	if app == "" || len(app) > 256 {
+		fail(w, badRequest("app is required (up to 256 characters)"))
+		return
+	}
+	if err := s.store.MarkInfrastructure(r.Context(), orgOf(r), app, who(r).User.ID); err != nil {
+		fail(w, err)
+		return
+	}
+	s.record(r, "usage.infrastructure.add", "org", orgOf(r), map[string]any{"app": app})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) unmarkInfrastructure(w http.ResponseWriter, r *http.Request) {
+	app := strings.TrimSpace(r.URL.Query().Get("app"))
+	if app == "" {
+		fail(w, badRequest("app is required"))
+		return
+	}
+	removed, err := s.store.UnmarkInfrastructure(r.Context(), orgOf(r), app)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if removed {
+		s.record(r, "usage.infrastructure.remove", "org", orgOf(r), map[string]any{"app": app})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// exportReclaim is the license-reclamation list for procurement: one row per
+// installed third-party app per device with no use in the period.
+func (s *Server) exportReclaim(w http.ResponseWriter, r *http.Request) {
+	days, f, err := fleetFilter(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	list, err := s.store.ReclaimList(r.Context(), orgOf(r), f)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	list = thirdParty(list, func(x store.ReclaimRow) store.Software {
+		return store.Software{Name: x.App, Publisher: x.Publisher, Source: x.Source}
+	})
+	s.record(r, "usage.export", "org", orgOf(r), map[string]any{"kind": "reclaim", "days": days, "app": f.App, "group_id": f.GroupID, "count": len(list)})
+	cw := csvResponse(w, "license-reclaim")
+	_ = cw.Write([]string{"app", "publisher", "version", "device", "device_user", "device_last_seen", "last_used", "installed_on", "period_days"})
+	for _, x := range list {
+		last := "never"
+		if x.LastUsed != nil {
+			last = timeOrEmpty(x.LastUsed)
+		}
+		_ = cw.Write([]string{csvSafe(x.App), csvSafe(x.Publisher), csvSafe(x.Version), csvSafe(x.DeviceName), csvSafe(x.DeviceUser),
+			timeOrEmpty(x.DeviceSeen), last, csvSafe(x.InstallDate), strconv.Itoa(days)})
+	}
+	cw.Flush()
 }

@@ -149,11 +149,35 @@ type FleetAppRow = { app: string; users: number;
   installed_on: number;       // devices it is installed on now
   last_used: string|null; minutes: number; active_seconds: number }
 ```
-- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
+- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user&group_id=` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
   - With no `app`, only used rows are returned. With `app`, devices where the app is installed but unused are included too.
   - `unused=true` returns only installed third-party apps with no use in the period.
+  - `group_id` limits every App usage endpoint (list, export, summary and reclaim list) to devices in that group. A value that isn't a group ID gets a 400.
 - `GET /api/usage/export.csv` (same params) → CSV with `active_hours` and `open_hours` columns. Audit-logged as `usage.export`.
-
+- `GET /api/usage/summary?app=&days=30|90|365&group_id=` → the App usage dashboard. It uses the same period and app search as `/api/usage`, and only counts devices that aren't retired.
+  - Use is split per (device, app, user):
+    - **foreground** if anyone was active in it at least once in the period;
+    - **background-only** otherwise, such as system daemons, helpers, remote-access hosts and apps under service accounts.
+  - Open time, the app lists and the user lists count foreground use only. Background-only use is totalled and listed separately.
+  ```
+  { totals: { active_seconds, open_minutes, apps_used, active_users, devices,
+              background_minutes, background_apps, background_third_party, unused_apps },
+    daily: [{ day: "YYYY-MM-DD", active_seconds, minutes, devices }],  // days anyone reported; a missing day = no data
+    top_apps: [{ app, active_seconds, minutes, users, devices }],       // top 10 by active time
+    idle_apps: [ same shape ],                                          // top 10 by idle time (open minus active)
+    top_users: [{ user, active_seconds, open_minutes, apps, devices, device_names }], // top 10 by active time
+    background: [{ app, device_id, device_name, user, minutes, third_party }],        // top 40 background-only, by open time
+    infrastructure: [{ app, active_seconds, minutes, users, devices }] }               // apps marked as infrastructure
+  ```
+  - `unused_apps` counts the same apps as `unused=true`: installed third-party apps with no use in the period.
+  - **Infrastructure apps** are open by design, such as remote-access hosts. Their active time still counts, including in `top_apps` and `top_users`. Their open time is left out of `open_minutes`, `daily.minutes`, `idle_apps` and `background`, and they're listed under `infrastructure`.
+  - `third_party` uses the same system vs third-party rule: OS built-ins and distro packages (bash, systemd) are `false`, and vendor software is `true`. `background_third_party` counts the `true` rows.
+- `GET /api/usage/infrastructure` → `{items: [{app, created_at}]}`: the apps marked as infrastructure.
+- `PUT /api/usage/infrastructure` `{app}` → 204. Marks an app as infrastructure. Case-insensitive; marking it again does nothing. Needs `devices.write`. Audit-logged as `usage.infrastructure.add`.
+- `DELETE /api/usage/infrastructure?app=` → 204. Puts the app back in the rankings. Needs `devices.write`. Audit-logged as `usage.infrastructure.remove`.
+- `GET /api/usage/reclaim.csv?app=&days=&group_id=` → the license-reclamation list: one row per installed third-party app per device with no use in the period.
+  - Columns: `app, publisher, version, device, device_user, device_last_seen, last_used, installed_on, period_days`. `last_used` is the most recent use ever, or `never`.
+  - Audit-logged as `usage.export` with `kind: reclaim`.
 ## Alerts
 `Alert = {id, device_id: string|null, device_name: string|null, rule_id: string|null, severity, title, message, status: "open"|"resolved", created_at, resolved_at: string|null}`
 - `GET /api/alerts?status=open|resolved` → `{items}`

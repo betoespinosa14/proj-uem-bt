@@ -230,6 +230,7 @@ func TestRBACAndCSRF(t *testing.T) {
 	hd.do("GET", "/api/devices", nil, 200, nil)
 	hd.do("POST", "/api/scripts", map[string]any{"name": "S", "shell": "sh", "body": "id"}, 403, nil)
 	hd.do("GET", "/api/audit", nil, 403, nil)
+	hd.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "Parsec"}, 403, nil)
 	hd.do("POST", "/api/users", map[string]any{"email": "x@y.z", "role": "owner", "password": "correct-horse-1"}, 403, nil)
 
 	// Missing CSRF token is rejected even with a valid session.
@@ -502,6 +503,136 @@ func TestUsageTracking(t *testing.T) {
 	if err != nil || len(rows) != 3 || rows[0][4] != "active_hours" || rows[1][2] != "ana" || rows[1][4] != "1.00" || rows[1][5] != "3.0" {
 		t.Fatalf("usage csv = %v, err = %v", rows, err)
 	}
+
+	// Dashboard summary: same data, totalled. A process that only ever ran in
+	// the background (carl's Dropbox: open, never active) is reported apart
+	// from foreground use instead of inflating open time.
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: today, App: "Dropbox", User: "carl", Minutes: 60, LastSeen: time.Now()},
+		{Date: today, App: "Contacts", User: "carl", Minutes: 30, LastSeen: time.Now()}, // installed macOS built-in
+	}})
+	type stat struct {
+		DeviceNames                   []string `json:"device_names"`
+		App, User                     string
+		ActiveSeconds                 int `json:"active_seconds"`
+		Minutes, Users, Apps, Devices int
+	}
+	var sum struct {
+		Totals struct {
+			ActiveSeconds int `json:"active_seconds"`
+			OpenMinutes   int `json:"open_minutes"`
+			AppsUsed      int `json:"apps_used"`
+			ActiveUsers   int `json:"active_users"`
+			Devices       int
+			UnusedApps    int `json:"unused_apps"`
+			BgMinutes     int `json:"background_minutes"`
+			BgApps        int `json:"background_apps"`
+			BgThirdParty  int `json:"background_third_party"`
+		}
+		Daily []struct {
+			Day           string
+			ActiveSeconds int `json:"active_seconds"`
+			Minutes       int
+			Devices       int
+		}
+		TopApps    []stat `json:"top_apps"`
+		TopUsers   []stat `json:"top_users"`
+		IdleApps   []stat `json:"idle_apps"`
+		Background []struct {
+			App, User  string
+			Minutes    int
+			ThirdParty bool `json:"third_party"`
+		}
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary", nil, 200, &sum)
+		if len(sum.Background) == 2 && sum.Totals.BgApps == 2 { // usage is stored asynchronously
+			break
+		}
+	}
+	tt := sum.Totals
+	if tt.ActiveSeconds != 4800 || tt.OpenMinutes != 180 || tt.AppsUsed != 1 || tt.ActiveUsers != 2 || tt.Devices != 1 ||
+		tt.UnusedApps != 1 || tt.BgMinutes != 90 || tt.BgApps != 2 || tt.BgThirdParty != 1 {
+		t.Fatalf("summary totals = %+v", tt)
+	}
+	if len(sum.Daily) != 1 || sum.Daily[0].ActiveSeconds != 4800 || sum.Daily[0].Minutes != 180 || sum.Daily[0].Devices != 1 ||
+		len(sum.TopApps) != 1 || sum.TopApps[0].App != "Slack" || sum.TopApps[0].Users != 2 ||
+		len(sum.IdleApps) != 1 || sum.IdleApps[0].Minutes != 180 ||
+		len(sum.TopUsers) != 2 || sum.TopUsers[0].User != "ana" || sum.TopUsers[0].ActiveSeconds != 3600 || sum.TopUsers[0].Apps != 1 ||
+		len(sum.TopUsers[0].DeviceNames) != 1 ||
+		len(sum.Background) != 2 || sum.Background[0].App != "Dropbox" || sum.Background[0].User != "carl" || sum.Background[0].Minutes != 60 ||
+		!sum.Background[0].ThirdParty || sum.Background[1].App != "Contacts" || sum.Background[1].ThirdParty {
+		t.Fatalf("summary = %+v", sum)
+	}
+	// The app search narrows it: Zoom was never used.
+	a.do("GET", "/api/usage/summary?app=zoom", nil, 200, &sum)
+	if sum.Totals.ActiveSeconds != 0 || len(sum.Daily) != 0 || len(sum.TopApps) != 0 || sum.Totals.UnusedApps != 1 {
+		t.Fatalf("summary?app=zoom = %+v", sum)
+	}
+
+	// Marking an app as infrastructure takes its open time out of the idle
+	// ranking and open totals; its active time still counts.
+	a.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "slack"}, 204, nil)
+	a.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "Slack"}, 204, nil) // idempotent, any case
+	var infra struct{ Items []struct{ App string } }
+	a.do("GET", "/api/usage/infrastructure", nil, 200, &infra)
+	if len(infra.Items) != 1 {
+		t.Fatalf("infrastructure = %+v", infra.Items)
+	}
+	var withInfra struct {
+		Totals struct {
+			ActiveSeconds int `json:"active_seconds"`
+			OpenMinutes   int `json:"open_minutes"`
+		}
+		TopApps        []stat `json:"top_apps"`
+		IdleApps       []stat `json:"idle_apps"`
+		Infrastructure []stat `json:"infrastructure"`
+	}
+	a.do("GET", "/api/usage/summary", nil, 200, &withInfra)
+	if withInfra.Totals.ActiveSeconds != 4800 || withInfra.Totals.OpenMinutes != 0 || len(withInfra.IdleApps) != 0 ||
+		len(withInfra.TopApps) != 1 || len(withInfra.Infrastructure) != 1 || withInfra.Infrastructure[0].Minutes != 180 {
+		t.Fatalf("summary with Slack as infrastructure = %+v", withInfra)
+	}
+	a.do("DELETE", "/api/usage/infrastructure?app=SLACK", nil, 204, nil)
+	a.do("GET", "/api/usage/summary", nil, 200, &withInfra)
+	if withInfra.Totals.OpenMinutes != 180 || len(withInfra.IdleApps) != 1 || len(withInfra.Infrastructure) != 0 {
+		t.Fatalf("summary after restoring Slack = %+v", withInfra)
+	}
+
+	// Reclaim list: installed third-party apps unused in the period, per
+	// device. Slack is used; Contacts is a system app; Zoom is the one.
+	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 2 || rows[0][0] != "app" || rows[0][4] != "device_user" || rows[1][0] != "Zoom" || rows[1][6] != "never" {
+		t.Fatalf("reclaim csv = %v, err = %v", rows, err)
+	}
+
+	// Group filter: the test device isn't in this group, so everything is empty.
+	var grp idResp
+	a.do("POST", "/api/groups", map[string]any{"name": "Accounting"}, 201, &grp)
+	q := "?group_id=" + grp.ID
+	a.do("GET", "/api/usage/summary"+q, nil, 200, &sum)
+	if sum.Totals.ActiveSeconds != 0 || len(sum.TopApps) != 0 || sum.Totals.UnusedApps != 0 || len(sum.Background) != 0 {
+		t.Fatalf("summary for an empty group = %+v", sum)
+	}
+	a.do("GET", "/api/usage"+q, nil, 200, &usage)
+	if len(usage.Items) != 0 {
+		t.Fatalf("usage for an empty group = %+v", usage.Items)
+	}
+	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv" + q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("reclaim csv for an empty group = %v, err = %v", rows, err)
+	}
+	a.do("GET", "/api/usage/summary?group_id=nope", nil, 400, nil)
 
 	// Idle threshold: 1–15 minutes.
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 30}, 400, nil)

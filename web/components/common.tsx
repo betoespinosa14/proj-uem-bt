@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Apple, Download, Monitor, Search, Server, X, type LucideIcon } from "lucide-react";
+import { AlertCircle, Apple, ChevronRight, Download, Monitor, Search, Server, X, type LucideIcon } from "lucide-react";
 import type { CommandStatus, ComplianceState, DeviceStatus, Severity } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 import { cn, osLabel, titleCase } from "@/lib/utils";
@@ -21,6 +21,11 @@ export type HeadlineStat = {
   value: React.ReactNode;
   icon: LucideIcon;
   tone?: "default" | "brand" | "success" | "danger" | "warning";
+  /** Makes the figure a button, e.g. to open the list behind it. */
+  onClick?: () => void;
+  /** Label for a small action pill under the figure, e.g. "Review list"; needs onClick. */
+  cta?: string;
+  hint?: string;
 };
 
 const headlineTone = {
@@ -59,17 +64,47 @@ export function PageHeader({
       {(stats?.length || statsAside) && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
           <dl className="flex flex-wrap gap-x-8 gap-y-3">
-            {stats?.map((s) => (
-              <div key={s.label} className="flex items-center gap-2.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge/70 bg-card text-muted-foreground dark:border-edge">
-                  <s.icon className="h-4 w-4" />
-                </span>
-                <div className="leading-tight">
-                  <dd className={cn("text-xl font-semibold tracking-tight tabular", headlineTone[s.tone ?? "default"])}>{s.value}</dd>
-                  <dt className="text-xs text-muted-foreground">{s.label}</dt>
+            {stats?.map((s) => {
+              const body = (
+                <>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge/70 bg-card text-muted-foreground dark:border-edge">
+                    <s.icon className="h-4 w-4" />
+                  </span>
+                  <div className="text-left leading-tight">
+                    <dd className={cn("text-xl font-semibold tracking-tight tabular", headlineTone[s.tone ?? "default"])}>{s.value}</dd>
+                    <dt className="text-xs text-muted-foreground">{s.label}</dt>
+                    {s.cta && (
+                      <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        {s.cta} <ChevronRight className="h-3 w-3" />
+                      </span>
+                    )}
+                  </div>
+                </>
+              );
+              return s.onClick ? (
+                // A div (not a button) so the dt/dd stay valid children of the dl.
+                <div
+                  key={s.label}
+                  role="button"
+                  tabIndex={0}
+                  onClick={s.onClick}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      s.onClick?.();
+                    }
+                  }}
+                  title={s.hint}
+                  className="-m-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl p-1.5 outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  {body}
                 </div>
-              </div>
-            ))}
+              ) : (
+                <div key={s.label} className="flex items-center gap-2.5" title={s.hint}>
+                  {body}
+                </div>
+              );
+            })}
           </dl>
           {statsAside}
         </div>
@@ -313,7 +348,7 @@ export function StatCard({
 }
 
 /** A download link styled as an outline button, for CSV exports. */
-export function ExportLink({ href, title, className }: { href: string; title?: string; className?: string }) {
+export function ExportLink({ href, title, className, label = "Export CSV" }: { href: string; title?: string; className?: string; label?: string }) {
   return (
     <a
       href={href}
@@ -321,7 +356,7 @@ export function ExportLink({ href, title, className }: { href: string; title?: s
       title={title}
       className={cn("inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4", className)}
     >
-      <Download /> Export CSV
+      <Download /> {label}
     </a>
   );
 }

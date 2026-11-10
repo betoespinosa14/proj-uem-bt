@@ -17,6 +17,9 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **The Devices list shows the employee** in place of the signed-in account (hover to see that account). The
   device page shows both, device search matches employee names, and the devices CSV has an `employee_name`
   column.
+- **App usage summary on a device's Overview:** active hours per day and the top 5 apps for the last 30
+  days, with a link to the Usage tab. It's hidden when tracking is off, the device has no recorded use, or it
+  runs Linux.
 
 ## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 

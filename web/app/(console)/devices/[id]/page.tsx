@@ -53,6 +53,7 @@ import {
 import { CommandDialog, CommandOutput, commandLabel, useAgentLatest } from "@/components/commands";
 import { toast } from "@/components/toast";
 import { UsageExplorer } from "@/components/usage-explorer";
+import { DeviceUsageCard } from "@/components/device-usage-card";
 
 export default function DevicePage() {
   const { id } = useParams<{ id: string }>();
@@ -175,7 +176,7 @@ export default function DevicePage() {
           ))}
         </TabsList>
         <TabsContent value="overview">
-          <Overview d={d} onUpdate={can("commands.run") ? () => setAction("update_agent") : undefined} />
+          <Overview d={d} onUpdate={can("commands.run") ? () => setAction("update_agent") : undefined} onOpenUsage={() => setTab("usage")} />
         </TabsContent>
         <TabsContent value="hardware">
           <Hardware inv={d.inventory} />
@@ -262,7 +263,7 @@ function Metric({
   );
 }
 
-function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
+function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: () => void; onOpenUsage: () => void }) {
   const latest = useAgentLatest().data?.version;
   const behind = agentOutdated(d.agent_version, latest);
   const inv = d.inventory;
@@ -332,6 +333,7 @@ function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
           </CardContent>
         </Card>
       </div>
+      <DeviceUsageCard deviceId={d.id} os={d.os_family} onOpen={onOpenUsage} />
     </div>
   );
 }

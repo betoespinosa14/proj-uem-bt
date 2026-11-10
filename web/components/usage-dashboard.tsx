@@ -226,7 +226,18 @@ const DAY = 86_400_000;
  * installed yet, devices off, tracking off) are shaded "No data" and break the
  * line, so they don't read as days nobody worked.
  */
-function Trend({ daily, days, device }: { daily: UsageSummary["daily"]; days: number; device: boolean }) {
+export function Trend({
+  daily,
+  days,
+  device,
+  compact = false,
+}: {
+  daily: UsageSummary["daily"];
+  days: number;
+  device: boolean;
+  /** A shorter chart, for the summary card on a device's Overview. */
+  compact?: boolean;
+}) {
   const byDay = new Map(daily.map((d) => [d.day, d]));
   const today = new Date();
   const points = Array.from({ length: days }, (_, i) => {
@@ -252,7 +263,7 @@ function Trend({ daily, days, device }: { daily: UsageSummary["daily"]; days: nu
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
     <div>
-      <div className="h-56">
+      <div className={compact ? "h-40" : "h-56"}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={points} margin={{ left: -12, right: 8, top: 8 }}>
             <defs>
@@ -332,7 +343,7 @@ function Trend({ daily, days, device }: { daily: UsageSummary["daily"]; days: nu
 type RankedRow = { key: string; label: string; value: number; note: string; hint?: string; onClick?: () => void };
 
 /** Horizontal bars scaled to the top row, with the value as text. */
-function Ranked({ rows }: { rows: RankedRow[] }) {
+export function Ranked({ rows }: { rows: RankedRow[] }) {
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">No use in this period</p>;
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (

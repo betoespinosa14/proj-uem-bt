@@ -153,12 +153,13 @@ type FleetAppRow = { app: string; users: number;
   installed_on: number;       // devices it is installed on now
   last_used: string|null; minutes: number; active_seconds: number }
 ```
-- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user&group_id=` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
+- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user&group_id=&device_id=` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
   - With no `app`, only used rows are returned. With `app`, devices where the app is installed but unused are included too.
   - `unused=true` returns only installed third-party apps with no use in the period.
   - `group_id` limits every App usage endpoint (list, export, summary and reclaim list) to devices in that group. A value that isn't a group ID gets a 400.
+  - `device_id` limits them all to one device; the device page's Usage tab uses it. A value that isn't a device ID gets a 400.
 - `GET /api/usage/export.csv` (same params) → CSV with `active_hours` and `open_hours` columns. Audit-logged as `usage.export`.
-- `GET /api/usage/summary?app=&days=30|90|365&group_id=` → the App usage dashboard. It uses the same period and app search as `/api/usage`, and only counts devices that aren't retired.
+- `GET /api/usage/summary?app=&days=30|90|365&group_id=&device_id=` → the App usage dashboard. It uses the same period and app search as `/api/usage`, and only counts devices that aren't retired.
   - Use is split per (device, app, user):
     - **foreground** if anyone was active in it at least once in the period;
     - **background-only** otherwise, such as system daemons, helpers, remote-access hosts and apps under service accounts.
@@ -179,7 +180,7 @@ type FleetAppRow = { app: string; users: number;
 - `GET /api/usage/infrastructure` → `{items: [{app, created_at}]}`: the apps marked as infrastructure.
 - `PUT /api/usage/infrastructure` `{app}` → 204. Marks an app as infrastructure. Case-insensitive; marking it again does nothing. Needs `devices.write`. Audit-logged as `usage.infrastructure.add`.
 - `DELETE /api/usage/infrastructure?app=` → 204. Puts the app back in the rankings. Needs `devices.write`. Audit-logged as `usage.infrastructure.remove`.
-- `GET /api/usage/reclaim.csv?app=&days=&group_id=` → the license-reclamation list: one row per installed third-party app per device with no use in the period.
+- `GET /api/usage/reclaim.csv?app=&days=&group_id=&device_id=` → the license-reclamation list: one row per installed third-party app per device with no use in the period.
   - Columns: `app, publisher, version, device, device_user, device_last_seen, last_used, installed_on, period_days`. `last_used` is the most recent use ever, or `never`.
   - Audit-logged as `usage.export` with `kind: reclaim`.
 ## Alerts

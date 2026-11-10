@@ -115,64 +115,71 @@ export function PageHeader({
       </div>
       {(stats?.length || statsAside) && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
-          <dl className="flex flex-wrap gap-x-8 gap-y-3">
-            {stats?.map((s) => {
-              const body = (
-                <>
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge/70 bg-card text-muted-foreground dark:border-edge">
-                    <s.icon className="h-4 w-4" />
-                  </span>
-                  <div className="text-left leading-tight">
-                    <dd
-                      className={cn(
-                        "text-xl font-semibold tracking-tight tabular",
-                        headlineTone[s.tone ?? "default"],
-                      )}
-                    >
-                      {s.value}
-                    </dd>
-                    <dt className="text-xs text-muted-foreground">{s.label}</dt>
-                    {s.cta && (
-                      <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                        {s.cta} <ChevronRight className="h-3 w-3" />
-                      </span>
-                    )}
-                  </div>
-                </>
-              );
-              return s.onClick ? (
-                // A div (not a button) so the dt/dd stay valid children of the dl.
-                <div
-                  key={s.label}
-                  role="button"
-                  tabIndex={0}
-                  onClick={s.onClick}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      s.onClick?.();
-                    }
-                  }}
-                  title={s.hint}
-                  className="-m-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl p-1.5 outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  {body}
-                </div>
-              ) : (
-                <div
-                  key={s.label}
-                  className="flex items-center gap-2.5"
-                  title={s.hint}
-                >
-                  {body}
-                </div>
-              );
-            })}
-          </dl>
+          {stats?.length ? <HeadlineStats stats={stats} /> : null}
           {statsAside}
         </div>
       )}
     </div>
+  );
+}
+
+/** Large headline figures with icons, e.g. under a page title. */
+export function HeadlineStats({ stats, className }: { stats: HeadlineStat[]; className?: string }) {
+  return (
+    <dl className={cn("flex flex-wrap gap-x-8 gap-y-3", className)}>
+      {stats.map((s) => {
+        const body = (
+          <>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge/70 bg-card text-muted-foreground dark:border-edge">
+              <s.icon className="h-4 w-4" />
+            </span>
+            <div className="text-left leading-tight">
+              <dd
+                className={cn(
+                  "text-xl font-semibold tracking-tight tabular",
+                  headlineTone[s.tone ?? "default"],
+                )}
+              >
+                {s.value}
+              </dd>
+              <dt className="text-xs text-muted-foreground">{s.label}</dt>
+              {s.cta && (
+                <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  {s.cta} <ChevronRight className="h-3 w-3" />
+                </span>
+              )}
+            </div>
+          </>
+        );
+        return s.onClick ? (
+          // A div (not a button) so the dt/dd stay valid children of the dl.
+          <div
+            key={s.label}
+            role="button"
+            tabIndex={0}
+            onClick={s.onClick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                s.onClick?.();
+              }
+            }}
+            title={s.hint}
+            className="-m-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl p-1.5 outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            {body}
+          </div>
+        ) : (
+          <div
+            key={s.label}
+            className="flex items-center gap-2.5"
+            title={s.hint}
+          >
+            {body}
+          </div>
+        );
+      })}
+    </dl>
   );
 }
 

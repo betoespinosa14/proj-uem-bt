@@ -646,6 +646,35 @@ func TestUsageTracking(t *testing.T) {
 	}
 	a.do("GET", "/api/usage/summary?group_id=nope", nil, 400, nil)
 
+	// Device filter: the test device sees its own usage; another device ID sees nothing.
+	a.do("GET", "/api/usage/summary?device_id="+dev.DeviceID, nil, 200, &sum)
+	if sum.Totals.ActiveSeconds != 4800 || sum.Totals.Devices != 1 || len(sum.TopApps) != 1 || sum.Totals.UnusedApps != 1 || len(sum.Background) != 2 {
+		t.Fatalf("summary for the test device = %+v", sum)
+	}
+	a.do("GET", "/api/usage?group=app&device_id="+dev.DeviceID, nil, 200, &usage)
+	if len(usage.Items) != 3 || usage.Items[0].App != "Slack" {
+		t.Fatalf("usage by app for the test device = %+v", usage.Items)
+	}
+	other := "?device_id=00000000-0000-4000-8000-000000000000"
+	a.do("GET", "/api/usage/summary"+other, nil, 200, &sum)
+	if sum.Totals.ActiveSeconds != 0 || len(sum.TopApps) != 0 || sum.Totals.UnusedApps != 0 || len(sum.Background) != 0 {
+		t.Fatalf("summary for another device = %+v", sum)
+	}
+	a.do("GET", "/api/usage"+other, nil, 200, &usage)
+	if len(usage.Items) != 0 {
+		t.Fatalf("usage for another device = %+v", usage.Items)
+	}
+	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv" + other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("reclaim csv for another device = %v, err = %v", rows, err)
+	}
+	a.do("GET", "/api/usage/summary?device_id=nope", nil, 400, nil)
+
 	// Idle threshold: 1–15 minutes.
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 30}, 400, nil)
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 1000}, 400, nil)

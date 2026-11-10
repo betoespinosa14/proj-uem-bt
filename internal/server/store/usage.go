@@ -89,10 +89,11 @@ func (s *Store) DeviceUsage(ctx context.Context, orgID, deviceID string, since t
 
 // FleetUsageFilter narrows the fleet usage report.
 type FleetUsageFilter struct {
-	App     string    // substring match on the app name
-	Since   time.Time // start of the period
-	Unused  bool      // only installed apps with no use in the period
-	GroupID string    // only devices in this group ("" for all)
+	App      string    // substring match on the app name
+	Since    time.Time // start of the period
+	Unused   bool      // only installed apps with no use in the period
+	GroupID  string    // only devices in this group ("" for all)
+	DeviceID string    // only this device ("" for all)
 }
 
 // FleetUsageRow is one (device, app, user) line of the fleet report. For an
@@ -133,12 +134,12 @@ func (s *Store) FleetUsage(ctx context.Context, orgID string, f FleetUsageFilter
 			COALESCE(i.publisher, ''), COALESCE(i.source, '')
 		FROM installed i
 		FULL OUTER JOIN used u ON u.device_id = i.device_id AND lower(u.app) = lower(i.name)
-		JOIN devices d ON d.id = COALESCE(i.device_id, u.device_id) AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5)
+		JOIN devices d ON d.id = COALESCE(i.device_id, u.device_id) AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
 		LEFT JOIN ever e ON e.device_id = d.id AND e.app = lower(COALESCE(u.app, i.name))
 		WHERE ($3 = '' OR lower(COALESCE(u.app, i.name)) LIKE '%' || lower($3) || '%')
 			AND (CASE WHEN $4 THEN u.app IS NULL ELSE u.app IS NOT NULL OR $3 <> '' END)
 		ORDER BY lower(COALESCE(u.app, i.name)), COALESCE(u.active, 0) DESC, d.name, u.username
-		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID)
+		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID)
 	return collect(rows, err, func(r pgx.Rows) (FleetUsageRow, error) {
 		var u FleetUsageRow
 		return u, r.Scan(&u.DeviceID, &u.DeviceName, &u.App, &u.User, &u.Installed,
@@ -168,13 +169,13 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 			SELECT lower(u.app) AS k, min(u.app) AS app, count(DISTINCT u.username) AS users,
 				count(DISTINCT u.device_id) AS devices, max(u.last_used) AS last_used,
 				sum(u.minutes) AS minutes, sum(u.active_seconds) AS active
-			FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5)
+			FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
 			WHERE u.org_id = $1 AND u.day >= $2
 			GROUP BY lower(u.app)
 		), installed AS (
 			SELECT lower(s.name) AS k, min(s.name) AS app, count(DISTINCT s.device_id) AS installed_on,
 				min(s.publisher) AS publisher, min(s.source) AS source
-			FROM device_software s JOIN devices d ON d.id = s.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5)
+			FROM device_software s JOIN devices d ON d.id = s.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
 			WHERE s.org_id = $1
 			GROUP BY lower(s.name)
 		), ever AS (
@@ -189,7 +190,7 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 		WHERE ($3 = '' OR COALESCE(u.k, i.k) LIKE '%' || lower($3) || '%')
 			AND (CASE WHEN $4 THEN u.k IS NULL ELSE u.k IS NOT NULL OR $3 <> '' END)
 		ORDER BY COALESCE(u.active, 0) DESC, COALESCE(u.minutes, 0) DESC, COALESCE(u.k, i.k)
-		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID)
+		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID)
 	return collect(rows, err, func(r pgx.Rows) (FleetAppRow, error) {
 		var u FleetAppRow
 		return u, r.Scan(&u.App, &u.Users, &u.Devices, &u.InstalledOn, &u.LastUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source)
@@ -290,13 +291,13 @@ type UsageBackground struct {
 }
 
 // usageRows is the org's usage since $2 on devices that aren't retired,
-// optionally only apps whose name contains $3 and devices in group $4, with each row marked fg when
+// optionally only apps whose name contains $3, devices in group $4 and device $5, with each row marked fg when
 // its (device, app, user) had any active time in the period, and infra when
 // an admin marked the app as infrastructure.
 const usageRows = `
 	WITH scoped AS (
 		SELECT u.*, d.name AS device_name
-		FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4)
+		FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		WHERE u.org_id = $1 AND u.day >= $2 AND ($3 = '' OR lower(u.app) LIKE '%' || lower($3) || '%')
 	), u AS (
 		SELECT s.*, sum(s.active_seconds) OVER (PARTITION BY s.device_id, lower(s.app), s.username) > 0 AS fg,
@@ -309,7 +310,7 @@ const usageBackgroundN = 40
 
 // UsageSummary totals usage for the dashboard view.
 func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilter) (UsageSummary, error) {
-	since, app, group := f.Since, f.App, f.GroupID
+	since, app, group, dev := f.Since, f.App, f.GroupID, f.DeviceID
 	var out UsageSummary
 	t := &out.Totals
 	err := s.Pool.QueryRow(ctx, usageRows+`
@@ -317,7 +318,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 			count(DISTINCT lower(app)) FILTER (WHERE fg), count(DISTINCT username) FILTER (WHERE fg),
 			count(DISTINCT device_id), COALESCE(sum(minutes) FILTER (WHERE NOT fg AND NOT infra), 0),
 			count(DISTINCT lower(app)) FILTER (WHERE NOT fg AND NOT infra)
-		FROM u`, orgID, since, app, group).
+		FROM u`, orgID, since, app, group, dev).
 		Scan(&t.ActiveSeconds, &t.OpenMinutes, &t.AppsUsed, &t.ActiveUsers, &t.Devices, &t.BackgroundMinutes, &t.BackgroundApps)
 	if err != nil {
 		return out, err
@@ -325,7 +326,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 
 	rows, err := s.Pool.Query(ctx, usageRows+`
 		SELECT to_char(day, 'YYYY-MM-DD'), sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE fg AND NOT infra), 0), count(DISTINCT device_id)
-		FROM u GROUP BY day ORDER BY day`, orgID, since, app, group)
+		FROM u GROUP BY day ORDER BY day`, orgID, since, app, group, dev)
 	if out.Daily, err = collect(rows, err, func(r pgx.Rows) (UsageDay, error) {
 		var d UsageDay
 		return d, r.Scan(&d.Day, &d.ActiveSeconds, &d.Minutes, &d.Devices)
@@ -337,7 +338,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	apps := func(where, order string, limit int) ([]UsageAppStat, error) {
 		rows, err := s.Pool.Query(ctx, usageRows+`
 			SELECT min(app), sum(active_seconds), sum(minutes), count(DISTINCT username), count(DISTINCT device_id)
-			FROM u WHERE `+where+` GROUP BY lower(app) ORDER BY `+order+`, min(app) LIMIT $5`, orgID, since, app, group, limit)
+			FROM u WHERE `+where+` GROUP BY lower(app) ORDER BY `+order+`, min(app) LIMIT $6`, orgID, since, app, group, dev, limit)
 		return collect(rows, err, func(r pgx.Rows) (UsageAppStat, error) {
 			var a UsageAppStat
 			return a, r.Scan(&a.App, &a.ActiveSeconds, &a.Minutes, &a.Users, &a.Devices)
@@ -359,7 +360,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	rows, err = s.Pool.Query(ctx, usageRows+`
 		SELECT username, sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE NOT infra), 0), count(DISTINCT lower(app)), count(DISTINCT device_id),
 			array_agg(DISTINCT device_name ORDER BY device_name)
-		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $5`, orgID, since, app, group, usageTopN)
+		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $6`, orgID, since, app, group, dev, usageTopN)
 	if out.TopUsers, err = collect(rows, err, func(r pgx.Rows) (UsageUser, error) {
 		var u UsageUser
 		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames)
@@ -371,14 +372,14 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 		, bg AS (
 			SELECT min(app) AS app, device_id, min(device_name) AS device_name, username, sum(minutes) AS minutes
 			FROM u WHERE NOT fg AND NOT infra GROUP BY device_id, lower(app), username
-			ORDER BY sum(minutes) DESC, min(app) LIMIT $5
+			ORDER BY sum(minutes) DESC, min(app) LIMIT $6
 		)
 		SELECT bg.app, bg.device_id, bg.device_name, bg.username, bg.minutes, COALESCE(sw.publisher, ''), COALESCE(sw.source, '')
 		FROM bg LEFT JOIN LATERAL (
 			SELECT publisher, source FROM device_software
 			WHERE device_id = bg.device_id AND lower(name) = lower(bg.app) LIMIT 1
 		) sw ON true
-		ORDER BY bg.minutes DESC, bg.app`, orgID, since, app, group, usageBackgroundN)
+		ORDER BY bg.minutes DESC, bg.app`, orgID, since, app, group, dev, usageBackgroundN)
 	out.Background, err = collect(rows, err, func(r pgx.Rows) (UsageBackground, error) {
 		var b UsageBackground
 		return b, r.Scan(&b.App, &b.DeviceID, &b.DeviceName, &b.User, &b.Minutes, &b.Publisher, &b.Source)
@@ -435,11 +436,11 @@ func (s *Store) ReclaimList(ctx context.Context, orgID string, f FleetUsageFilte
 		SELECT DISTINCT ON (lower(sw.name), d.name, d.id) sw.name, COALESCE(sw.publisher, ''), COALESCE(sw.version, ''), COALESCE(sw.source, ''),
 			COALESCE(sw.install_date::text, ''), d.name, COALESCE(d.logged_in_user, ''), d.last_seen_at,
 			(SELECT max(last_used) FROM app_usage e WHERE e.device_id = d.id AND lower(e.app) = lower(sw.name))
-		FROM device_software sw JOIN devices d ON d.id = sw.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4)
+		FROM device_software sw JOIN devices d ON d.id = sw.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		WHERE sw.org_id = $1 AND ($3 = '' OR lower(sw.name) LIKE '%' || lower($3) || '%')
 			AND NOT EXISTS (SELECT 1 FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name) AND u.day >= $2)
 		ORDER BY lower(sw.name), d.name, d.id
-		LIMIT 50000`, orgID, f.Since, f.App, f.GroupID)
+		LIMIT 50000`, orgID, f.Since, f.App, f.GroupID, f.DeviceID)
 	return collect(rows, err, func(r pgx.Rows) (ReclaimRow, error) {
 		var x ReclaimRow
 		return x, r.Scan(&x.App, &x.Publisher, &x.Version, &x.Source, &x.InstallDate, &x.DeviceName, &x.DeviceUser, &x.DeviceSeen, &x.LastUsed)

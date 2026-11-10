@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Added
+- **Each device's Usage tab has the full App usage features,** for that device only: the dashboard (headline
+  figures, active hours per day, top apps and users, active vs open, background-only processes), app search,
+  the "Not used" list with its reclaim export, and the Infrastructure badges and marking. Marking an app as
+  infrastructure from a device page still applies to every device. The App usage endpoints accept
+  `device_id=` for this.
+
 ## 2026.11.9 (2026-11-10): Phone layout, battery display, Windows install TLS
 
 ### Fixed

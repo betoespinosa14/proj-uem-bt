@@ -15,6 +15,9 @@ import { ServerCog } from "lucide-react";
 
 type InfraAction = (app: string, mark: boolean) => void;
 
+/** "device" when the dashboard covers one device (the device page's Usage tab). */
+export type UsageScope = "fleet" | "device";
+
 /**
  * The App usage dashboard: trend, top apps and users, active vs open time, and
  * background-only processes. onInfrastructure is set when the viewer may mark
@@ -23,23 +26,26 @@ type InfraAction = (app: string, mark: boolean) => void;
 export function UsageDashboard({
   data,
   days,
+  scope = "fleet",
   onPickApp,
   onInfrastructure,
 }: {
   data: UsageSummary;
   days: number;
+  scope?: UsageScope;
   onPickApp: (app: string) => void;
   onInfrastructure?: InfraAction;
 }) {
+  const device = scope === "device";
   return (
     <div className="space-y-5">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Active hours per day</CardTitle>
-          <CardDescription>Time an app was in front while someone was typing or using the mouse, across all devices.</CardDescription>
+          <CardDescription>Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Trend daily={data.daily} days={days} />
+          <Trend daily={data.daily} days={days} device={device} />
         </CardContent>
       </Card>
 
@@ -72,8 +78,10 @@ export function UsageDashboard({
                 key: u.user,
                 label: u.user,
                 value: u.active_seconds,
-                note: `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
-                hint: `On ${u.device_names.join(", ")}`,
+                note: device
+                  ? `${u.apps} ${u.apps === 1 ? "app" : "apps"}`
+                  : `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
+                hint: device ? undefined : `On ${u.device_names.join(", ")}`,
               }))}
             />
           </CardContent>
@@ -95,13 +103,19 @@ export function UsageDashboard({
           </span>
         </CardHeader>
         <CardContent>
-          <ActiveVsOpen apps={data.idle_apps} onPickApp={onPickApp} onInfrastructure={onInfrastructure} />
+          <ActiveVsOpen apps={data.idle_apps} onPickApp={onPickApp} onInfrastructure={onInfrastructure} device={device} />
           <InfrastructureFooter apps={data.infrastructure} onInfrastructure={onInfrastructure} />
         </CardContent>
       </Card>
 
       {data.background.length > 0 && (
-        <Background rows={data.background} apps={data.totals.background_apps} minutes={data.totals.background_minutes} onInfrastructure={onInfrastructure} />
+        <Background
+          rows={data.background}
+          apps={data.totals.background_apps}
+          minutes={data.totals.background_minutes}
+          onInfrastructure={onInfrastructure}
+          device={device}
+        />
       )}
     </div>
   );
@@ -131,11 +145,13 @@ function Background({
   apps,
   minutes,
   onInfrastructure,
+  device,
 }: {
   rows: UsageSummary["background"];
   apps: number;
   minutes: number;
   onInfrastructure?: InfraAction;
+  device: boolean;
 }) {
   const [all, setAll] = useState(false);
   // Third-party only by default: vendor software (remote access, helpers, paid
@@ -164,19 +180,21 @@ function Background({
           {shown.map((b) => (
             <li
               key={`${b.device_id}-${b.app}-${b.user}`}
-              className="group grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_5.5rem_2rem] items-center gap-3 px-5 py-2 text-sm"
+              className={`group grid ${device ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_5.5rem_2rem]" : "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_5.5rem_2rem]"} items-center gap-3 px-5 py-2 text-sm`}
             >
               <span className="truncate font-medium" title={b.app}>
                 {b.app}
               </span>
-              <Link href={`/devices/${b.device_id}`} className="truncate text-muted-foreground hover:underline" title={b.device_name}>
-                {b.device_name}
-              </Link>
+              {!device && (
+                <Link href={`/devices/${b.device_id}`} className="truncate text-muted-foreground hover:underline" title={b.device_name}>
+                  {b.device_name}
+                </Link>
+              )}
               <span className="truncate text-muted-foreground" title={b.user}>
                 {b.user}
               </span>
               <span className="text-right text-xs text-muted-foreground tabular">{formatHours(b.minutes * 60)} open</span>
-              <span>{onInfrastructure && <MarkInfra app={b.app} onInfrastructure={onInfrastructure} />}</span>
+              <span>{onInfrastructure && <MarkInfra app={b.app} onInfrastructure={onInfrastructure} device={device} />}</span>
             </li>
           ))}
         </ul>
@@ -208,7 +226,7 @@ const DAY = 86_400_000;
  * installed yet, devices off, tracking off) are shaded "No data" and break the
  * line, so they don't read as days nobody worked.
  */
-function Trend({ daily, days }: { daily: UsageSummary["daily"]; days: number }) {
+function Trend({ daily, days, device }: { daily: UsageSummary["daily"]; days: number; device: boolean }) {
   const byDay = new Map(daily.map((d) => [d.day, d]));
   const today = new Date();
   const points = Array.from({ length: days }, (_, i) => {
@@ -284,9 +302,11 @@ function Trend({ daily, days }: { daily: UsageSummary["daily"]; days: number }) 
                         <p>
                           <span className="text-muted-foreground">Open</span> <span className="tabular">{formatHours((p.open ?? 0) * 3600)}</span>
                         </p>
-                        <p className="text-muted-foreground">
-                          {p.devices} {p.devices === 1 ? "device" : "devices"} reported
-                        </p>
+                        {!device && (
+                          <p className="text-muted-foreground">
+                            {p.devices} {p.devices === 1 ? "device" : "devices"} reported
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -300,7 +320,9 @@ function Trend({ daily, days }: { daily: UsageSummary["daily"]; days: number }) 
       {gaps.length > 0 && (
         <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
           <span className="h-2.5 w-4 rounded-sm bg-muted-foreground/15" />
-          Shaded: no device reported usage (agent not installed yet, devices off, or tracking off).
+          {device
+            ? "Shaded: the device reported no usage (agent not installed yet, device off, or tracking off)."
+            : "Shaded: no device reported usage (agent not installed yet, devices off, or tracking off)."}
         </p>
       )}
     </div>
@@ -347,7 +369,17 @@ function Ranked({ rows }: { rows: RankedRow[] }) {
 }
 
 /** Each app's open time as a bar, split into the part it was actively used and the idle rest. */
-function ActiveVsOpen({ apps, onPickApp, onInfrastructure }: { apps: UsageAppStat[]; onPickApp: (app: string) => void; onInfrastructure?: InfraAction }) {
+function ActiveVsOpen({
+  apps,
+  onPickApp,
+  onInfrastructure,
+  device,
+}: {
+  apps: UsageAppStat[];
+  onPickApp: (app: string) => void;
+  onInfrastructure?: InfraAction;
+  device: boolean;
+}) {
   const rows = apps.filter((a) => a.minutes > 0);
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">No open-time data in this period</p>;
   const maxOpen = Math.max(...rows.map((a) => a.minutes * 60));
@@ -380,7 +412,7 @@ function ActiveVsOpen({ apps, onPickApp, onInfrastructure }: { apps: UsageAppSta
                 <span className="font-semibold text-foreground">{formatHours(open - active)} idle</span> · {share(active, a.minutes)} active
               </span>
             </button>
-            {onInfrastructure && <MarkInfra app={a.app} onInfrastructure={onInfrastructure} />}
+            {onInfrastructure && <MarkInfra app={a.app} onInfrastructure={onInfrastructure} device={device} />}
           </li>
         );
       })}
@@ -389,12 +421,12 @@ function ActiveVsOpen({ apps, onPickApp, onInfrastructure }: { apps: UsageAppSta
 }
 
 /** Icon button, shown on row hover or keyboard focus. */
-function MarkInfra({ app, onInfrastructure }: { app: string; onInfrastructure: InfraAction }) {
+function MarkInfra({ app, onInfrastructure, device }: { app: string; onInfrastructure: InfraAction; device: boolean }) {
   return (
     <button
       type="button"
       onClick={() => onInfrastructure(app, true)}
-      title={`Mark ${app} as infrastructure: open by design (e.g. remote access), so its open time isn't counted as idle`}
+      title={`Mark ${app} as infrastructure: open by design (e.g. remote access), so its open time isn't counted as idle${device ? " (applies to all devices)" : ""}`}
       aria-label={`Mark ${app} as infrastructure`}
       className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
     >

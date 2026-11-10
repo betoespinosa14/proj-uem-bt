@@ -85,7 +85,7 @@ func thirdParty[T any](list []T, sw func(T) store.Software) []T {
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // fleetFilter parses the App usage filters: ?days=, ?app=, ?unused=true and
-// ?group_id= (only devices in that group).
+// ?group_id= (only devices in that group) and ?device_id= (only that device).
 func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
 	days, since := usagePeriod(r)
 	q := r.URL.Query()
@@ -93,7 +93,11 @@ func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
 	if group != "" && !uuidRe.MatchString(group) {
 		return days, store.FleetUsageFilter{}, badRequest("group_id must be a group ID")
 	}
-	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Unused: q.Get("unused") == "true", GroupID: group}, nil
+	device := strings.TrimSpace(q.Get("device_id"))
+	if device != "" && !uuidRe.MatchString(device) {
+		return days, store.FleetUsageFilter{}, badRequest("device_id must be a device ID")
+	}
+	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Unused: q.Get("unused") == "true", GroupID: group, DeviceID: device}, nil
 }
 
 func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
@@ -176,7 +180,7 @@ func (s *Server) exportFleetUsage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	audit := map[string]any{"days": days, "app": f.App, "group_id": f.GroupID, "by_app": byApp(r)}
+	audit := map[string]any{"days": days, "app": f.App, "group_id": f.GroupID, "device_id": f.DeviceID, "by_app": byApp(r)}
 	if byApp(r) {
 		list, err := s.fleetUsageByApp(r)
 		if err != nil {
@@ -299,7 +303,7 @@ func (s *Server) exportReclaim(w http.ResponseWriter, r *http.Request) {
 	list = thirdParty(list, func(x store.ReclaimRow) store.Software {
 		return store.Software{Name: x.App, Publisher: x.Publisher, Source: x.Source}
 	})
-	s.record(r, "usage.export", "org", orgOf(r), map[string]any{"kind": "reclaim", "days": days, "app": f.App, "group_id": f.GroupID, "count": len(list)})
+	s.record(r, "usage.export", "org", orgOf(r), map[string]any{"kind": "reclaim", "days": days, "app": f.App, "group_id": f.GroupID, "device_id": f.DeviceID, "count": len(list)})
 	cw := csvResponse(w, "license-reclaim")
 	_ = cw.Write([]string{"app", "publisher", "version", "device", "device_user", "device_last_seen", "last_used", "installed_on", "period_days"})
 	for _, x := range list {

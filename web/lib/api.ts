@@ -146,18 +146,6 @@ export type UsagePeriod = 30 | 90 | 365;
 
 export type UsageGroup = "app" | "app_user";
 
-/** Running time is `minutes`; active (in front, user interacting) time is `active_seconds`. */
-export type UsageRow = {
-  app: string;
-  /** Empty when grouped by app. */
-  user: string;
-  users: number;
-  last_used: string;
-  days_used: number;
-  minutes: number;
-  active_seconds: number;
-};
-
 export type FleetUsageRow = {
   device_id: string;
   device_name: string;
@@ -184,8 +172,9 @@ export type FleetAppRow = {
   active_seconds: number;
 };
 
-export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean; group_id?: string };
-type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "group_id">;
+/** device_id narrows everything to one device (the device page's Usage tab). */
+export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean; group_id?: string; device_id?: string };
+type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "group_id" | "device_id">;
 
 export type UsageAppStat = { app: string; active_seconds: number; minutes: number; users: number; devices: number };
 /**
@@ -635,10 +624,6 @@ export const api = {
     software: (id: string) => get<Items<SoftwareItem>>(`/api/devices/${enc(id)}/software`),
     softwareExportUrl: (id: string, f: { q?: string; category?: string } = {}) =>
       withQuery(`/api/devices/${enc(id)}/software.csv`, f),
-    usage: (id: string, days: UsagePeriod, group: UsageGroup) =>
-      get<Items<UsageRow>>(`/api/devices/${enc(id)}/usage`, { days, group }),
-    usageExportUrl: (id: string, days: UsagePeriod, group: UsageGroup) =>
-      withQuery(`/api/devices/${enc(id)}/usage.csv`, { days, group }),
     telemetry: (id: string, hours: number) =>
       get<Items<TelemetryPoint>>(`/api/devices/${enc(id)}/telemetry`, { hours }),
     compliance: (id: string) => get<Items<ComplianceResult>>(`/api/devices/${enc(id)}/compliance`),
@@ -740,7 +725,6 @@ export const qk = {
   devices: (f?: DeviceFilters) => (f ? (["devices", f] as const) : (["devices"] as const)),
   device: (id: string) => ["device", id] as const,
   deviceSoftware: (id: string) => ["device", id, "software"] as const,
-  deviceUsage: (id: string, days: UsagePeriod, group: UsageGroup) => ["device", id, "usage", days, group] as const,
   usage: (f: FleetUsageFilters, group: UsageGroup) => ["usage", group, f] as const,
   usageSummary: (f: SummaryFilters) => ["usage", "summary", f] as const,
   usageInfrastructure: ["usage", "infrastructure"] as const,

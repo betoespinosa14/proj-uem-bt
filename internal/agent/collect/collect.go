@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/distatus/battery"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
@@ -158,20 +157,6 @@ func disks(ctx context.Context) []protocol.Disk {
 		if u, err := disk.UsageWithContext(ctx, systemMount()); err == nil {
 			out = append(out, protocol.Disk{Mount: systemMount(), FSType: u.Fstype, TotalBytes: u.Total, UsedBytes: u.Used, FreeBytes: u.Free})
 		}
-	}
-	return out
-}
-
-func batteryInfo() protocol.Battery {
-	bats, err := battery.GetAll()
-	if err != nil || len(bats) == 0 || bats[0] == nil || bats[0].Full == 0 {
-		return protocol.Battery{Present: false, State: "none"}
-	}
-	b := bats[0]
-	out := protocol.Battery{Present: true, Percent: round1(b.Current / b.Full * 100), State: strings.ToLower(b.State.String())}
-	if b.Design > 0 {
-		h := round1(b.Full / b.Design * 100)
-		out.HealthPct = &h
 	}
 	return out
 }

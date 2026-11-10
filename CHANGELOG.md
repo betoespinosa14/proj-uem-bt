@@ -7,12 +7,20 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.6 (2026-11-10): New logo, link previews, MacBook battery
 
 ### Added
 - **Link previews.** Sharing https://beacon.itsthev.net in a chat or email app shows a card with the BEACON
   logo, the name and "Endpoint oversight". It shows no device or company data. The address comes from
   `BEACON_PUBLIC_URL` at build time (default https://beacon.itsthev.net).
+
+### Fixed
+- **MacBooks report their battery again.** The agent read the Mac battery through a library that depends on
+  registry fields newer macOS versions no longer provide, so MacBooks showed no battery at all. The agent now
+  reads the battery itself: the charge, plus health as full-charge capacity against design capacity. When the
+  registry has no capacities in mAh, it falls back to macOS's own "Maximum Capacity" from System Information.
+  It handles both Apple Silicon and Intel. On Windows and Linux, a partial battery reading now still reports
+  the charge instead of no battery. MacBooks need the 2026.11.6 agent.
 
 ### Changed
 - **BEACON has its own logo:** a teal ribbon folded into a shield, a nod to The V's folded-ribbon logo, with

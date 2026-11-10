@@ -160,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 			r.With(s.perm(auth.PermWebhooksWrite)).Post("/webhooks/{id}/test", s.testWebhook)
 
 			r.Get("/org", s.getOrg)
+			r.Get("/agents/latest", s.latestAgent)
 			r.With(s.perm(auth.PermSettingsWrite)).Patch("/org", s.updateOrg)
 		})
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) { writeErr(w, http.StatusNotFound, "not found") })

@@ -78,6 +78,7 @@ The machine must stay awake and online: while it's down, no device can report. A
 On the office Mac Mini, BEACON runs as four launchd daemons: `com.beacon.postgres`, `com.beacon.server`, `com.beacon.web` and `com.beacon.caddy`. They start at boot without anyone logging in, and restart if they crash. They run as your user from a copy in `~/Library/Application Support/BEACON`, because macOS blocks background processes from reading `~/Desktop`.
 
 - **Install or redeploy:** run `make deploy-mac`, then `sudo deploy/macos/install.sh --system`. The first step builds and stages; the second installs the daemons and restarts them on the new build.
+- **Updating agents:** after a release, `make deploy-mac` also publishes the new agent builds. Devices on an older agent show **Update available**. Update one from its page (**⋯ → Update agent**), or all of them with **Update agents (N)** on the Devices list. Agents older than 2026.11.7 get a one-time script through Run script; from 2026.11.7 on they update themselves.
 - **Open browser tabs during an update:** a tab opened before the update keeps working. The new console also serves the previous versions' script and style files for 14 days (`KEEP_OLD_STATIC_DAYS` in `install.sh`), so the old tab's links still load until it reloads.
 - **Settings:** edit `server.env` (server) or `Caddyfile` in the BEACON folder. Then restart the service, for example `sudo launchctl kickstart -k system/com.beacon.server`.
 - **Status:** `sudo launchctl print system/com.beacon.server`.

@@ -96,6 +96,7 @@ func run() error {
 
 	publicURL := env("UEM_PUBLIC_URL", "")
 	c.PublicURL = publicURL
+	c.AgentDist = env("UEM_AGENT_DIST", "dist")
 	var origins []string
 	if o := os.Getenv("UEM_ALLOWED_ORIGINS"); o != "" {
 		origins = strings.Split(o, ",")
@@ -104,7 +105,7 @@ func run() error {
 		PublicURL:      publicURL,
 		SecureCookies:  envBool("UEM_SECURE_COOKIES", strings.HasPrefix(publicURL, "https://")),
 		TrustProxy:     envBool("UEM_TRUST_PROXY", false),
-		AgentDistDir:   env("UEM_AGENT_DIST", "dist"),
+		AgentDistDir:   c.AgentDist,
 		OriginPatterns: origins,
 		AllowSignup:    envBool("UEM_ALLOW_SIGNUP", true),
 	}, c, sched)

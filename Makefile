@@ -31,6 +31,7 @@ build-agents:
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -ldflags "$(LDFLAGS)" \
 			-o dist/uem-agent-$$os-$$arch$$ext ./cmd/agent || exit 1; \
 	done
+	@go run ./cmd/distmanifest dist "$(VERSION)"
 
 # Print the version the next build will report.
 version:

@@ -37,12 +37,13 @@ const (
 	CmdDisplayMessage   = "display_message"
 	CmdRefreshInventory = "refresh_inventory"
 	CmdUninstallAgent   = "uninstall_agent"
+	CmdUpdateAgent      = "update_agent"
 )
 
 // CommandTypes lists every command type a user may issue.
 var CommandTypes = []string{
 	CmdRunScript, CmdReboot, CmdShutdown, CmdLock, CmdDisplayMessage,
-	CmdRefreshInventory, CmdUninstallAgent,
+	CmdRefreshInventory, CmdUninstallAgent, CmdUpdateAgent,
 }
 
 // Command status values.
@@ -230,6 +231,15 @@ type RunScriptPayload struct {
 	Shell          string `json:"shell"`
 	Script         string `json:"script"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+// UpdatePayload tells the agent which build to install. File is downloaded from
+// <server>/downloads/<file> and must match SHA256 and Size before it replaces the agent.
+type UpdatePayload struct {
+	Version string `json:"version"`
+	File    string `json:"file"`
+	SHA256  string `json:"sha256"`
+	Size    int64  `json:"size"`
 }
 
 type DelayPayload struct {

@@ -82,11 +82,15 @@ type Inventory = {
 - `GET /api/commands/{id}` → `Command`
 
 ```ts
-type CommandType = "run_script"|"reboot"|"shutdown"|"lock"|"display_message"|"refresh_inventory"|"uninstall_agent"
+type CommandType = "run_script"|"reboot"|"shutdown"|"lock"|"display_message"|"refresh_inventory"|"uninstall_agent"|"update_agent"
 // payloads:
 //   run_script: {script_id} OR {shell: "bash"|"sh"|"zsh"|"powershell"|"cmd", script: string, timeout_seconds?: number}
 //   reboot/shutdown: {delay_seconds?: number}
 //   display_message: {title: string, message: string}
+//   update_agent: send {} — the server fills {version, file, sha256, size} from the device's platform build.
+//     Agents older than 2026.11.7 get a one-time run_script (shell "sh"/"powershell") that replaces them instead.
+//     Refused (400) when the device already runs the latest agent or no build exists for its platform; the bulk
+//     endpoint skips such devices and returns 400 only if none needs an update.
 //   others: {}
 type Command = { id; device_id; device_name; type: CommandType; payload: object;
   status: "queued"|"sent"|"running"|"succeeded"|"failed"|"timeout"|"cancelled";
@@ -196,6 +200,10 @@ type FleetAppRow = { app: string; users: number;
 `Webhook = {id, name, url, secret, events: string[], enabled, created_at, last_status: number|null, last_delivery_at: string|null}`. The events are `alert.created`, `device.enrolled`, `device.offline`, `command.completed`, `audit.*`. Payloads are POSTed as JSON and signed with the header `X-UEM-Signature: sha256=<hex hmac of body with secret>`.
 - `GET/POST /api/webhooks`, `PATCH/DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test`
 
+## Agent builds
+- `GET /api/agents/latest` → `{version: string|null, self_update_since: string}`: the agent version in the server's `dist/manifest.json` (null when none is published).
+- When a device reconnects on a different agent version, the audit log records `agent.updated` with `{from, to}`.
+
 ## Org settings
 - `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?, usage_tracking?, idle_threshold_sec? (60–900)}` (settings.write). Changing `usage_tracking` or `idle_threshold_sec` re-pushes policy to online agents.
 
@@ -209,3 +217,4 @@ type FleetAppRow = { app: string; users: number;
 - `POST /api/agent/enroll` `{token, facts: {hostname, os_family, os_name, os_version, arch, serial, agent_version}}` → `{device_id, device_secret}`
 - `GET /api/agent/ws` with the header `Authorization: Device <device_id>:<secret>`. Message types are defined in `internal/protocol`. The `policy` message carries `usage_tracking`, `idle_threshold_sec` and `server_url` (the org's Public server URL, else `UEM_PUBLIC_URL`). When `server_url` differs from the agent's address, the agent checks `/healthz`, reconnects there, and saves it only after that connection succeeds; otherwise it keeps its address and retries after 10 minutes. The agent sends `usage` messages (`{entries: {date, app, user, minutes, active_seconds, last_seen}[]}`), which the server drops while tracking is off.
 - `GET /downloads/uem-agent-<os>-<arch>[.exe]`, `GET /install.sh`, `GET /install.ps1`
+- `GET /downloads/manifest.json` → `{version, files: {<file>: {sha256, size}}}`, written by `make build-agents`. On `update_agent` the agent downloads `<server>/downloads/<file>`, checks size and sha256, runs it once (`version`), swaps it in (renaming the running exe aside on Windows) and exits so its service manager starts the new binary; any failure leaves the current agent in place.

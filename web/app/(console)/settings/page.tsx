@@ -12,12 +12,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ErrorState, KeyValues, PageHeader } from "@/components/common";
+import { useAgentLatest } from "@/components/commands";
 import { toast } from "@/components/toast";
 
 export default function SettingsPage() {
   const can = useCan();
   const qc = useQueryClient();
   const { data: me } = useMe();
+  const latestAgent = useAgentLatest().data?.version;
   const { data: org, isLoading, error, refetch } = useQuery({ queryKey: qk.org, queryFn: api.org.get });
   const [name, setName] = useState("");
   const [serverUrl, setServerUrl] = useState("");
@@ -148,6 +150,7 @@ export default function SettingsPage() {
                     ["Role", titleCase(me.user.role)],
                     ["Member since", formatDate(me.user.created_at)],
                     ["Organization ID", <span key="id" className="font-mono text-xs">{me.org.id}</span>],
+                    ["Latest agent on server", <span key="agent" className="font-mono text-xs">{latestAgent ?? "—"}</span>],
                   ]}
                 />
               )}

@@ -33,6 +33,8 @@ type Core struct {
 	// PublicURL is the server address agents should use when the org
 	// hasn't set one (UEM_PUBLIC_URL).
 	PublicURL string
+	// AgentDist is the directory with the agent builds and their manifest (UEM_AGENT_DIST).
+	AgentDist string
 }
 
 // ValidationError is returned for bad client input and maps to HTTP 400.
@@ -124,6 +126,13 @@ func (c *Core) ResolvePayload(ctx context.Context, orgID, typ string, payload js
 			p.Title = "Message from IT"
 		}
 		return json.Marshal(p)
+	case protocol.CmdUpdateAgent:
+		// Filled in from the server's agent builds by agentUpdate (IssueCommand).
+		var p protocol.UpdatePayload
+		if err := json.Unmarshal(payload, &p); err != nil || p.Version == "" || p.File == "" || p.SHA256 == "" {
+			return nil, invalid("update_agent needs a device; send it to a device")
+		}
+		return json.Marshal(p)
 	default:
 		return json.RawMessage(`{}`), nil
 	}
@@ -132,6 +141,12 @@ func (c *Core) ResolvePayload(ctx context.Context, orgID, typ string, payload js
 // IssueCommand validates, queues, audits and (if the device is connected)
 // immediately dispatches a command.
 func (c *Core) IssueCommand(ctx context.Context, orgID, deviceID, typ string, payload json.RawMessage, actor audit.Actor, source string) (store.Command, error) {
+	if typ == protocol.CmdUpdateAgent {
+		var err error
+		if typ, payload, err = c.agentUpdate(ctx, orgID, deviceID); err != nil {
+			return store.Command{}, err
+		}
+	}
 	resolved, err := c.ResolvePayload(ctx, orgID, typ, payload)
 	if err != nil {
 		return store.Command{}, err

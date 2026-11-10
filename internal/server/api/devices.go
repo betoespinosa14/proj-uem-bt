@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/uem/uem/internal/protocol"
 	"net/http"
 	"strconv"
 	"strings"
@@ -280,10 +281,13 @@ func (s *Server) bulkCommand(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest("device_ids must contain 1 to 1000 devices"))
 		return
 	}
-	// Validate once up front so a bad payload fails the whole request.
-	if _, err := s.core.ResolvePayload(r.Context(), orgOf(r), req.Type, req.Payload); err != nil {
-		fail(w, err)
-		return
+	// Validate once up front so a bad payload fails the whole request. update_agent's
+	// payload is built per device (each device needs its own platform's build).
+	if req.Type != protocol.CmdUpdateAgent {
+		if _, err := s.core.ResolvePayload(r.Context(), orgOf(r), req.Type, req.Payload); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	out := []store.Command{}
 	for _, id := range req.DeviceIDs {
@@ -292,6 +296,10 @@ func (s *Server) bulkCommand(w http.ResponseWriter, r *http.Request) {
 			continue // devices not in this org are skipped
 		}
 		out = append(out, cmd)
+	}
+	if len(out) == 0 && req.Type == protocol.CmdUpdateAgent {
+		fail(w, badRequest("none of the selected devices needs an agent update"))
+		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"items": out})
 }

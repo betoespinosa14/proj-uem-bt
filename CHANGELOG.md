@@ -7,7 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.7 (2026-11-10): Update agents from the console
+
+### Added
+- **Update agents from the console.** No more rerunning the install command on each device.
+  - Devices on an older agent show **Update available** on their page, and an **Update** marker in the new
+    Agent column of the Devices list.
+  - Update one device with **⋯ → Update agent**, a selection with **Actions → Update agent**, or every outdated
+    device with **Update agents (N)**.
+  - **How the agent updates itself:** it downloads the new build from BEACON, checks its size and sha256 against
+    `dist/manifest.json` (now written by `make build-agents`), runs it once to confirm it works, swaps it in and
+    restarts. A failed check leaves the current agent untouched.
+  - **The audit log** records each version change as `agent.updated`.
+  - **Agents older than this release** are replaced once by a script sent through Run script, and keep their
+    enrollment.
+  - **Settings** shows the latest agent on the server.
 
 ### Fixed
 - **Browser tabs left open through an update keep working.** Before, the update removed the old console's

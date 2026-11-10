@@ -13,7 +13,19 @@ import { Segmented } from "./ui/tabs";
 import { CommandStatusBadge } from "./common";
 import { toast } from "./toast";
 
+/** The agent version the server offers; cached for the session (it changes only on a release). */
+export function useAgentLatest() {
+  return useQuery({ queryKey: qk.agentLatest, queryFn: api.agents.latest, staleTime: 5 * 60_000 });
+}
+
+/** First line of the script the server sends to agents that predate self-update. */
+const ONE_TIME_UPDATE = "# BEACON: one-time update";
+
 export function commandLabel(type: string, payload: Record<string, unknown>): string {
+  if (type === "update_agent") return typeof payload.version === "string" ? `Update agent to ${payload.version}` : "Update agent";
+  if (type === "run_script" && typeof payload.script === "string" && payload.script.startsWith(ONE_TIME_UPDATE)) {
+    return "Update agent (first time)";
+  }
   if (type === "run_script") {
     const name = payload.script_name;
     return typeof name === "string" ? `Script: ${name}` : `Run ${String(payload.shell ?? "script")}`;
@@ -28,6 +40,7 @@ const ACTION_COPY: Record<Exclude<CommandType, "run_script">, { title: string; c
   display_message: { title: "Send message", confirm: "Send" },
   refresh_inventory: { title: "Refresh inventory", confirm: "Refresh" },
   uninstall_agent: { title: "Uninstall agent", confirm: "Uninstall", danger: true },
+  update_agent: { title: "Update agent", confirm: "Update" },
 };
 
 /**
@@ -176,6 +189,13 @@ export function CommandDialog({
       {type === "uninstall_agent" && (
         <p className="text-sm text-muted-foreground">
           The agent removes its service and credentials. The device stops reporting and must be re-enrolled to be managed again.
+        </p>
+      )}
+      {type === "update_agent" && (
+        <p className="text-sm text-muted-foreground">
+          Each device downloads the newest agent from BEACON, checks that it&apos;s intact and runs, then restarts on it. It
+          takes about a minute and the device stays managed throughout. Devices already up to date are skipped, and
+          offline devices update when they next connect.
         </p>
       )}
       {(type === "lock" || type === "refresh_inventory") && (

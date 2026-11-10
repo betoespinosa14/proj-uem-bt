@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/uem/uem/internal/agent/config"
 	"github.com/uem/uem/internal/agent/conn"
 	"github.com/uem/uem/internal/agent/session"
+	"github.com/uem/uem/internal/agent/update"
 	"github.com/uem/uem/internal/protocol"
 )
 
@@ -63,6 +65,16 @@ func (p *program) Start(s service.Service) error {
 	}
 	if !service.Interactive() {
 		a.OnUninstall = func() { selfUninstall(p.svc, p.cfg) }
+		if exe, err := os.Executable(); err == nil {
+			if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+				exe = resolved
+			}
+			update.Cleanup(exe) // leftovers from an earlier update
+			a.Executable = exe
+			// Exit with an error so every service manager starts the new binary: launchd
+			// (KeepAlive) and systemd (Restart=always) on any exit, Windows on failure.
+			a.Restart = func() { os.Exit(3) }
+		}
 	}
 	go func() {
 		defer close(p.done)

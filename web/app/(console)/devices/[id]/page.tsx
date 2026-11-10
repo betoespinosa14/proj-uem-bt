@@ -24,7 +24,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { api, qk, type Command, type CommandType, type DeviceDetail, type Inventory, type UsageGroup, type UsagePeriod } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Inventory, type UsageGroup, type UsagePeriod } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
 import { formatBytes, formatDate, formatHours, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +50,7 @@ import {
   TagInput,
   UsageBar,
 } from "@/components/common";
-import { CommandDialog, CommandOutput, commandLabel } from "@/components/commands";
+import { CommandDialog, CommandOutput, commandLabel, useAgentLatest } from "@/components/commands";
 import { toast } from "@/components/toast";
 
 export default function DevicePage() {
@@ -64,6 +64,7 @@ export default function DevicePage() {
   const [retiring, setRetiring] = useState(false);
 
   const { data: d, isLoading, error, refetch } = useQuery({ queryKey: qk.device(id), queryFn: () => api.devices.get(id) });
+  const latestAgent = useAgentLatest().data?.version;
 
   const retire = useMutation({
     mutationFn: () => api.devices.retire(id),
@@ -151,6 +152,9 @@ export default function DevicePage() {
                     </DropdownItem>
                   </>
                 )}
+                {can("commands.run") && agentOutdated(d.agent_version, latestAgent) && (
+                  <DropdownItem onSelect={() => setAction("update_agent")}>Update agent to {latestAgent}…</DropdownItem>
+                )}
                 {can("commands.run") && <DropdownItem onSelect={() => setAction("uninstall_agent")} destructive>Uninstall agent…</DropdownItem>}
                 {can("devices.write") && (
                   <DropdownItem onSelect={() => setRetiring(true)} destructive>
@@ -172,7 +176,7 @@ export default function DevicePage() {
           ))}
         </TabsList>
         <TabsContent value="overview">
-          <Overview d={d} />
+          <Overview d={d} onUpdate={can("commands.run") ? () => setAction("update_agent") : undefined} />
         </TabsContent>
         <TabsContent value="hardware">
           <Hardware inv={d.inventory} />
@@ -245,7 +249,9 @@ function Metric({ icon: Icon, label, value, sub }: { icon: typeof Cpu; label: st
   );
 }
 
-function Overview({ d }: { d: DeviceDetail }) {
+function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
+  const latest = useAgentLatest().data?.version;
+  const behind = agentOutdated(d.agent_version, latest);
   const inv = d.inventory;
   return (
     <div className="space-y-4">
@@ -292,7 +298,20 @@ function Overview({ d }: { d: DeviceDetail }) {
                 ["Uptime", inv ? formatDuration(inv.os.uptime_seconds) : ""],
                 ["IP address", <span key="ip" className="font-mono">{d.ip_address}</span>],
                 ["MAC address", <span key="mac" className="font-mono">{d.mac_address}</span>],
-                ["Agent version", d.agent_version],
+                [
+                  "Agent version",
+                  <span key="av" className="inline-flex flex-wrap items-center gap-2">
+                    {d.agent_version}
+                    {behind &&
+                      (onUpdate ? (
+                        <button type="button" onClick={onUpdate} className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+                          <Badge variant="warning" title="Update this device's agent">Update available · {latest}</Badge>
+                        </button>
+                      ) : (
+                        <Badge variant="warning">Update available · {latest}</Badge>
+                      ))}
+                  </span>,
+                ],
                 ["Inventory collected", inv ? relativeTime(inv.collected_at) : "Never"],
               ]}
             />

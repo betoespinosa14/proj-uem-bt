@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,7 @@ type env struct {
 	srv   *httptest.Server
 	store *store.Store
 	audit *audit.Log
+	dist  string // agent builds directory (empty until a test writes a manifest)
 }
 
 func setup(t *testing.T) *env {
@@ -58,12 +60,13 @@ func setup(t *testing.T) *env {
 	}
 	st := store.New(pool)
 	al := audit.New(st)
+	dist := t.TempDir()
 	c := &core.Core{Store: st, Audit: al, Hub: hub.New(), Hooks: notify.New(st, false),
-		TelemetryInterval: time.Minute, InventoryInterval: time.Hour}
+		TelemetryInterval: time.Minute, InventoryInterval: time.Hour, AgentDist: dist}
 	sched := scheduler.New(c)
-	srv := httptest.NewServer(api.New(api.Config{AllowSignup: true}, c, sched).Handler())
+	srv := httptest.NewServer(api.New(api.Config{AllowSignup: true, AgentDistDir: dist}, c, sched).Handler())
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, store: st, audit: al}
+	return &env{srv: srv, store: st, audit: al, dist: dist}
 }
 
 // client is a logged-in browser session.
@@ -744,4 +747,112 @@ func TestCommandOnReplacedConnectionIsRedelivered(t *testing.T) {
 
 	// The new connection replaces the old one before the old one is torn down.
 	waitCommand(dial(), cmd.ID)
+}
+
+func TestAgentUpdate(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Updates")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	enroll := func(os, arch, version string) protocol.EnrollResponse {
+		b, _ := json.Marshal(protocol.EnrollRequest{Token: tok.Token, Facts: protocol.Facts{Hostname: "h-" + version, OSFamily: os, Arch: arch, AgentVersion: version}})
+		resp, err := http.Post(e.srv.URL+"/api/agent/enroll", "application/json", bytes.NewReader(b))
+		if err != nil || resp.StatusCode != 200 {
+			t.Fatalf("enroll: %v %v", err, resp.Status)
+		}
+		defer resp.Body.Close()
+		var out protocol.EnrollResponse
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return out
+	}
+	type cmdResp struct {
+		Type    string
+		Status  string
+		Payload map[string]any
+	}
+	update := func(id string, want int) cmdResp {
+		var c cmdResp
+		a.do("POST", "/api/devices/"+id+"/commands", map[string]any{"type": "update_agent"}, want, &c)
+		return c
+	}
+
+	// No builds on the server yet.
+	var latest struct{ Version *string }
+	a.do("GET", "/api/agents/latest", nil, 200, &latest)
+	if latest.Version != nil {
+		t.Fatalf("latest = %v with no manifest", *latest.Version)
+	}
+	current := enroll("linux", "amd64", "2026.11.7")
+	update(current.DeviceID, 400)
+
+	os.WriteFile(filepath.Join(e.dist, "manifest.json"), []byte(`{"version":"2026.11.9","files":{"uem-agent-linux-amd64":{"sha256":"`+strings.Repeat("ab", 32)+`","size":42}}}`), 0o644)
+	a.do("GET", "/api/agents/latest", nil, 200, &latest)
+	if latest.Version == nil || *latest.Version != "2026.11.9" {
+		t.Fatalf("latest = %v", latest.Version)
+	}
+	resp, err := http.Get(e.srv.URL + "/downloads/manifest.json")
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("manifest download: %v %v", err, resp.Status)
+	}
+	resp.Body.Close()
+
+	// An agent that can update itself gets update_agent with the build's checksum (queued while offline).
+	c := update(current.DeviceID, 201)
+	if c.Type != "update_agent" || c.Status != "queued" || c.Payload["file"] != "uem-agent-linux-amd64" ||
+		c.Payload["version"] != "2026.11.9" || c.Payload["sha256"] != strings.Repeat("ab", 32) || c.Payload["size"] != float64(42) {
+		t.Fatalf("update_agent command = %+v", c)
+	}
+
+	// An older agent gets the one-time replacement script, which needs the public server address.
+	old := enroll("linux", "amd64", "2026.11.3-dirty")
+	update(old.DeviceID, 400)
+	a.do("PATCH", "/api/org", map[string]any{"server_url": "https://beacon.example"}, 200, nil)
+	c = update(old.DeviceID, 201)
+	script, _ := c.Payload["script"].(string)
+	if c.Type != "run_script" || c.Payload["shell"] != "sh" || !strings.Contains(script, "https://beacon.example/downloads/uem-agent-linux-amd64") ||
+		!strings.Contains(script, strings.Repeat("ab", 32)) || !strings.Contains(script, "kickstart") {
+		t.Fatalf("bootstrap command = %+v", c)
+	}
+
+	// Bulk: each device gets the command its agent understands; current devices are skipped.
+	var bulk struct{ Items []cmdResp }
+	a.do("POST", "/api/commands/bulk", map[string]any{"type": "update_agent", "device_ids": []string{current.DeviceID, old.DeviceID}}, 201, &bulk)
+	if len(bulk.Items) != 2 || bulk.Items[0].Type == bulk.Items[1].Type {
+		t.Fatalf("bulk update = %+v", bulk.Items)
+	}
+	upToDate := enroll("linux", "amd64", "2026.11.9")
+	a.do("POST", "/api/commands/bulk", map[string]any{"type": "update_agent", "device_ids": []string{upToDate.DeviceID}}, 400, nil)
+
+	// Already current, or no build for the platform: refused.
+	update(upToDate.DeviceID, 400)
+	update(enroll("windows", "arm64", "2026.11.7").DeviceID, 400)
+
+	// When the device reconnects on the new version, the change is audited.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ws, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(e.srv.URL, "http")+"/api/agent/ws",
+		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Device " + current.DeviceID + ":" + current.DeviceSecret}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.CloseNow()
+	f, _ := protocol.Encode(protocol.TypeHello, protocol.Hello{ProtocolVersion: protocol.Version, AgentVersion: "2026.11.9"})
+	if err := ws.Write(ctx, websocket.MessageText, f); err != nil {
+		t.Fatal(err)
+	}
+	var log struct {
+		Items []struct {
+			Action  string
+			Details map[string]any
+		}
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/audit?action=agent.updated", nil, 200, &log)
+		if len(log.Items) > 0 {
+			break
+		}
+	}
+	if len(log.Items) != 1 || log.Items[0].Details["from"] != "2026.11.7" || log.Items[0].Details["to"] != "2026.11.9" {
+		t.Fatalf("agent.updated audit = %+v", log.Items)
+	}
 }

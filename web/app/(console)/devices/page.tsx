@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Monitor, Search, UserPlus } from "lucide-react";
-import { api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
+import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus } from "lucide-react";
+import { agentOutdated, api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
 import { formatPct, osLabel, relativeTime } from "@/lib/utils";
@@ -17,13 +17,14 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
-import { CommandDialog } from "@/components/commands";
+import { CommandDialog, useAgentLatest } from "@/components/commands";
 
 const BULK_ACTIONS: { type: CommandType; label: string }[] = [
   { type: "run_script", label: "Run script…" },
   { type: "refresh_inventory", label: "Refresh inventory" },
   { type: "display_message", label: "Send message…" },
   { type: "lock", label: "Lock screen" },
+  { type: "update_agent", label: "Update agent…" },
   { type: "reboot", label: "Reboot…" },
 ];
 
@@ -51,11 +52,15 @@ function DevicesView() {
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<CommandType | null>(null);
+  // Devices for "Update agents (N)"; null means the action applies to the selection.
+  const [targets, setTargets] = useState<string[] | null>(null);
 
   const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId };
   const devices = useQuery({ queryKey: qk.devices(filters), queryFn: () => api.devices.list(filters), placeholderData: (p) => p });
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
   const items = useMemo(() => devices.data?.items ?? [], [devices.data]);
+  const latestAgent = useAgentLatest().data?.version;
+  const outdated = useMemo(() => items.filter((d) => agentOutdated(d.agent_version, latestAgent)).map((d) => d.id), [items, latestAgent]);
 
   // Drop selections that are no longer visible.
   useEffect(() => {
@@ -84,6 +89,18 @@ function DevicesView() {
         description={devices.data ? `${items.length} device${items.length === 1 ? "" : "s"}${filtered ? " match your filters" : ""}` : "All managed endpoints"}
         actions={
           <>
+            {can("commands.run") && outdated.length > 0 && (
+              <Button
+                variant="outline"
+                title={`Agent ${latestAgent} is available`}
+                onClick={() => {
+                  setTargets(outdated);
+                  setAction("update_agent");
+                }}
+              >
+                <ArrowUpCircle /> Update agents ({outdated.length})
+              </Button>
+            )}
             <ExportLink href={api.devices.exportUrl(filters)} title={filtered ? "Export the devices matching your filters" : "Export all devices"} />
             {can("enrollment.write") && (
               <Button onClick={() => router.push("/enrollment")}>
@@ -209,6 +226,7 @@ function DevicesView() {
                       <span>Disk</span>
                     </div>
                   </TH>
+                  <TH className="hidden xl:table-cell">Agent</TH>
                   <TH className="hidden md:table-cell">User</TH>
                   <TH>Last seen</TH>
                 </TR>
@@ -257,6 +275,15 @@ function DevicesView() {
                         ))}
                       </div>
                     </TD>
+                    <TD className="hidden whitespace-nowrap xl:table-cell">
+                      <span className="font-mono text-xs text-muted-foreground">{d.agent_version || "—"}</span>
+                      {agentOutdated(d.agent_version, latestAgent) && (
+                        <span className="ml-1.5 inline-flex items-center gap-1 text-xs font-medium text-foreground" title={`Agent ${latestAgent} is available`}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
+                          Update
+                        </span>
+                      )}
+                    </TD>
                     <TD className="hidden max-w-[10rem] truncate md:table-cell">
                       {d.logged_in_user || <span className="text-muted-foreground">—</span>}
                     </TD>
@@ -272,11 +299,20 @@ function DevicesView() {
       {action && (
         <CommandDialog
           open
-          onOpenChange={(o) => !o && setAction(null)}
+          onOpenChange={(o) => {
+            if (!o) {
+              setAction(null);
+              setTargets(null);
+            }
+          }}
           type={action}
-          deviceIds={[...selected]}
-          targetLabel={`${selected.size} device${selected.size === 1 ? "" : "s"}`}
-          onIssued={() => setSelected(new Set())}
+          deviceIds={targets ?? [...selected]}
+          targetLabel={
+            targets
+              ? `${targets.length} device${targets.length === 1 ? "" : "s"} on an older agent (latest ${latestAgent})`
+              : `${selected.size} device${selected.size === 1 ? "" : "s"}`
+          }
+          onIssued={() => (targets ? setTargets(null) : setSelected(new Set()))}
         />
       )}
     </>

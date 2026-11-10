@@ -25,6 +25,7 @@ import (
 	"github.com/uem/uem/internal/agent/config"
 	agentexec "github.com/uem/uem/internal/agent/exec"
 	"github.com/uem/uem/internal/agent/session"
+	agentupdate "github.com/uem/uem/internal/agent/update"
 	"github.com/uem/uem/internal/agent/usage"
 	"github.com/uem/uem/internal/protocol"
 )
@@ -34,8 +35,8 @@ const (
 	// pong arrives in time. Without this, a connection that died silently (a
 	// laptop switching from cable to Wi-Fi, or leaving the office) is only
 	// noticed when the operating system gives up on it, which takes minutes.
-	pingInterval = 30 * time.Second
-	pingTimeout  = 10 * time.Second
+	pingInterval      = 30 * time.Second
+	pingTimeout       = 10 * time.Second
 	heartbeatInterval = 30 * time.Second
 	blocklistInterval = 15 * time.Second
 	retryMoveAfter    = 10 * time.Minute // after a new server address failed
@@ -53,14 +54,19 @@ type Agent struct {
 
 	// OnUninstall is invoked after an uninstall_agent command is acknowledged.
 	OnUninstall func()
+	// Executable is the agent binary that update_agent replaces, and Restart makes the
+	// service start the new one. Both are nil in the foreground, where updates are refused.
+	Executable string
+	Restart    func()
+	updatedTo  string // set once update_agent has swapped in a new binary
 	// SaveServerURL persists a new server address once the agent has
 	// connected to it. When nil, the agent never changes address.
 	SaveServerURL func(url string) error
 
 	mu      sync.Mutex
 	policy  protocol.Policy
-	out     chan []byte // frames for the current connection, nil when offline
-	pending [][]byte    // command results produced while offline
+	out     chan []byte                        // frames for the current connection, nil when offline
+	pending [][]byte                           // command results produced while offline
 	seen    map[string]*protocol.CommandResult // command ID → result (nil while running)
 
 	cmdSlots chan struct{}
@@ -444,6 +450,27 @@ func (a *Agent) execute(ctx context.Context, cmd protocol.Command) protocol.Comm
 			return failed(errors.New("uninstall is not supported when running in the foreground"))
 		}
 		return succeeded("Agent uninstalling")
+	case protocol.CmdUpdateAgent:
+		if a.Restart == nil || a.Executable == "" {
+			return failed(errors.New("updates are not supported when running in the foreground"))
+		}
+		var p protocol.UpdatePayload
+		if err := json.Unmarshal(cmd.Payload, &p); err != nil {
+			return failed(fmt.Errorf("invalid payload: %w", err))
+		}
+		if p.Version == a.version {
+			return succeeded("Already running " + p.Version)
+		}
+		a.mu.Lock()
+		server := a.cfg.ServerURL
+		a.mu.Unlock()
+		if err := agentupdate.Install(ctx, http.DefaultClient, a.Executable, server, p); err != nil {
+			return failed(err)
+		}
+		a.mu.Lock()
+		a.updatedTo = p.Version
+		a.mu.Unlock()
+		return succeeded(fmt.Sprintf("Updated from %s to %s; restarting", a.version, p.Version))
 	}
 	return failed(fmt.Errorf("unsupported command type %q", cmd.Type))
 }
@@ -462,6 +489,15 @@ func (a *Agent) afterResult(cmd protocol.Command) {
 		if a.OnUninstall != nil {
 			time.Sleep(3 * time.Second)
 			a.OnUninstall()
+		}
+	case protocol.CmdUpdateAgent:
+		a.mu.Lock()
+		updated := a.updatedTo
+		a.mu.Unlock()
+		if a.Restart != nil && updated != "" { // only once the new binary is in place
+			time.Sleep(3 * time.Second)
+			a.log.Info("restarting on the updated agent", "version", updated)
+			a.Restart()
 		}
 	}
 }

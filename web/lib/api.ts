@@ -231,7 +231,8 @@ export type CommandType =
   | "lock"
   | "display_message"
   | "refresh_inventory"
-  | "uninstall_agent";
+  | "uninstall_agent"
+  | "update_agent";
 
 export const COMMAND_TYPES: CommandType[] = [
   "run_script",
@@ -241,7 +242,29 @@ export const COMMAND_TYPES: CommandType[] = [
   "display_message",
   "refresh_inventory",
   "uninstall_agent",
+  "update_agent",
 ];
+
+/** The agent version the server offers (null when no builds are published). */
+export type AgentLatest = { version: string | null; self_update_since: string };
+
+function versionBase(v: string): number[] {
+  return v.replace(/^v/, "").split("-")[0]!.split(".").map((n) => Number.parseInt(n, 10) || 0);
+}
+
+/** Whether an agent at `current` is behind `latest`; mirrors the server's agentdist.Outdated. */
+export function agentOutdated(current: string | null | undefined, latest: string | null | undefined): boolean {
+  if (!latest || current === latest) return false;
+  if (!current) return true;
+  const a = versionBase(current);
+  const b = versionBase(latest);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x < y;
+  }
+  return current.endsWith("-dirty") && !latest.endsWith("-dirty");
+}
 
 export type Shell = "bash" | "sh" | "zsh" | "powershell" | "cmd";
 export const SHELLS: Shell[] = ["bash", "sh", "zsh", "powershell", "cmd"];
@@ -683,6 +706,9 @@ export const api = {
     remove: (id: string) => del<Ok>(`/api/webhooks/${enc(id)}`),
     test: (id: string) => post<unknown>(`/api/webhooks/${enc(id)}/test`),
   },
+  agents: {
+    latest: () => get<AgentLatest>("/api/agents/latest"),
+  },
   org: {
     get: () => get<Org>("/api/org"),
     update: (b: { name?: string; server_url?: string; usage_tracking?: boolean; idle_threshold_sec?: number }) =>
@@ -733,4 +759,5 @@ export const qk = {
   users: ["users"] as const,
   webhooks: ["webhooks"] as const,
   org: ["org"] as const,
+  agentLatest: ["agents", "latest"] as const,
 };

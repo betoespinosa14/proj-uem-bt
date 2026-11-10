@@ -179,8 +179,14 @@ func (s *Server) handleAgentMessage(ctx context.Context, dev store.DeviceAuth, e
 		if json.Unmarshal(env.Data, &h) != nil {
 			return
 		}
+		before, _ := s.store.GetDevice(ctx, dev.OrgID, dev.ID)
 		if err := s.store.SetDeviceOnline(ctx, dev.ID, h); err != nil {
 			log.Error("set online", "err", err)
+		}
+		if h.AgentVersion != "" && before.AgentVersion != "" && h.AgentVersion != before.AgentVersion {
+			s.audit.Record(ctx, audit.Event{OrgID: dev.OrgID, Actor: audit.Actor{Type: "device", ID: dev.ID},
+				Action: "agent.updated", TargetType: "device", TargetID: dev.ID,
+				Details: map[string]any{"from": before.AgentVersion, "to": h.AgentVersion, "device_name": before.Name}})
 		}
 		s.core.PushPolicy(ctx, dev.ID)
 		// Commands still marked sent went out on an earlier connection and may

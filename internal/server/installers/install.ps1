@@ -1,5 +1,7 @@
 # UEM agent installer for Windows. Run from an elevated PowerShell:
+#   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
 #   & ([scriptblock]::Create((irm https://uem.example.com/install.ps1))) -Server 'https://uem.example.com' -Token 'enr_xxx'
+# (The first line lets older Windows PowerShell download this script over TLS 1.2.)
 # Re-running it on an enrolled device upgrades the agent and keeps its identity.
 param(
     [Parameter(Mandatory = $true)][string]$Server,
@@ -22,7 +24,8 @@ if (Get-Service -Name 'uem-agent' -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "Downloading UEM agent (windows/$arch)..."
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Add TLS 1.2 (3072) to what's allowed, keeping TLS 1.3 where available.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072
 Invoke-WebRequest -UseBasicParsing -Uri "$Server/downloads/uem-agent-windows-$arch.exe" -OutFile $bin
 
 $cfgDir = Join-Path $env:ProgramData 'UEM Agent'

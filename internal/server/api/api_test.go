@@ -250,6 +250,15 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
 	dev := e.enroll(t, tok.Token)
 
+	// The Windows install command enables TLS 1.2 before it downloads the installer.
+	var cmds map[string]string
+	a.do("GET", "/api/enrollment-tokens/"+tok.ID+"/install", nil, 200, &cmds)
+	win := cmds["windows"]
+	tls, irm := strings.Index(win, "SecurityProtocol -bor 3072"), strings.Index(win, "irm ")
+	if tls < 0 || irm < 0 || tls > irm || !strings.Contains(win, "/install.ps1") || !strings.Contains(win, tok.Token) {
+		t.Fatalf("windows install command = %q", win)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	wsURL := "ws" + strings.TrimPrefix(e.srv.URL, "http") + "/api/agent/ws"

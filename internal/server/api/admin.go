@@ -201,7 +201,9 @@ func (s *Server) installCommands(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"linux": fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s", base, base, t.Token),
 		"macos": fmt.Sprintf("curl -fsSL %s/install.sh | sudo sh -s -- --server %s --token %s", base, base, t.Token),
-		"windows": fmt.Sprintf(`powershell -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm %s/install.ps1))) -Server '%s' -Token '%s'"`,
+		// Windows PowerShell 5.1 on older .NET doesn't offer TLS 1.2, which the server requires, so the
+		// command adds it (3072 = Tls12, valid even where the name is missing) before downloading.
+		"windows": fmt.Sprintf(`powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; & ([scriptblock]::Create((irm %s/install.ps1))) -Server '%s' -Token '%s'"`,
 			base, base, t.Token),
 	})
 }

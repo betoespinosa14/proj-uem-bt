@@ -7,6 +7,14 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Fixed
+- **The Windows install command works on older Windows.** Built-in PowerShell on older Windows 10 and Windows
+  Server doesn't offer TLS 1.2, so the command failed with "Could not create SSL/TLS secure channel" before
+  anything installed. The command on the Enrollment page now enables TLS 1.2 first. The installer adds TLS 1.2
+  to the allowed protocols instead of replacing them, so TLS 1.3 stays available.
+
 ## 2026.11.8 (2026-11-10): Agent update fixes
 
 ### Fixed

@@ -45,7 +45,7 @@ func Classify(s store.Software) string {
 	if s.Source == "apple" {
 		return ""
 	}
-	if s.Source == "msstore" && microsoft.MatchString(s.Publisher) && windowsXbox.MatchString(s.Name) {
+	if s.Source == "msstore" && microsoft.MatchString(s.Publisher) {
 		return ""
 	}
 	if gamblingName.MatchString(s.Name) || gamblingPublisher.MatchString(s.Publisher) {
@@ -66,9 +66,9 @@ const (
 // Microsoft products that ship separately from Windows itself.
 var msAddon = regexp.MustCompile(`(?i)\b(365|office|teams|word|excel|powerpoint|outlook|onenote|publisher|access|visio|project|visual studio|sql server|skype)\b`)
 
-// windowsXbox matches the Xbox components Windows ships with (the Xbox app,
-// Game Bar, identity provider), which aren't games someone installed.
-var windowsXbox = regexp.MustCompile(`(?i)^xbox\b`)
+// Microsoft's own Store apps, like Macs' built-in apps, come with Windows:
+// the Xbox app and Game Bar, and games such as "Solitaire & Casual Games",
+// Minesweeper and Mahjong. They aren't games someone chose to install.
 
 // distro matches Linux distribution maintainers/vendors whose packages make up the base OS.
 var distro = regexp.MustCompile(`(?i)ubuntu|canonical|debian|red ?hat|fedora|centos|rocky|almalinux|suse|oracle linux|amazon linux`)

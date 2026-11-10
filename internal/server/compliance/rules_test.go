@@ -163,7 +163,11 @@ func TestClassify(t *testing.T) {
 		{store.Software{Name: "betaflight-configurator"}, ""},
 		{store.Software{Name: "Xbox", Publisher: "Microsoft Corporation", Source: "msstore"}, ""},
 		{store.Software{Name: "Xbox Game Bar", Publisher: "Microsoft Corporation", Source: "msstore"}, ""},
-		{store.Software{Name: "Microsoft Solitaire Collection", Publisher: "Microsoft Studios", Source: "msstore"}, FlagGame},
+		{store.Software{Name: "Solitaire & Casual Games", Publisher: "Microsoft Studios", Source: "msstore"}, ""},
+		{store.Software{Name: "Microsoft Minesweeper", Publisher: "Microsoft Studios", Source: "msstore"}, ""},
+		{store.Software{Name: "Microsoft Solitaire Collection", Source: "unknown"}, FlagGame}, // installed on a Mac
+		{store.Software{Name: "Candy Crush Saga", Publisher: "king.com", Source: "msstore"}, FlagGame},
+		{store.Software{Name: "Roblox", Publisher: "Roblox Corporation", Source: "msstore"}, FlagGame},
 	}
 	for _, c := range cases {
 		if got := Classify(c.sw); got != c.want {

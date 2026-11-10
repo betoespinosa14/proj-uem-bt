@@ -7,7 +7,7 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 
 ### Added
 - **Each device's Usage tab has the full App usage features,** for that device only: the dashboard (headline
@@ -20,8 +20,12 @@ commits after 2026.11.0, at commit `60f25a5`.
   by folder. Store apps (the new Teams, WhatsApp, Spotify) and per-user installs were never counted, and Word,
   Excel, PowerPoint and Outlook all counted as "Microsoft 365 Apps for enterprise". Each now has its own name.
   Store apps keep matching after they update themselves. They show "Microsoft Store" as their source, and
-  Microsoft's own Store apps (Calculator, Photos) count as part of Windows. The Xbox components Windows ships
-  with are not flagged as games. Needs the agent update.
+  Microsoft's own Store apps (Calculator, Photos) count as part of Windows. Needs the agent update.
+
+### Changed
+- **Games that come with Windows aren't flagged.** Microsoft's own Store apps, such as Solitaire & Casual
+  Games, Minesweeper, Mahjong, the Xbox app and Game Bar, are exempt from the "No gambling apps or games" check,
+  like the built-in Mac apps. Games people install themselves are still flagged, from the Store or otherwise.
 
 ## 2026.11.9 (2026-11-10): Phone layout, battery display, Windows install TLS
 

@@ -7,6 +7,14 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Fixed
+- **Browser tabs left open through an update keep working.** Before, the update removed the old console's
+  script files, so a tab opened earlier could end up with sidebar links that did nothing until it was closed
+  and reopened. The deploy now also serves the previous versions' static files for 14 days
+  (`KEEP_OLD_STATIC_DAYS` in `deploy/macos/install.sh`).
+
 ## 2026.11.6 (2026-11-10): New logo, link previews, MacBook battery
 
 ### Added

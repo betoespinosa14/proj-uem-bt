@@ -49,6 +49,8 @@ stage() {
   rsync -a --delete "$REPO/web/.next/standalone/" "$APP/web.next/"
   rsync -a --delete "$REPO/web/.next/static/" "$APP/web.next/.next/static/"
   rsync -a --delete "$REPO/web/public/" "$APP/web.next/public/"
+  # Remember which static files belong to this build (see swap_web).
+  (cd "$APP/web.next/.next/static" && find . -type f | sort) > "$APP/web.next/.build-files"
 
   # The Caddyfile and server settings are machine config, not code: create
   # them once and leave them alone afterwards.
@@ -90,9 +92,31 @@ EOF
 
 loaded() { launchctl print "system/com.beacon.$1" >/dev/null 2>&1; }
 
+# Days to keep serving the script and style files of earlier console versions.
+KEEP_OLD_STATIC_DAYS=14
+
 # Put a staged console in place (the previous one is kept as web.prev).
+#
+# A browser tab opened before the update still runs the old console, which loads its pages'
+# script files by name as you navigate. If those files are gone, its links silently do nothing
+# until the tab is reloaded. So the new console also carries the earlier versions' static files
+# (they're named by content hash and never clash), and drops them after KEEP_OLD_STATIC_DAYS.
 swap_web() {
   [[ -d "$APP/web.next" ]] || return 0
+  local new_static="$APP/web.next/.next/static"
+  if [[ -d "$APP/web/.next/static" && -f "$APP/web.next/.build-files" ]]; then
+    rsync -a --ignore-existing "$APP/web/.next/static/" "$new_static/"
+    # The version being replaced starts its countdown now, however long ago it was built.
+    if [[ -f "$APP/web/.build-files" ]]; then
+      (cd "$new_static" && comm -23 "$APP/web/.build-files" "$APP/web.next/.build-files" |
+        while IFS= read -r f; do if [[ -f "$f" ]]; then touch "$f"; fi; done)
+    fi
+    # Carried files (not part of this build) older than the limit are dropped.
+    (cd "$new_static" && find . -type f -mtime +"$KEEP_OLD_STATIC_DAYS" | sort |
+      comm -23 - "$APP/web.next/.build-files" | while IFS= read -r f; do rm -f "$f"; done)
+    find "$new_static" -type d -empty -delete
+    echo "==> Kept earlier console files so open browser tabs keep working"
+  fi
   rm -rf "$APP/web.prev"
   if [[ -d "$APP/web" ]]; then mv "$APP/web" "$APP/web.prev"; fi
   mv "$APP/web.next" "$APP/web"

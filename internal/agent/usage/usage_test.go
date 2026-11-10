@@ -13,6 +13,10 @@ func TestAppFor(t *testing.T) {
 		{Name: "Adobe Common", InstallLocation: `C:\Program Files\Adobe`},
 		{Name: "Zoom Workplace", InstallLocation: `"C:\Users\ana\AppData\Roaming\Zoom"`},
 		{Name: "Bad root", InstallLocation: `C:\`},
+		{Name: "Microsoft 365 Apps for enterprise - en-us", InstallLocation: `C:\Program Files\Microsoft Office`},
+		{Name: "Microsoft Word", InstallLocation: `C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE`},
+		{Name: "Microsoft Teams", InstallLocation: `C:\Program Files\WindowsApps\MSTeams_25153.1010.3727.5483_x64__8wekyb3d8bbwe`},
+		{Name: "WhatsApp", InstallLocation: `C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2525.4.0_x64__cv1g1gvanyjgm`},
 	})
 	lin := NewIndex("linux", []protocol.Software{{Name: "firefox"}, {Name: "libreoffice-calc"}})
 	mac := NewIndex("darwin", nil)
@@ -35,6 +39,14 @@ func TestAppFor(t *testing.T) {
 		{win, `c:\program files\adobe\other\x.exe`, "Adobe Common"},
 		{win, `C:\Users\ana\AppData\Roaming\Zoom\bin\Zoom.exe`, "Zoom Workplace"},
 		{win, `C:\Windows\System32\notepad.exe`, ""},
+		{win, `C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE`, "Microsoft Word"},
+		{win, `c:\program files\microsoft office\root\office16\winword.exe`, "Microsoft Word"},
+		{win, `C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE`, "Microsoft 365 Apps for enterprise - en-us"}, // not in the list: the suite
+		{win, `C:\Program Files\WindowsApps\MSTeams_25153.1010.3727.5483_x64__8wekyb3d8bbwe\ms-teams.exe`, "Microsoft Teams"},
+		// Updated since the last inventory: a new version folder still matches.
+		{win, `C:\Program Files\WindowsApps\MSTeams_25200.1.0.0_x64__8wekyb3d8bbwe\ms-teams.exe`, "Microsoft Teams"},
+		{win, `C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2530.1.0_x64__cv1g1gvanyjgm\WhatsApp.Root.exe`, "WhatsApp"},
+		{win, `C:\Program Files\WindowsApps\Microsoft.WindowsCalculator_11.2405.2.0_x64__8wekyb3d8bbwe\CalculatorApp.exe`, ""},
 		{lin, "/usr/lib/firefox/firefox", "firefox"},
 		{lin, "/usr/bin/bash", ""},
 	}

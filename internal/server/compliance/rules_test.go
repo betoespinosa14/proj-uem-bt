@@ -161,6 +161,9 @@ func TestClassify(t *testing.T) {
 		{store.Software{Name: "Microsoft Visual C++ 2015-2022 Redistributable", Publisher: "Microsoft Corporation"}, ""},
 		{store.Software{Name: "Adobe Photoshop 2024"}, ""},
 		{store.Software{Name: "betaflight-configurator"}, ""},
+		{store.Software{Name: "Xbox", Publisher: "Microsoft Corporation", Source: "msstore"}, ""},
+		{store.Software{Name: "Xbox Game Bar", Publisher: "Microsoft Corporation", Source: "msstore"}, ""},
+		{store.Software{Name: "Microsoft Solitaire Collection", Publisher: "Microsoft Studios", Source: "msstore"}, FlagGame},
 	}
 	for _, c := range cases {
 		if got := Classify(c.sw); got != c.want {
@@ -183,6 +186,10 @@ func TestCategory(t *testing.T) {
 		{store.Software{Name: "procps", Publisher: "Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>", Source: "dpkg"}, CategorySystem},
 		{store.Software{Name: "zabbix-agent", Publisher: "Zabbix Packager <info@zabbix.com>", Source: "dpkg"}, CategoryThirdParty},
 		{store.Software{Name: "NewApp", Source: "unknown"}, CategoryThirdParty},
+		{store.Software{Name: "Microsoft Word", Publisher: "Microsoft Corporation", Source: "registry"}, CategoryThirdParty},
+		{store.Software{Name: "Microsoft Teams", Publisher: "Microsoft Corporation", Source: "msstore"}, CategoryThirdParty},
+		{store.Software{Name: "Windows Calculator", Publisher: "Microsoft Corporation", Source: "msstore"}, CategorySystem},
+		{store.Software{Name: "WhatsApp", Publisher: "WhatsApp Inc.", Source: "msstore"}, CategoryThirdParty},
 	}
 	for _, c := range cases {
 		if got := Category(c.sw); got != c.want {

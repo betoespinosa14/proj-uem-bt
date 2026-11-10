@@ -496,7 +496,7 @@ function Software({ id }: { id: string }) {
                   </TD>
                   <TD className="hidden max-w-[16rem] truncate text-muted-foreground md:table-cell">{s.publisher}</TD>
                   <TD className="hidden sm:table-cell">
-                    <Badge variant="neutral">{s.source}</Badge>
+                    <Badge variant="neutral">{s.source === "msstore" ? "Microsoft Store" : s.source}</Badge>
                   </TD>
                   <TD className="hidden text-muted-foreground lg:table-cell">{s.install_date ? formatDate(s.install_date) : "—"}</TD>
                   <TD className="hidden text-muted-foreground lg:table-cell" title={s.last_used ? formatDateTime(s.last_used) : undefined}>

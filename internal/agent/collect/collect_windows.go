@@ -3,11 +3,15 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
 	"github.com/uem/uem/internal/protocol"
@@ -53,12 +57,26 @@ func osBuild(ctx context.Context, info protocol.OSInfo) string {
 func software(ctx context.Context) []protocol.Software {
 	out := []protocol.Software{}
 	seen := map[string]bool{}
-	roots := []struct {
+	add := func(sw protocol.Software) {
+		k := strings.ToLower(sw.Name + "\x00" + sw.Version)
+		if sw.Name == "" || seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, sw)
+	}
+	type root struct {
 		key  registry.Key
 		path string
-	}{
+	}
+	roots := []root{
 		{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`},
 		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`},
+	}
+	// Apps installed for one user only (Spotify, Zoom, Discord...) are listed
+	// under that user's own hive, loaded while they're signed in.
+	for _, sid := range userSIDs() {
+		roots = append(roots, root{registry.USERS, sid + `\Software\Microsoft\Windows\CurrentVersion\Uninstall`})
 	}
 	for _, root := range roots {
 		k, err := registry.OpenKey(root.key, root.path, registry.ENUMERATE_SUB_KEYS)
@@ -79,19 +97,134 @@ func software(ctx context.Context) []protocol.Software {
 			date, _, _ := sk.GetStringValue("InstallDate")
 			location, _, _ := sk.GetStringValue("InstallLocation")
 			sk.Close()
-			if name == "" || sys == 1 || seen[name+version] {
+			if sys == 1 {
 				continue
 			}
-			seen[name+version] = true
 			sw := protocol.Software{Name: name, Version: version, Publisher: publisher, Source: "registry", InstallLocation: location}
 			if len(date) == 8 {
 				d := date[:4] + "-" + date[4:6] + "-" + date[6:]
 				sw.InstallDate = &d
 			}
-			out = append(out, sw)
+			add(sw)
+			for _, o := range officePrograms(sw) {
+				add(o)
+			}
+		}
+	}
+	for _, sw := range storeApps(ctx) {
+		add(sw)
+	}
+	return out
+}
+
+var userSID = regexp.MustCompile(`^S-1-5-21-[0-9-]+$`)
+
+// userSIDs lists the loaded hives of real user accounts.
+func userSIDs() []string {
+	k, err := registry.OpenKey(registry.USERS, "", registry.ENUMERATE_SUB_KEYS)
+	if err != nil {
+		return nil
+	}
+	defer k.Close()
+	names, _ := k.ReadSubKeyNames(-1)
+	var out []string
+	for _, n := range names {
+		if userSID.MatchString(n) {
+			out = append(out, n)
 		}
 	}
 	return out
+}
+
+// officePrograms lists Word, Excel and the other Office programs found in an
+// Office suite's install folder. Their InstallLocation is the program itself,
+// so usage is counted per program rather than for the whole suite.
+func officePrograms(suite protocol.Software) []protocol.Software {
+	loc := strings.TrimRight(strings.Trim(suite.InstallLocation, `" `), `\/`)
+	if loc == "" || !strings.Contains(strings.ToLower(loc), "microsoft office") {
+		return nil
+	}
+	var out []protocol.Software
+	for _, dir := range officeDirs {
+		for _, a := range officeApps {
+			exe := filepath.Join(loc, dir, a.exe)
+			if _, err := os.Stat(exe); err == nil {
+				out = append(out, protocol.Software{Name: a.name, Version: suite.Version, Publisher: suite.Publisher,
+					Source: "registry", InstallDate: suite.InstallDate, InstallLocation: exe})
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return out
+}
+
+// storeApps lists Microsoft Store (MSIX/AppX) apps installed for any user,
+// such as the new Teams, WhatsApp and Spotify. Parts of Windows itself
+// (system-signed or non-removable packages) and frameworks are left out.
+func storeApps(ctx context.Context) []protocol.Software {
+	out, err := powershell(ctx, 90*time.Second,
+		`$p = @(Get-AppxPackage -AllUsers | Where-Object { -not $_.IsFramework -and -not $_.IsResourcePackage -and -not $_.NonRemovable -and `+
+			`$_.SignatureKind -ne 'System' -and $_.InstallLocation } | Select-Object Name, PackageFullName, Version, InstallLocation); `+
+			`ConvertTo-Json -Compress -InputObject $p`)
+	if err != nil {
+		return nil
+	}
+	var pkgs []struct{ Name, PackageFullName, Version, InstallLocation string }
+	if json.Unmarshal([]byte(strings.TrimSpace(out)), &pkgs) != nil {
+		return nil
+	}
+	var list []protocol.Software
+	done := map[string]bool{}
+	for _, p := range pkgs {
+		if done[p.PackageFullName] {
+			continue
+		}
+		done[p.PackageFullName] = true
+		data, err := os.ReadFile(filepath.Join(p.InstallLocation, "AppxManifest.xml"))
+		if err != nil {
+			continue
+		}
+		app, ok := parseAppxManifest(data)
+		if !ok {
+			continue
+		}
+		name := app.Name
+		if isResourceRef(name) {
+			name = resolveResource(p.PackageFullName, p.Name, name)
+			if name == "" {
+				name = app.Fallback
+			}
+		}
+		list = append(list, protocol.Software{Name: name, Version: p.Version, Publisher: app.Publisher,
+			Source: "msstore", InstallLocation: p.InstallLocation})
+	}
+	return list
+}
+
+var procSHLoadIndirectString = windows.NewLazySystemDLL("shlwapi.dll").NewProc("SHLoadIndirectString")
+
+// resolveResource looks up a manifest "ms-resource:" display name in the
+// package's own resources; "" if Windows can't resolve it.
+func resolveResource(fullName, packageName, ref string) string {
+	if procSHLoadIndirectString.Find() != nil {
+		return ""
+	}
+	for _, uri := range resourceURIs(ref, packageName) {
+		src, err := windows.UTF16PtrFromString("@{" + fullName + "?" + uri + "}")
+		if err != nil {
+			continue
+		}
+		buf := make([]uint16, 512)
+		hr, _, _ := procSHLoadIndirectString.Call(uintptr(unsafe.Pointer(src)), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0)
+		if hr == 0 {
+			if s := strings.TrimSpace(windows.UTF16ToString(buf)); s != "" && !isResourceRef(s) {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 var protectionOn = regexp.MustCompile(`(?i)Protection Status:\s+Protection On`)

@@ -15,6 +15,13 @@ commits after 2026.11.0, at commit `60f25a5`.
   the "Not used" list with its reclaim export, and the Infrastructure badges and marking. Marking an app as
   infrastructure from a device page still applies to every device. The App usage endpoints accept
   `device_id=` for this.
+- **Windows: app usage and installed software now include Microsoft Store apps, apps installed for one user,
+  and each Office program.** Usage used to count only apps in Windows' machine-wide installed list, matched
+  by folder. Store apps (the new Teams, WhatsApp, Spotify) and per-user installs were never counted, and Word,
+  Excel, PowerPoint and Outlook all counted as "Microsoft 365 Apps for enterprise". Each now has its own name.
+  Store apps keep matching after they update themselves. They show "Microsoft Store" as their source, and
+  Microsoft's own Store apps (Calculator, Photos) count as part of Windows. The Xbox components Windows ships
+  with are not flagged as games. Needs the agent update.
 
 ## 2026.11.9 (2026-11-10): Phone layout, battery display, Windows install TLS
 

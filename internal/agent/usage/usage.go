@@ -28,6 +28,8 @@ type Proc struct {
 type Index struct {
 	goos     string
 	prefixes []prefix          // windows: install location → app name, longest first
+	exes     map[string]string // windows: one program (e.g. Word within Office) → app name
+	families map[string]string // windows: Store package family (name + publisher ID) → app name
 	packages map[string]string // linux: lower(package name) → package name
 }
 
@@ -35,14 +37,22 @@ type prefix struct{ dir, name string }
 
 // NewIndex builds an index from the installed software list.
 func NewIndex(goos string, software []protocol.Software) *Index {
-	ix := &Index{goos: goos, packages: map[string]string{}}
+	ix := &Index{goos: goos, packages: map[string]string{}, exes: map[string]string{}, families: map[string]string{}}
 	for _, s := range software {
 		switch goos {
 		case "windows":
-			dir := strings.TrimRight(strings.ToLower(strings.Trim(s.InstallLocation, `" `)), `\/`)
-			if len(dir) > 3 && s.Name != "" { // skip empty and bare drive roots like C:\
-				ix.prefixes = append(ix.prefixes, prefix{dir + `\`, s.Name})
+			dir := strings.TrimRight(strings.ToLower(strings.ReplaceAll(strings.Trim(s.InstallLocation, `" `), "/", `\`)), `\`)
+			if len(dir) <= 3 || s.Name == "" { // skip empty and bare drive roots like C:\
+				continue
 			}
+			if strings.HasSuffix(dir, ".exe") {
+				ix.exes[dir] = s.Name
+				continue
+			}
+			if f := storeFamily(dir); f != "" {
+				ix.families[f] = s.Name
+			}
+			ix.prefixes = append(ix.prefixes, prefix{dir + `\`, s.Name})
 		case "linux":
 			ix.packages[strings.ToLower(s.Name)] = s.Name
 		}
@@ -62,6 +72,12 @@ func (ix *Index) AppFor(exe string) string {
 		return macApp(exe)
 	case "windows":
 		lower := strings.ToLower(strings.ReplaceAll(exe, "/", `\`))
+		if name := ix.exes[lower]; name != "" {
+			return name
+		}
+		if f := storeFamily(lower); f != "" && ix.families[f] != "" {
+			return ix.families[f]
+		}
 		for _, p := range ix.prefixes {
 			if strings.HasPrefix(lower, p.dir) {
 				return p.name
@@ -72,6 +88,27 @@ func (ix *Index) AppFor(exe string) string {
 		return ix.packages[strings.ToLower(base)]
 	}
 	return ""
+}
+
+// storeFamily returns "name|publisherid" for a path inside a Store app's
+// folder (...\WindowsApps\<Name>_<Version>_<Arch>_<ResourceID>_<PublisherID>\...),
+// or "". The version is left out so an app that updated itself since the
+// last inventory still matches.
+func storeFamily(lowerPath string) string {
+	const marker = `\windowsapps\`
+	i := strings.Index(lowerPath, marker)
+	if i < 0 {
+		return ""
+	}
+	folder := lowerPath[i+len(marker):]
+	if j := strings.IndexByte(folder, '\\'); j >= 0 {
+		folder = folder[:j]
+	}
+	parts := strings.Split(folder, "_")
+	if len(parts) != 5 || parts[0] == "" || parts[4] == "" {
+		return ""
+	}
+	return parts[0] + "|" + parts[4]
 }
 
 // AppForFront maps the front app reported by the session probe: a bundle

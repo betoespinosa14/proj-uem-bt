@@ -45,6 +45,9 @@ func Classify(s store.Software) string {
 	if s.Source == "apple" {
 		return ""
 	}
+	if s.Source == "msstore" && microsoft.MatchString(s.Publisher) && windowsXbox.MatchString(s.Name) {
+		return ""
+	}
 	if gamblingName.MatchString(s.Name) || gamblingPublisher.MatchString(s.Publisher) {
 		return FlagGambling
 	}
@@ -61,7 +64,11 @@ const (
 )
 
 // Microsoft products that ship separately from Windows itself.
-var msAddon = regexp.MustCompile(`(?i)\b(365|office|teams|access|visio|project|visual studio|sql server|skype)\b`)
+var msAddon = regexp.MustCompile(`(?i)\b(365|office|teams|word|excel|powerpoint|outlook|onenote|publisher|access|visio|project|visual studio|sql server|skype)\b`)
+
+// windowsXbox matches the Xbox components Windows ships with (the Xbox app,
+// Game Bar, identity provider), which aren't games someone installed.
+var windowsXbox = regexp.MustCompile(`(?i)^xbox\b`)
 
 // distro matches Linux distribution maintainers/vendors whose packages make up the base OS.
 var distro = regexp.MustCompile(`(?i)ubuntu|canonical|debian|red ?hat|fedora|centos|rocky|almalinux|suse|oracle linux|amazon linux`)
@@ -75,7 +82,7 @@ func Category(s store.Software) string {
 	switch s.Source {
 	case "apple": // Apple-signed (macOS built-ins)
 		return CategorySystem
-	case "registry":
+	case "registry", "msstore": // msstore: Microsoft Store apps (Windows)
 		if microsoft.MatchString(s.Publisher) && !msAddon.MatchString(s.Name) {
 			return CategorySystem
 		}

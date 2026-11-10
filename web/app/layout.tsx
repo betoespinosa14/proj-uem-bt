@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/config";
+import { PUBLIC_URL, SHARE_TAGLINE } from "@/lib/share";
 
 // Downloaded at build time and served by the app itself: no runtime request to Google.
 const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -10,6 +11,10 @@ const sans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", di
 export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
   description: APP_DESCRIPTION,
+  // Link previews: absolute image URLs need the public address. The image is app/opengraph-image.tsx.
+  metadataBase: new URL(PUBLIC_URL),
+  openGraph: { type: "website", siteName: APP_NAME, title: APP_NAME, description: SHARE_TAGLINE, url: "/" },
+  twitter: { card: "summary_large_image", title: APP_NAME, description: SHARE_TAGLINE },
 };
 
 // Applies the saved or system theme before first paint to avoid a flash.

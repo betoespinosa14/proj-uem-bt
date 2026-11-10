@@ -7,6 +7,19 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Added
+- **Link previews.** Sharing https://beacon.itsthev.net in a chat or email app shows a card with the BEACON
+  logo, the name and "Endpoint oversight". It shows no device or company data. The address comes from
+  `BEACON_PUBLIC_URL` at build time (default https://beacon.itsthev.net).
+
+### Changed
+- **BEACON has its own logo:** a teal ribbon folded into a shield, a nod to The V's folded-ribbon logo, with
+  the signal light in the middle. It's used in the sidebar, the login page, the browser tab and the phone
+  home-screen icon. It's a flat vector in the company teals, and the dot follows the theme (dark green on light,
+  neon on dark). The artwork is in `web/public/logo.svg` and `logo-dark.svg`.
+
 ## 2026.11.5 (2026-11-09): Display polish
 
 ### Changed

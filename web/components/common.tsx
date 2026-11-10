@@ -2,18 +2,59 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Apple, ChevronRight, Download, Monitor, Search, Server, X, type LucideIcon } from "lucide-react";
-import type { CommandStatus, ComplianceState, DeviceStatus, Severity } from "@/lib/api";
+import {
+  AlertCircle,
+  Apple,
+  ChevronRight,
+  Download,
+  Monitor,
+  Search,
+  Server,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import type {
+  CommandStatus,
+  ComplianceState,
+  DeviceStatus,
+  Severity,
+} from "@/lib/api";
 import { errorMessage } from "@/lib/api";
 import { cn, osLabel, titleCase } from "@/lib/utils";
 import { Badge, type BadgeVariant } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 
-/** The company logo. The PNG is 88×80, so keep it at 40px or smaller. */
-export function BrandMark({ className }: { className?: string }) {
-  // eslint-disable-next-line @next/next/no-img-element -- tiny static logo; next/image adds nothing here
-  return <img src="/logo.png" alt="" width={88} height={80} className={cn("h-8 w-auto select-none", className)} draggable={false} />;
+/**
+ * BEACON's mark: a teal ribbon folded into a shield (a nod to The V's folded-ribbon logo) around the
+ * signal light. Flat fills in the company teals. The dot follows the sidebar accent (dark green on
+ * light, neon on dark); pass `dotClassName` for a fixed surface, e.g. "fill-neon" on the dark login.
+ * Source artwork: public/logo.svg (light) and public/logo-dark.svg.
+ */
+export function BrandMark({
+  className,
+  dotClassName = "fill-nav-accent",
+}: {
+  className?: string;
+  dotClassName?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      aria-hidden
+      className={cn("aspect-square h-8 w-auto shrink-0 select-none", className)}
+    >
+      <path d="M56 9 L54.5 33 L45 31.5 L46 17 Z" fill="#00a4cc" />
+      <path d="M54.5 33 L36.5 55.4 L32 47 L45 31.5 Z" fill="#00889c" />
+      <path d="M39.65 51.48 L36.5 55.4 L32 47 Z" fill="#005870" />
+      <path d="M19 31.5 L9.5 33 L32 61 L36.5 55.4 L32 47 Z" fill="#00ccec" />
+      <path d="M9.5 33 L8 9 L18 17 L19 31.5 Z" fill="#00a4cc" />
+      <path d="M8 9 L32 3 L56 9 L46 17 L32 13.5 L18 17 Z" fill="#00889c" />
+      <path d="M8 9 L18 17 L13 20 Z" fill="#004858" />
+      <path d="M56 9 L51.5 13.5 L46 17 Z" fill="#005870" />
+      <circle cx="32" cy="27.5" r="5" className={dotClassName} />
+    </svg>
+  );
 }
 
 export type HeadlineStat = {
@@ -55,11 +96,22 @@ export function PageHeader({
     <div className="mb-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <span className="mb-2.5 block h-1 w-8 rounded-full bg-brand" aria-hidden />
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{title}</h1>
-          {description && <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">{description}</p>}
+          <span
+            className="mb-2.5 block h-1 w-8 rounded-full bg-brand"
+            aria-hidden
+          />
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">
+              {description}
+            </p>
+          )}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && (
+          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        )}
       </div>
       {(stats?.length || statsAside) && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
@@ -71,7 +123,14 @@ export function PageHeader({
                     <s.icon className="h-4 w-4" />
                   </span>
                   <div className="text-left leading-tight">
-                    <dd className={cn("text-xl font-semibold tracking-tight tabular", headlineTone[s.tone ?? "default"])}>{s.value}</dd>
+                    <dd
+                      className={cn(
+                        "text-xl font-semibold tracking-tight tabular",
+                        headlineTone[s.tone ?? "default"],
+                      )}
+                    >
+                      {s.value}
+                    </dd>
                     <dt className="text-xs text-muted-foreground">{s.label}</dt>
                     {s.cta && (
                       <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
@@ -100,7 +159,11 @@ export function PageHeader({
                   {body}
                 </div>
               ) : (
-                <div key={s.label} className="flex items-center gap-2.5" title={s.hint}>
+                <div
+                  key={s.label}
+                  className="flex items-center gap-2.5"
+                  title={s.hint}
+                >
                   {body}
                 </div>
               );
@@ -153,25 +216,42 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center px-6 py-14 text-center",
+        className,
+      )}
+    >
       <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
         <span className="absolute inset-0 rounded-full bg-brand/10" />
         <span className="absolute inset-2 rounded-full bg-brand/15" />
         <Icon className="relative h-5 w-5 text-primary" />
       </div>
       <p className="font-medium">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
+      {description && (
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          {description}
+        </p>
+      )}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+export function ErrorState({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry?: () => void;
+}) {
   return (
     <Card className="flex flex-col items-center px-6 py-10 text-center">
       <AlertCircle className="mb-2 h-5 w-5 text-destructive" />
       <p className="font-medium">Couldn&apos;t load this data</p>
-      <p className="mt-1 text-sm text-muted-foreground">{errorMessage(error)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {errorMessage(error)}
+      </p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
           Try again
@@ -196,7 +276,11 @@ const complianceVariant: Record<ComplianceState, BadgeVariant> = {
 };
 
 export function ComplianceBadge({ state }: { state: ComplianceState }) {
-  return <Badge variant={complianceVariant[state] ?? "neutral"}>{titleCase(state === "non_compliant" ? "non-compliant" : state)}</Badge>;
+  return (
+    <Badge variant={complianceVariant[state] ?? "neutral"}>
+      {titleCase(state === "non_compliant" ? "non-compliant" : state)}
+    </Badge>
+  );
 }
 
 const severityVariant: Record<Severity, BadgeVariant> = {
@@ -208,7 +292,10 @@ const severityVariant: Record<Severity, BadgeVariant> = {
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   return (
-    <Badge variant={severityVariant[severity] ?? "neutral"} className={severity === "critical" ? "font-semibold" : undefined}>
+    <Badge
+      variant={severityVariant[severity] ?? "neutral"}
+      className={severity === "critical" ? "font-semibold" : undefined}
+    >
       {titleCase(severity)}
     </Badge>
   );
@@ -226,7 +313,10 @@ const commandVariant: Record<CommandStatus, BadgeVariant> = {
 
 export function CommandStatusBadge({ status }: { status: CommandStatus }) {
   return (
-    <Badge variant={commandVariant[status] ?? "neutral"} dot={status === "running" || status === "sent"}>
+    <Badge
+      variant={commandVariant[status] ?? "neutral"}
+      dot={status === "running" || status === "sent"}
+    >
       {titleCase(status)}
     </Badge>
   );
@@ -234,28 +324,62 @@ export function CommandStatusBadge({ status }: { status: CommandStatus }) {
 
 export function OsIcon({ os, className }: { os: string; className?: string }) {
   const Icon = os === "macos" ? Apple : os === "linux" ? Server : Monitor;
-  return <Icon className={cn("h-4 w-4 text-muted-foreground", className)} aria-label={osLabel(os)} />;
+  return (
+    <Icon
+      className={cn("h-4 w-4 text-muted-foreground", className)}
+      aria-label={osLabel(os)}
+    />
+  );
 }
 
 /** Thin usage bar; turns amber/red as it fills. */
-export function UsageBar({ value, className }: { value: number | null | undefined; className?: string }) {
+export function UsageBar({
+  value,
+  className,
+}: {
+  value: number | null | undefined;
+  className?: string;
+}) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const color = v >= 90 ? "bg-destructive" : v >= 75 ? "bg-warning" : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
+  const color =
+    v >= 90
+      ? "bg-destructive"
+      : v >= 75
+        ? "bg-warning"
+        : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
   return (
-    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
-      <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${v}%` }} />
+    <div
+      className={cn(
+        "h-1.5 w-full overflow-hidden rounded-full bg-muted",
+        className,
+      )}
+    >
+      <div
+        className={cn("h-full rounded-full transition-all", color)}
+        style={{ width: `${v}%` }}
+      />
     </div>
   );
 }
 
 /** Label/value rows for detail panels. */
-export function KeyValues({ items }: { items: [React.ReactNode, React.ReactNode][] }) {
+export function KeyValues({
+  items,
+}: {
+  items: [React.ReactNode, React.ReactNode][];
+}) {
   return (
     <dl className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-6 gap-y-2.5 text-sm">
       {items.map(([k, v], i) => (
         <React.Fragment key={i}>
           <dt className="text-muted-foreground">{k}</dt>
-          <dd className="min-w-0 break-words">{v === "" || v == null ? <span className="text-muted-foreground">—</span> : v}</dd>
+          <dd className="min-w-0 break-words">
+            {v === "" || v == null ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              v
+            )}
+          </dd>
         </React.Fragment>
       ))}
     </dl>
@@ -287,9 +411,16 @@ export function TagInput({
   return (
     <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-input bg-card px-2 py-1.5 shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/40">
       {value.map((t) => (
-        <span key={t} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+        <span
+          key={t}
+          className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+        >
           {t}
-          <button type="button" onClick={() => onChange(value.filter((x) => x !== t))} aria-label={`Remove ${t}`}>
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((x) => x !== t))}
+            aria-label={`Remove ${t}`}
+          >
             <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
           </button>
         </span>
@@ -341,20 +472,35 @@ export function StatCard({
         </span>
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
       </div>
-      <p className="mt-3 text-3xl font-semibold tracking-tight tabular">{value}</p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight tabular">
+        {value}
+      </p>
       {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
 }
 
 /** A download link styled as an outline button, for CSV exports. */
-export function ExportLink({ href, title, className, label = "Export CSV" }: { href: string; title?: string; className?: string; label?: string }) {
+export function ExportLink({
+  href,
+  title,
+  className,
+  label = "Export CSV",
+}: {
+  href: string;
+  title?: string;
+  className?: string;
+  label?: string;
+}) {
   return (
     <a
       href={href}
       download
       title={title}
-      className={cn("inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4", className)}
+      className={cn(
+        "inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium shadow-sm transition-colors hover:bg-muted [&_svg]:size-4",
+        className,
+      )}
     >
       <Download /> {label}
     </a>

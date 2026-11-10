@@ -43,7 +43,7 @@ export function UsageDashboard({
         </CardContent>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle>Top apps</CardTitle>

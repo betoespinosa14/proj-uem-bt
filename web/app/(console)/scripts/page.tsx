@@ -156,7 +156,7 @@ function ScriptDialog({ script, readOnly, onClose }: { script: Script | null; re
       }
     >
       <fieldset disabled={readOnly} className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-[1fr_10rem_9rem]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem_9rem]">
           <Field label="Name" htmlFor="sname">
             <Input id="sname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Clear browser caches" />
           </Field>

@@ -61,7 +61,7 @@ export default function SettingsPage() {
       {error ? (
         <ErrorState error={error} onRetry={refetch} />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
           <Card>
             <CardHeader>
               <CardTitle>Organization</CardTitle>

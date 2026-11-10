@@ -336,13 +336,21 @@ export function OsIcon({ os, className }: { os: string; className?: string }) {
 export function UsageBar({
   value,
   className,
+  charge,
 }: {
   value: number | null | undefined;
   className?: string;
+  /** A charge level (battery): low is red/amber and high is healthy, unlike usage. */
+  charge?: boolean;
 }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const color =
-    v >= 90
+  const color = charge
+    ? v <= 20
+      ? "bg-destructive"
+      : v <= 40
+        ? "bg-warning"
+        : "bg-success dark:bg-neon"
+    : v >= 90
       ? "bg-destructive"
       : v >= 75
         ? "bg-warning"

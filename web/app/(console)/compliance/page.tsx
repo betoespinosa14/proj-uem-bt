@@ -336,7 +336,7 @@ function RuleDialog({
       }
     >
       <div className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem]">
           <Field label="Name" htmlFor="rname">
             <Input id="rname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Disk encryption required" />
           </Field>
@@ -365,7 +365,7 @@ function RuleDialog({
               const f = fieldOf(c.field);
               const needsValue = !NO_VALUE_OPS.includes(c.op);
               return (
-                <div key={i} className="grid items-center gap-2 rounded-md border border-border bg-muted/30 p-2 sm:grid-cols-[1.3fr_1fr_1fr_auto]">
+                <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-md border border-border bg-muted/30 p-2 sm:grid-cols-[1.3fr_1fr_1fr_auto]">
                   <Select
                     aria-label="Field"
                     value={c.field}
@@ -420,7 +420,7 @@ function RuleDialog({
           <p className="mt-1 text-xs text-muted-foreground">If the agent can&apos;t determine a value (for example, encryption status in a VM), the condition fails.</p>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label>Applies to operating systems</Label>
             <div className="mt-2 flex flex-wrap gap-4">
@@ -462,7 +462,7 @@ function RuleDialog({
               </span>
               <Switch checked={webhook} onCheckedChange={setWebhook} aria-label="Send webhook" />
             </label>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Tag the device" htmlFor="rtag">
                 <Input id="rtag" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="e.g. needs-encryption" />
               </Field>

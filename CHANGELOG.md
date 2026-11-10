@@ -7,9 +7,18 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.9 (2026-11-10): Phone layout, battery display, Windows install TLS
 
 ### Fixed
+- **The console fits phone screens.** Card rows on most pages (Dashboard, device page, App usage, Enrollment,
+  Settings, Users, Scheduled tasks, Compliance, Scripts) could grow to fit one long line, such as an alert
+  listing several games. That made the page wider than the screen, and the phone shrank the whole page. Long
+  lines now end in "…". `npm run lint` checks that new layouts keep this rule.
+- **Devices list on phones:** status, compliance and last seen appear under each device's name instead of in
+  columns cut off at the screen edge. On a device's page, the system and last-seen line wraps instead of running
+  off the screen.
+- **Battery shows at most 100%,** and its bar reads like a charge: green when full, amber at 40% or below, red at
+  20% or below. It used to be red when full, like a usage bar. Windows agents also cap a reading above 100%.
 - **The Windows install command works on older Windows.** Built-in PowerShell on older Windows 10 and Windows
   Server doesn't offer TLS 1.2, so the command failed with "Could not create SSL/TLS secure channel" before
   anything installed. The command on the Enrollment page now enables TLS 1.2 first. The installer adds TLS 1.2

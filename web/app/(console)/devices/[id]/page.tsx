@@ -108,11 +108,9 @@ export default function DevicePage() {
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge status={d.status} />
               <ComplianceBadge state={d.compliance_state} />
-              <span>
-                {d.os_name || osLabel(d.os_family)} {d.os_version}
+              <span className="min-w-0 basis-full sm:basis-auto">
+                {d.os_name || osLabel(d.os_family)} {d.os_version} · Last seen {relativeTime(d.last_seen_at)}
               </span>
-              <span>·</span>
-              <span>Last seen {relativeTime(d.last_seen_at)}</span>
               {d.tags.map((t) => (
                 <Badge key={t} variant="outline" className="font-mono">
                   {t}
@@ -236,14 +234,28 @@ function NoInventory() {
   );
 }
 
-function Metric({ icon: Icon, label, value, sub }: { icon: typeof Cpu; label: string; value: number | null; sub?: string }) {
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  charge,
+}: {
+  icon: typeof Cpu;
+  label: string;
+  value: number | null;
+  sub?: string;
+  /** A charge level (battery): low is the warning, not high. */
+  charge?: boolean;
+}) {
+  if (charge && value != null) value = Math.min(100, value);
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Icon className="h-4 w-4" /> {label}
       </div>
       <p className="mt-2 text-2xl font-semibold tabular">{formatPct(value)}</p>
-      <UsageBar value={value} className="mt-2" />
+      <UsageBar value={value} className="mt-2" charge={charge} />
       {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
@@ -255,7 +267,7 @@ function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
   const inv = d.inventory;
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metric icon={Cpu} label="CPU" value={d.cpu_pct} sub={inv?.hardware.cpu_model} />
         <Metric
           icon={MemoryStick}
@@ -264,9 +276,9 @@ function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
           sub={inv ? `${formatBytes(inv.hardware.memory_total_bytes)} installed` : undefined}
         />
         <Metric icon={HardDrive} label="System disk" value={d.disk_pct} />
-        <Metric icon={BatteryMedium} label="Battery" value={d.battery_pct} sub={d.battery_pct == null ? "No battery" : undefined} />
+        <Metric icon={BatteryMedium} label="Battery" charge value={d.battery_pct} sub={d.battery_pct == null ? "No battery" : undefined} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Device</CardTitle>
@@ -326,7 +338,7 @@ function Hardware({ inv }: { inv: Inventory | null }) {
   if (!inv) return <NoInventory />;
   const hw = inv.hardware;
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Processor & memory</CardTitle>

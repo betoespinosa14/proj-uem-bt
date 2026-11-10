@@ -215,8 +215,8 @@ function DevicesView() {
                     </TH>
                   )}
                   <TH>Device</TH>
-                  <TH>Status</TH>
-                  <TH>Compliance</TH>
+                  <TH className="hidden sm:table-cell">Status</TH>
+                  <TH className="hidden sm:table-cell">Compliance</TH>
                   <TH className="hidden md:table-cell">Group</TH>
                   <TH className="hidden lg:table-cell">
                     {/* Same grid as the cells below, so each label sits over its own number. */}
@@ -228,7 +228,7 @@ function DevicesView() {
                   </TH>
                   <TH className="hidden xl:table-cell">Agent</TH>
                   <TH className="hidden md:table-cell">User</TH>
-                  <TH>Last seen</TH>
+                  <TH className="hidden sm:table-cell">Last seen</TH>
                 </TR>
               </THead>
               <TBody>
@@ -253,13 +253,19 @@ function DevicesView() {
                           <p className="truncate text-xs text-muted-foreground">
                             {d.os_name} {d.os_version} · {d.ip_address || "no IP"}
                           </p>
+                          {/* On phones the status columns are hidden; show them here instead. */}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
+                            <StatusBadge status={d.status} />
+                            <ComplianceBadge state={d.compliance_state} />
+                            <span className="text-xs text-muted-foreground">{relativeTime(d.last_seen_at)}</span>
+                          </div>
                         </div>
                       </div>
                     </TD>
-                    <TD>
+                    <TD className="hidden sm:table-cell">
                       <StatusBadge status={d.status} />
                     </TD>
-                    <TD>
+                    <TD className="hidden sm:table-cell">
                       <ComplianceBadge state={d.compliance_state} />
                     </TD>
                     <TD className="hidden md:table-cell">
@@ -287,7 +293,7 @@ function DevicesView() {
                     <TD className="hidden max-w-[10rem] truncate md:table-cell">
                       {d.logged_in_user || <span className="text-muted-foreground">—</span>}
                     </TD>
-                    <TD className="whitespace-nowrap text-muted-foreground">{relativeTime(d.last_seen_at)}</TD>
+                    <TD className="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{relativeTime(d.last_seen_at)}</TD>
                   </TR>
                 ))}
               </TBody>

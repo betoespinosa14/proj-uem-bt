@@ -238,7 +238,7 @@ function TaskDialog({ task, onClose }: { task: Task | null; onClose: () => void 
         <Field label="Name" htmlFor="tname">
           <Input id="tname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Nightly compliance check" />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Schedule" htmlFor="tpreset">
             <Select
               id="tpreset"
@@ -252,7 +252,7 @@ function TaskDialog({ task, onClose }: { task: Task | null; onClose: () => void 
             <Input id="tcron" className="font-mono" value={cron} onChange={(e) => setCron(e.target.value)} />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Action" htmlFor="taction">
             <Select id="taction" value={actionType} onValueChange={(v) => setActionType(v as TaskActionType)} options={ACTIONS} />
           </Field>

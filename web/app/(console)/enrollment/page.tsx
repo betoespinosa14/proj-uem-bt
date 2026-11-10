@@ -56,7 +56,7 @@ export default function EnrollmentPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {[
           { icon: KeyRound, title: "1. Create a token", body: "Optionally assign a group, an expiry and a use limit." },
           { icon: Terminal, title: "2. Run the installer", body: "Paste the one-liner as admin/root on the device." },

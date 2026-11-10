@@ -72,7 +72,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader className="flex-row items-center justify-between pb-2">
             <CardTitle>Devices by operating system</CardTitle>
@@ -121,7 +121,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Open alerts</CardTitle>

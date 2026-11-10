@@ -18,7 +18,9 @@ func batteryInfo() protocol.Battery {
 		return protocol.Battery{Present: false, State: "none"}
 	}
 	b := bats[0]
-	out := protocol.Battery{Present: true, Percent: round1(b.Current / b.Full * 100), State: strings.ToLower(b.State.String())}
+	// Windows can report a fully charged battery slightly above its full capacity (e.g. 101%).
+	pct := min(b.Current/b.Full*100, 100)
+	out := protocol.Battery{Present: true, Percent: round1(pct), State: strings.ToLower(b.State.String())}
 	if b.Design > 0 {
 		h := round1(b.Full / b.Design * 100)
 		out.HealthPct = &h

@@ -144,7 +144,7 @@ export type SoftwareItem = {
   flag?: "gambling" | "game";
 };
 
-export type UsagePeriod = 30 | 90 | 365;
+export type UsagePeriod = 1 | 7 | 30 | 90 | 365;
 
 export type UsageGroup = "app" | "app_user";
 

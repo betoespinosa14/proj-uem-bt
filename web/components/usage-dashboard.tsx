@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { UsageAppStat, UsageSummary } from "@/lib/api";
-import { formatHours } from "@/lib/utils";
+import { cn, formatHours } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { ServerCog } from "lucide-react";
@@ -37,19 +37,25 @@ export function UsageDashboard({
   onInfrastructure?: InfraAction;
 }) {
   const device = scope === "device";
+  // Usage is stored per day: a one-day period has no trend, and a weekday
+  // average needs several weeks.
+  const showTrend = days > 1;
+  const showWeekdays = device && days >= 30;
   return (
     <div className="space-y-5">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Active hours per day</CardTitle>
-          <CardDescription>Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Trend daily={data.daily} days={days} device={device} />
-        </CardContent>
-      </Card>
+      {showTrend && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Active hours per day</CardTitle>
+            <CardDescription>Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Trend daily={data.daily} days={days} device={device} />
+          </CardContent>
+        </Card>
+      )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className={cn("grid grid-cols-1 gap-5", (!device || showWeekdays) && "lg:grid-cols-2")}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle>Top apps</CardTitle>
@@ -68,15 +74,17 @@ export function UsageDashboard({
           </CardContent>
         </Card>
         {device ? (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>Active hours by weekday</CardTitle>
-              <CardDescription>Average active time on each day of the week, from the first report in this period.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <WeekdayPattern daily={data.daily} days={days} />
-            </CardContent>
-          </Card>
+          showWeekdays && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>Active hours by weekday</CardTitle>
+                <CardDescription>Average active time on each day of the week, from the first report in this period.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WeekdayPattern daily={data.daily} days={days} />
+              </CardContent>
+            </Card>
+          )
         ) : (
           <Card>
             <CardHeader className="pb-2">

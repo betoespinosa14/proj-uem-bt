@@ -75,7 +75,7 @@ type Inventory = {
 - `DELETE /api/devices/{id}` → `{ok:true}` (devices.write). This retires the device.
 - `GET /api/devices/{id}/software` → `{items: {name, version, publisher, source, install_date: string|null, last_used: string|null, category: "system"|"third_party", flag?: "gambling"|"game"}[]}`. `category` and `flag` are computed by the server (`internal/server/compliance/catalog.go`); `last_used` comes from usage tracking.
 - `GET /api/devices/{id}/software.csv?q=&category=system|third_party|flagged` → CSV of the device's installed software. Audit-logged as `device.software.export`.
-- `GET /api/devices/{id}/usage?days=30|90|365&group=app|app_user` → `{items: UsageRow[]}`, most active first. `group=app` (totals per app across users) leaves `user` empty and sets `users`. The default is `app_user`.
+- `GET /api/devices/{id}/usage?days=1|7|30|90|365&group=app|app_user` → `{items: UsageRow[]}`, most active first. `group=app` (totals per app across users) leaves `user` empty and sets `users`. The default is `app_user`.
 - `GET /api/devices/{id}/usage.csv?days=&group=` → CSV of the same. Audit-logged as `device.usage.export`.
 - `GET /api/devices/{id}/telemetry?hours=24` → `{items: {ts, cpu_pct, mem_pct, disk_pct, battery_pct: number|null}[]}`
 - `GET /api/devices/{id}/compliance` → `{items: ComplianceResult[]}`
@@ -156,13 +156,13 @@ type FleetAppRow = { app: string; users: number;
   installed_on: number;       // devices it is installed on now
   last_used: string|null; minutes: number; active_seconds: number }
 ```
-- `GET /api/usage?app=&days=30|90|365&unused=true&group=app|app_user&group_id=&device_id=` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
+- `GET /api/usage?app=&days=1|7|30|90|365&unused=true&group=app|app_user&group_id=&device_id=` → `{items}` (up to 10,000 rows). `group=app` returns `FleetAppRow[]`, most active first. The default `app_user` returns `FleetUsageRow[]`.
   - With no `app`, only used rows are returned. With `app`, devices where the app is installed but unused are included too.
   - `unused=true` returns only installed third-party apps with no use in the period.
   - `group_id` limits every App usage endpoint (list, export, summary and reclaim list) to devices in that group. A value that isn't a group ID gets a 400.
   - `device_id` limits them all to one device; the device page's Usage tab uses it. A value that isn't a device ID gets a 400.
 - `GET /api/usage/export.csv` (same params) → CSV with `active_hours` and `open_hours` columns. Audit-logged as `usage.export`.
-- `GET /api/usage/summary?app=&days=30|90|365&group_id=&device_id=` → the App usage dashboard. It uses the same period and app search as `/api/usage`, and only counts devices that aren't retired.
+- `GET /api/usage/summary?app=&days=1|7|30|90|365&group_id=&device_id=` → the App usage dashboard. It uses the same period and app search as `/api/usage`, and only counts devices that aren't retired.
   - Use is split per (device, app, user):
     - **foreground** if anyone was active in it at least once in the period;
     - **background-only** otherwise, such as system daemons, helpers, remote-access hosts and apps under service accounts.

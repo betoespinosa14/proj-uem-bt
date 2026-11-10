@@ -10,6 +10,9 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **"Today" and "7 days" periods in App usage**, on the fleet page and each device's Usage tab, so Top users
+  and every other card can show today's or this week's activity. The per-day chart is hidden for Today, and a
+  device's weekday chart needs 30 days or more.
 - **Employee name on devices.** The "Edit name, group & tags" dialog has a required Employee name field. The
   display name is now generated as `<group> | <employee name>`, or just the employee name without a group, and
   it follows the group: renaming a group renames its devices. Existing devices took their employee name from the

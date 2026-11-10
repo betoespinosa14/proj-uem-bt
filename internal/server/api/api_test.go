@@ -685,6 +685,30 @@ func TestUsageTracking(t *testing.T) {
 	}
 	a.do("GET", "/api/usage/summary?device_id=nope", nil, 400, nil)
 
+	// Short periods: use from 3 days ago counts in 7 days but not today.
+	threeDaysAgo := time.Now().AddDate(0, 0, -3)
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: threeDaysAgo.Format(time.DateOnly), App: "Slack", User: "dora", Minutes: 30, ActiveSeconds: 900, LastSeen: threeDaysAgo},
+	}})
+	hasDora := func() bool {
+		for _, u := range sum.TopUsers {
+			if u.User == "dora" {
+				return true
+			}
+		}
+		return false
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !hasDora(); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary?days=7", nil, 200, &sum)
+	}
+	if !hasDora() || len(sum.Daily) != 2 {
+		t.Fatalf("summary?days=7 = %+v", sum)
+	}
+	a.do("GET", "/api/usage/summary?days=1", nil, 200, &sum)
+	if hasDora() || len(sum.Daily) != 1 || len(sum.TopUsers) != 2 {
+		t.Fatalf("summary?days=1 = %+v", sum)
+	}
+
 	// Idle threshold: 1–15 minutes.
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 30}, 400, nil)
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 1000}, 400, nil)

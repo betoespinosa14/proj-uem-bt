@@ -15,11 +15,16 @@ import (
 	"github.com/uem/uem/internal/server/store"
 )
 
-// usagePeriod parses ?days= (30, 90 or 365; default 30) and returns the
-// number of days and the first day of the period.
+// usagePeriod parses ?days= (1, 7, 30, 90 or 365; default 30) and returns the
+// number of days and the first day of the period. Days are the server's local
+// dates, like the dates agents report usage under, so 1 means today.
 func usagePeriod(r *http.Request) (int, time.Time) {
 	days := 30
 	switch r.URL.Query().Get("days") {
+	case "1":
+		days = 1
+	case "7":
+		days = 7
 	case "90":
 		days = 90
 	case "365":

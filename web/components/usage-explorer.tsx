@@ -20,7 +20,8 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { EmptyState, ErrorState, ExportLink, type HeadlineStat } from "@/components/common";
 import { UsageDashboard } from "@/components/usage-dashboard";
 
-const PERIODS = { "30": "30 days", "90": "90 days", "365": "1 year" } as const;
+// Numeric keys, so Object.entries lists them shortest first.
+const PERIODS = { "1": "Today", "7": "7 days", "30": "30 days", "90": "90 days", "365": "1 year" } as const;
 const GROUPS = { app: "By app", app_user: "By app and user" } as const;
 
 type View = "dashboard" | "table";
@@ -212,7 +213,7 @@ export function UsageExplorer({
         {view === "table" && (
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={unused} onCheckedChange={setUnused} aria-label="Only installed apps not used in this period" />
-            Not used in {PERIODS[period]}
+            {period === "1" ? "Not used today" : `Not used in ${PERIODS[period]}`}
           </label>
         )}
       </div>

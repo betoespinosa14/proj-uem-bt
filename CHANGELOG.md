@@ -23,6 +23,9 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **A device's Usage dashboard shows active hours by weekday** in place of Top users, which mostly repeated the
   employee's name: the average active time for each day of the week, from the device's first report in the
   period. The App usage page keeps Top users.
+- **App usage "Top users" shows employee names** instead of signed-in accounts: each account is shown as the
+  employee of the device it was most active on, with the account on hover. Accounts without an employee name
+  show as before.
 
 ## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 

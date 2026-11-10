@@ -87,12 +87,12 @@ export function UsageDashboard({
               <Ranked
                 rows={data.top_users.map((u) => ({
                   key: u.user,
-                  label: u.user,
+                  label: userLabel(u, data.top_users),
                   value: u.active_seconds,
                   note: device
                     ? `${u.apps} ${u.apps === 1 ? "app" : "apps"}`
                     : `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
-                  hint: device ? undefined : `On ${u.device_names.join(", ")}`,
+                  hint: `Signed in as ${u.user} on ${u.device_names.join(", ")}`,
                 }))}
               />
             </CardContent>
@@ -445,6 +445,16 @@ function WeekdayPattern({ daily, days }: { daily: UsageSummary["daily"]; days: n
       )}
     </div>
   );
+}
+
+/**
+ * A top user's display name: the employee name of their main device, with the
+ * account's own name in brackets when two accounts map to the same employee.
+ */
+function userLabel(u: UsageSummary["top_users"][number], all: UsageSummary["top_users"]) {
+  if (!u.employee) return u.user;
+  const shared = all.filter((x) => x.employee === u.employee).length > 1;
+  return shared ? `${u.employee} (${u.user.split("\\").pop()})` : u.employee;
 }
 
 type RankedRow = { key: string; label: string; value: number; note: string; hint?: string; onClick?: () => void };

@@ -277,6 +277,9 @@ type UsageUser struct {
 	Apps          int      `json:"apps"`
 	Devices       int      `json:"devices"`
 	DeviceNames   []string `json:"device_names"` // sorted
+	// Employee is the employee name of the device where this account was
+	// most active ("" if that device has none), for display in place of the account.
+	Employee string `json:"employee"`
 }
 
 type UsageBackground struct {
@@ -296,7 +299,7 @@ type UsageBackground struct {
 // an admin marked the app as infrastructure.
 const usageRows = `
 	WITH scoped AS (
-		SELECT u.*, d.name AS device_name
+		SELECT u.*, d.name AS device_name, d.employee_name
 		FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		WHERE u.org_id = $1 AND u.day >= $2 AND ($3 = '' OR lower(u.app) LIKE '%' || lower($3) || '%')
 	), u AS (
@@ -359,11 +362,12 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 
 	rows, err = s.Pool.Query(ctx, usageRows+`
 		SELECT username, sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE NOT infra), 0), count(DISTINCT lower(app)), count(DISTINCT device_id),
-			array_agg(DISTINCT device_name ORDER BY device_name)
+			array_agg(DISTINCT device_name ORDER BY device_name),
+			COALESCE((array_agg(employee_name ORDER BY active_seconds DESC) FILTER (WHERE employee_name <> ''))[1], '')
 		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $6`, orgID, since, app, group, dev, usageTopN)
 	if out.TopUsers, err = collect(rows, err, func(r pgx.Rows) (UsageUser, error) {
 		var u UsageUser
-		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames)
+		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames, &u.Employee)
 	}); err != nil {
 		return out, err
 	}

@@ -173,7 +173,7 @@ type FleetAppRow = { app: string; users: number;
     daily: [{ day: "YYYY-MM-DD", active_seconds, minutes, devices }],  // days anyone reported; a missing day = no data
     top_apps: [{ app, active_seconds, minutes, users, devices }],       // top 10 by active time
     idle_apps: [ same shape ],                                          // top 10 by idle time (open minus active)
-    top_users: [{ user, active_seconds, open_minutes, apps, devices, device_names }], // top 10 by active time
+    top_users: [{ user, employee, active_seconds, open_minutes, apps, devices, device_names }], // top 10 by active time; employee = employee name of the device the account was most active on, or ""
     background: [{ app, device_id, device_name, user, minutes, third_party }],        // top 40 background-only, by open time
     infrastructure: [{ app, active_seconds, minutes, users, devices }] }               // apps marked as infrastructure
   ```

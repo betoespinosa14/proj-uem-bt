@@ -525,7 +525,7 @@ func TestUsageTracking(t *testing.T) {
 	}})
 	type stat struct {
 		DeviceNames                   []string `json:"device_names"`
-		App, User                     string
+		App, User, Employee           string
 		ActiveSeconds                 int `json:"active_seconds"`
 		Minutes, Users, Apps, Devices int
 	}
@@ -576,6 +576,16 @@ func TestUsageTracking(t *testing.T) {
 		!sum.Background[0].ThirdParty || sum.Background[1].App != "Contacts" || sum.Background[1].ThirdParty {
 		t.Fatalf("summary = %+v", sum)
 	}
+	if sum.TopUsers[0].Employee != "" {
+		t.Fatalf("employee before one is set = %q", sum.TopUsers[0].Employee)
+	}
+	// Top users carry the employee name of their device.
+	a.do("PATCH", "/api/devices/"+dev.DeviceID, map[string]any{"employee_name": "Ana Cruz"}, 200, nil)
+	a.do("GET", "/api/usage/summary", nil, 200, &sum)
+	if len(sum.TopUsers) != 2 || sum.TopUsers[0].Employee != "Ana Cruz" || sum.TopUsers[0].User != "ana" {
+		t.Fatalf("top users with an employee = %+v", sum.TopUsers)
+	}
+
 	// The app search narrows it: Zoom was never used.
 	a.do("GET", "/api/usage/summary?app=zoom", nil, 200, &sum)
 	if sum.Totals.ActiveSeconds != 0 || len(sum.Daily) != 0 || len(sum.TopApps) != 0 || sum.Totals.UnusedApps != 1 {

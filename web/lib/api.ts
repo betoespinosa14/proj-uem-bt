@@ -201,7 +201,8 @@ export type UsageSummary = {
   daily: { day: string; active_seconds: number; minutes: number; devices: number }[];
   top_apps: UsageAppStat[];
   idle_apps: UsageAppStat[];
-  top_users: { user: string; active_seconds: number; open_minutes: number; apps: number; devices: number; device_names: string[] }[];
+  /** employee: the employee name of the device the account was most active on ("" if none), shown in place of the account. */
+  top_users: { user: string; employee: string; active_seconds: number; open_minutes: number; apps: number; devices: number; device_names: string[] }[];
   background: { app: string; device_id: string; device_name: string; user: string; minutes: number; third_party: boolean }[];
   /** Apps marked as infrastructure: open by design, left out of open totals and idle ranking. */
   infrastructure: UsageAppStat[];

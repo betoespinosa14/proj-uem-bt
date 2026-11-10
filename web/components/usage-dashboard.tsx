@@ -233,6 +233,28 @@ function localDay(d: Date) {
 
 const DAY = 86_400_000;
 
+// Axis steps in minutes: round durations, then whole days for large fleet totals.
+const AXIS_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 7200, 14400, 28800, 72000];
+
+/** Round tick values (in hours) for a duration axis whose tallest value is maxHours: at most 5 steps above 0. */
+function durationAxis(maxHours: number): { ticks: number[]; top: number } {
+  const maxMin = maxHours * 60;
+  if (!(maxMin > 0)) return { ticks: [0, 0.25, 0.5, 0.75, 1], top: 1 };
+  const step = AXIS_STEPS.find((s) => maxMin / s <= 5) ?? Math.ceil(maxMin / 5);
+  const n = Math.max(1, Math.ceil(maxMin / step));
+  const ticks = Array.from({ length: n + 1 }, (_, i) => (i * step) / 60);
+  return { ticks, top: ticks[ticks.length - 1] ?? 1 };
+}
+
+/** "0", "5m", "30m", "1h", "1.5h", "12h". */
+function axisLabel(hours: number) {
+  const m = Math.round(hours * 60);
+  if (m === 0) return "0";
+  if (m < 60) return `${m}m`;
+  const h = m / 60;
+  return `${Number.isInteger(h) ? h : h.toFixed(1)}h`;
+}
+
 /**
  * Every day of the period. Days no device reported anything for (agents not
  * installed yet, devices off, tracking off) are shaded "No data" and break the
@@ -273,6 +295,7 @@ export function Trend({
   const firstReport = points[0]?.active === null ? points.find((p) => p.active !== null)?.t : undefined;
   const lastT = points[points.length - 1]?.t ?? 0;
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const axis = durationAxis(Math.max(0, ...points.map((p) => p.active ?? 0)));
   return (
     <div>
       <div className={compact ? "h-40" : "h-56"}>
@@ -306,7 +329,7 @@ export function Trend({
               />
             )}
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} minTickGap={40} />
-            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}h`} allowDecimals width={44} />
+            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={44} />
             <Tooltip
               cursor={{ stroke: "hsl(var(--muted-foreground))", strokeDasharray: "3 3" }}
               content={({ active, label }) => {
@@ -383,6 +406,7 @@ function WeekdayPattern({ daily, days }: { daily: UsageSummary["daily"]; days: n
     return { name, short: name.slice(0, 3), hours: n ? (totals[i] ?? 0) / n / 3600 : 0, count: n };
   });
   const busiest = bars.reduce((a, b) => (b.hours > a.hours ? b : a));
+  const axis = durationAxis(busiest.hours);
   return (
     <div>
       <div className="h-48">
@@ -390,7 +414,7 @@ function WeekdayPattern({ daily, days }: { daily: UsageSummary["daily"]; days: n
           <BarChart data={bars} margin={{ left: -12, right: 8, top: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
             <XAxis dataKey="short" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
-            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}h`} allowDecimals width={44} />
+            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={44} />
             <Tooltip
               cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.5 }}
               content={({ active, payload }) => {

@@ -7,6 +7,17 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Added
+- **Employee name on devices.** The "Edit name, group & tags" dialog has a required Employee name field. The
+  display name is now generated as `<group> | <employee name>`, or just the employee name without a group, and
+  it follows the group: renaming a group renames its devices. Existing devices took their employee name from the
+  part after " | " in their old names, and their names were regenerated from their current groups.
+- **The Devices list shows the employee** in place of the signed-in account (hover to see that account). The
+  device page shows both, device search matches employee names, and the devices CSV has an `employee_name`
+  column.
+
 ## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 
 ### Added

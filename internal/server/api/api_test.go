@@ -894,3 +894,56 @@ func TestAgentUpdate(t *testing.T) {
 		t.Fatalf("agent.updated audit = %+v", log.Items)
 	}
 }
+
+func TestEmployeeName(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Employee")
+	var tok, grp idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	dev := e.enroll(t, tok.Token)
+	a.do("POST", "/api/groups", map[string]any{"name": "Finance", "blocked_apps": []string{}}, 201, &grp)
+	path := "/api/devices/" + dev.DeviceID
+	type device struct {
+		Name     string
+		Employee string `json:"employee_name"`
+	}
+	var d device
+	// No employee yet: the name is free text.
+	a.do("PATCH", path, map[string]any{"name": "Spare laptop"}, 200, &d)
+	if d.Name != "Spare laptop" || d.Employee != "" {
+		t.Fatalf("free name = %+v", d)
+	}
+	a.do("PATCH", path, map[string]any{"employee_name": "  "}, 400, nil)
+	// With an employee, the name is generated and a typed name is ignored.
+	a.do("PATCH", path, map[string]any{"employee_name": " Ana Cruz ", "group_id": grp.ID, "name": "ignored"}, 200, &d)
+	if d.Name != "Finance | Ana Cruz" || d.Employee != "Ana Cruz" {
+		t.Fatalf("generated name = %+v", d)
+	}
+	a.do("PATCH", path, map[string]any{"name": "ignored again"}, 200, &d)
+	if d.Name != "Finance | Ana Cruz" {
+		t.Fatalf("name after a typed name = %q", d.Name)
+	}
+	// Renaming the group renames its devices.
+	a.do("PATCH", "/api/groups/"+grp.ID, map[string]any{"name": "FINANCE"}, 200, nil)
+	a.do("GET", path, nil, 200, &d)
+	if d.Name != "FINANCE | Ana Cruz" {
+		t.Fatalf("name after group rename = %q", d.Name)
+	}
+	// Search finds the employee.
+	var list struct{ Items []device }
+	a.do("GET", "/api/devices?q=ana", nil, 200, &list)
+	if len(list.Items) != 1 {
+		t.Fatalf("search by employee = %+v", list.Items)
+	}
+	// Leaving the group, or deleting it, drops the prefix.
+	a.do("PATCH", path, map[string]any{"group_id": nil}, 200, &d)
+	if d.Name != "Ana Cruz" {
+		t.Fatalf("name without a group = %q", d.Name)
+	}
+	a.do("PATCH", path, map[string]any{"group_id": grp.ID}, 200, &d)
+	a.do("DELETE", "/api/groups/"+grp.ID, nil, 200, nil)
+	a.do("GET", path, nil, 200, &d)
+	if d.Name != "Ana Cruz" {
+		t.Fatalf("name after deleting the group = %q", d.Name)
+	}
+}

@@ -75,6 +75,7 @@ type Device struct {
 	IPAddress       string     `json:"ip_address"`
 	MACAddress      string     `json:"mac_address"`
 	LoggedInUser    string     `json:"logged_in_user"`
+	EmployeeName    string     `json:"employee_name"`
 	Status          string     `json:"status"`
 	LastSeenAt      *time.Time `json:"last_seen_at"`
 	EnrolledAt      time.Time  `json:"enrolled_at"`

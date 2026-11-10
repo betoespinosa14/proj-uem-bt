@@ -227,7 +227,7 @@ function DevicesView() {
                     </div>
                   </TH>
                   <TH className="hidden xl:table-cell">Agent</TH>
-                  <TH className="hidden md:table-cell">User</TH>
+                  <TH className="hidden md:table-cell">Employee</TH>
                   <TH className="hidden sm:table-cell">Last seen</TH>
                 </TR>
               </THead>
@@ -290,8 +290,11 @@ function DevicesView() {
                         </span>
                       )}
                     </TD>
-                    <TD className="hidden max-w-[10rem] truncate md:table-cell">
-                      {d.logged_in_user || <span className="text-muted-foreground">—</span>}
+                    <TD
+                      className="hidden max-w-[10rem] truncate md:table-cell"
+                      title={d.logged_in_user ? `Signed in: ${d.logged_in_user}` : undefined}
+                    >
+                      {d.employee_name || <span className="text-muted-foreground">—</span>}
                     </TD>
                     <TD className="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{relativeTime(d.last_seen_at)}</TD>
                   </TR>

@@ -64,6 +64,8 @@ export type Device = {
   ip_address: string;
   mac_address: string;
   logged_in_user: string;
+  /** Once set, the device's name is generated as "<group> | <employee>". */
+  employee_name: string;
   status: DeviceStatus;
   last_seen_at: string | null;
   enrolled_at: string;
@@ -617,7 +619,7 @@ export const api = {
   devices: {
     list: (f: DeviceFilters = {}) => get<Items<Device>>("/api/devices", f),
     get: (id: string) => get<DeviceDetail>(`/api/devices/${enc(id)}`),
-    update: (id: string, b: { name?: string; group_id?: string | null; tags?: string[] }) =>
+    update: (id: string, b: { name?: string; employee_name?: string; group_id?: string | null; tags?: string[] }) =>
       patch<Device>(`/api/devices/${enc(id)}`, b),
     retire: (id: string) => del<Ok>(`/api/devices/${enc(id)}`),
     exportUrl: (f: DeviceFilters = {}) => withQuery("/api/devices/export.csv", f),

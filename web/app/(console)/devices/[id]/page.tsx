@@ -292,6 +292,7 @@ function Overview({ d, onUpdate }: { d: DeviceDetail; onUpdate?: () => void }) {
                 ["Model", d.model],
                 ["Serial number", <span key="s" className="font-mono">{d.serial}</span>],
                 ["Group", d.group_name],
+                ["Employee", d.employee_name || "—"],
                 ["Logged-in user", d.logged_in_user],
                 ["Enrolled", formatDateTime(d.enrolled_at)],
               ]}
@@ -771,11 +772,15 @@ function Commands({ id, onRun }: { id: string; onRun?: () => void }) {
 function EditDevice({ d, onClose }: { d: DeviceDetail; onClose: () => void }) {
   const qc = useQueryClient();
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
-  const [name, setName] = useState(d.name);
+  const [employee, setEmployee] = useState(d.employee_name);
   const [groupId, setGroupId] = useState(d.group_id ?? "");
   const [tags, setTags] = useState(d.tags);
+  const groupName = groups.data?.items.find((g) => g.id === groupId)?.name ?? (groupId === d.group_id ? d.group_name : null);
+  const emp = employee.trim();
+  // Same rule as the server: "<group> | <employee>", or the employee alone without a group.
+  const name = emp ? (groupName ? `${groupName} | ${emp}` : emp) : "";
   const save = useMutation({
-    mutationFn: () => api.devices.update(d.id, { name, group_id: groupId || null, tags }),
+    mutationFn: () => api.devices.update(d.id, { employee_name: emp, group_id: groupId || null, tags }),
     onSuccess: (updated) => {
       qc.setQueryData<DeviceDetail>(qk.device(d.id), (old) => (old ? { ...old, ...updated } : old));
       void qc.invalidateQueries({ queryKey: qk.devices() });
@@ -795,15 +800,15 @@ function EditDevice({ d, onClose }: { d: DeviceDetail; onClose: () => void }) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button loading={save.isPending} onClick={() => save.mutate()}>
+          <Button loading={save.isPending} disabled={!emp} onClick={() => save.mutate()}>
             Save
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Display name" htmlFor="dname">
-          <Input id="dname" value={name} onChange={(e) => setName(e.target.value)} />
+        <Field label="Employee name" htmlFor="demployee" hint="Who uses this device. For shared machines and servers, describe it instead, e.g. Sprout Server Office.">
+          <Input id="demployee" value={employee} onChange={(e) => setEmployee(e.target.value)} placeholder="e.g. Arnold Nacario" maxLength={128} autoFocus required />
         </Field>
         <Field label="Group" htmlFor="dgroup" hint="The group's app blocklist applies to this device.">
           <Select
@@ -816,6 +821,9 @@ function EditDevice({ d, onClose }: { d: DeviceDetail; onClose: () => void }) {
         </Field>
         <Field label="Tags" htmlFor="dtags" hint="Press Enter to add. Tags are searchable and usable in compliance rules.">
           <TagInput id="dtags" value={tags} onChange={setTags} placeholder="e.g. finance, loaner" />
+        </Field>
+        <Field label="Display name" htmlFor="dname" hint="Generated from the group and employee name.">
+          <Input id="dname" value={name} readOnly placeholder="Enter an employee name" className="bg-muted/50 text-muted-foreground" />
         </Field>
       </div>
     </Dialog>

@@ -44,7 +44,7 @@ then by number of failing devices.
 ```ts
 type Device = {
   id; name; hostname; os_family: "windows"|"macos"|"linux"|string; os_name; os_version; os_build; arch;
-  serial; model; manufacturer; agent_version; ip_address; mac_address; logged_in_user;
+  serial; model; manufacturer; agent_version; ip_address; mac_address; logged_in_user; employee_name;
   status: "online"|"offline"; last_seen_at: string|null; enrolled_at;
   compliance_state: "compliant"|"non_compliant"|"unknown";
   group_id: string|null; group_name: string|null; tags: string[];
@@ -68,7 +68,10 @@ type Inventory = {
 - `GET /api/devices?q=&status=&os=&compliance=&group_id=` → `{items: Device[]}`
 - `GET /api/devices/export.csv?q=&status=&os=&compliance=&group_id=` → CSV report of the matching devices, including software count and flagged gambling apps/games. Audit-logged as `devices.export`.
 - `GET /api/devices/{id}` → `DeviceDetail`
-- `PATCH /api/devices/{id}` `{name?, group_id?, tags?}` → `Device` (devices.write)
+- `PATCH /api/devices/{id}` `{name?, employee_name?, group_id?, tags?}` → `Device` (devices.write)
+  - Once a device has an `employee_name`, its name is generated as `<group name> | <employee name>`, or the employee name alone without a group, and `name` is ignored. `name` only applies to devices without one.
+  - `employee_name` can't be empty (400) and is at most 128 characters.
+  - Renaming or deleting a group regenerates the names of its devices. The device search (`q`) also matches `employee_name`, and the CSV export has an `employee_name` column.
 - `DELETE /api/devices/{id}` → `{ok:true}` (devices.write). This retires the device.
 - `GET /api/devices/{id}/software` → `{items: {name, version, publisher, source, install_date: string|null, last_used: string|null, category: "system"|"third_party", flag?: "gambling"|"game"}[]}`. `category` and `flag` are computed by the server (`internal/server/compliance/catalog.go`); `last_used` comes from usage tracking.
 - `GET /api/devices/{id}/software.csv?q=&category=system|third_party|flagged` → CSV of the device's installed software. Audit-logged as `device.software.export`.

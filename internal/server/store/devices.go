@@ -56,11 +56,19 @@ func (s *Store) UpdateGroup(ctx context.Context, orgID, id string, name, desc *s
 	if err != nil {
 		return Group{}, err
 	}
+	if name != nil { // device names include the group's
+		if err := s.refreshDeviceNames(ctx, orgID, ""); err != nil {
+			return Group{}, err
+		}
+	}
 	return s.GetGroup(ctx, orgID, id)
 }
 
 func (s *Store) DeleteGroup(ctx context.Context, orgID, id string) error {
-	return expectOne(s.Pool.Exec(ctx, `DELETE FROM device_groups WHERE org_id = $1 AND id = $2`, orgID, id))
+	if err := expectOne(s.Pool.Exec(ctx, `DELETE FROM device_groups WHERE org_id = $1 AND id = $2`, orgID, id)); err != nil {
+		return err
+	}
+	return s.refreshDeviceNames(ctx, orgID, "") // its devices lose the group prefix
 }
 
 // GroupBelongs verifies a client-supplied group ID is in the caller's org.
@@ -155,7 +163,7 @@ const deviceSelect = `
 	SELECT d.id, d.org_id, d.name, d.hostname, d.os_family, d.os_name, d.os_version, d.os_build, d.arch,
 	       d.serial, d.model, d.manufacturer, d.agent_version, d.ip_address, d.mac_address, d.logged_in_user,
 	       d.status, d.last_seen_at, d.enrolled_at, d.compliance_state, d.group_id, g.name, d.tags,
-	       d.cpu_pct, d.mem_pct, d.disk_pct, d.battery_pct
+	       d.cpu_pct, d.mem_pct, d.disk_pct, d.battery_pct, d.employee_name
 	FROM devices d LEFT JOIN device_groups g ON g.id = d.group_id`
 
 func scanDevice(r pgx.Row) (Device, error) {
@@ -163,7 +171,7 @@ func scanDevice(r pgx.Row) (Device, error) {
 	err := r.Scan(&d.ID, &d.OrgID, &d.Name, &d.Hostname, &d.OSFamily, &d.OSName, &d.OSVersion, &d.OSBuild, &d.Arch,
 		&d.Serial, &d.Model, &d.Manufacturer, &d.AgentVersion, &d.IPAddress, &d.MACAddress, &d.LoggedInUser,
 		&d.Status, &d.LastSeenAt, &d.EnrolledAt, &d.ComplianceState, &d.GroupID, &d.GroupName, &d.Tags,
-		&d.CPUPct, &d.MemPct, &d.DiskPct, &d.BatteryPct)
+		&d.CPUPct, &d.MemPct, &d.DiskPct, &d.BatteryPct, &d.EmployeeName)
 	d.Tags = nonNil(d.Tags)
 	return d, err
 }
@@ -186,7 +194,7 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, f DeviceFilter) (
 	}
 	if f.Query != "" {
 		add(`(d.name ILIKE $%[1]d OR d.hostname ILIKE $%[1]d OR d.serial ILIKE $%[1]d OR d.ip_address ILIKE $%[1]d
-		      OR d.logged_in_user ILIKE $%[1]d OR array_to_string(d.tags, ' ') ILIKE $%[1]d)`,
+		      OR d.logged_in_user ILIKE $%[1]d OR d.employee_name ILIKE $%[1]d OR array_to_string(d.tags, ' ') ILIKE $%[1]d)`,
 			"%"+escapeLike(f.Query)+"%")
 	}
 	if f.Status != "" {
@@ -250,16 +258,33 @@ func (s *Store) GetDeviceAuth(ctx context.Context, id string) (DeviceAuth, error
 	return a, mapErr(err)
 }
 
-func (s *Store) UpdateDevice(ctx context.Context, orgID, id string, name *string, groupID *string, clearGroup bool, tags []string) (Device, error) {
+// UpdateDevice changes a device's name, employee, group and tags (nil =
+// unchanged). A device with an employee name gets a generated name, so name
+// only applies to devices without one.
+func (s *Store) UpdateDevice(ctx context.Context, orgID, id string, name, employee *string, groupID *string, clearGroup bool, tags []string) (Device, error) {
 	err := expectOne(s.Pool.Exec(ctx, `
-		UPDATE devices SET name = COALESCE($3, name),
+		UPDATE devices SET name = COALESCE($3, name), employee_name = COALESCE($7, employee_name),
 		       group_id = CASE WHEN $5 THEN NULL ELSE COALESCE($4, group_id) END,
 		       tags = COALESCE($6, tags)
-		WHERE org_id = $1 AND id = $2 AND retired_at IS NULL`, orgID, id, name, groupID, clearGroup, tags))
+		WHERE org_id = $1 AND id = $2 AND retired_at IS NULL`, orgID, id, name, groupID, clearGroup, tags, employee))
 	if err != nil {
 		return Device{}, err
 	}
+	if err := s.refreshDeviceNames(ctx, orgID, id); err != nil {
+		return Device{}, err
+	}
 	return s.GetDevice(ctx, orgID, id)
+}
+
+// refreshDeviceNames regenerates the names of devices with an employee name:
+// "<group name> | <employee name>", or the employee name alone without a
+// group. deviceID limits it to one device; "" does the whole org (after a
+// group is renamed or deleted).
+func (s *Store) refreshDeviceNames(ctx context.Context, orgID, deviceID string) error {
+	_, err := s.Pool.Exec(ctx, `
+		UPDATE devices d SET name = COALESCE((SELECT g.name || ' | ' FROM device_groups g WHERE g.id = d.group_id), '') || d.employee_name
+		WHERE d.org_id = $1 AND d.retired_at IS NULL AND d.employee_name <> '' AND ($2 = '' OR d.id::text = $2)`, orgID, deviceID)
+	return mapErr(err)
 }
 
 // AddDeviceTag adds a tag if not already present.

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
@@ -56,7 +57,7 @@ func (s *Server) exportDevices(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{
 		"name", "hostname", "status", "compliance", "os_family", "os_name", "os_version", "os_build", "arch",
-		"manufacturer", "model", "serial", "ip_address", "mac_address", "logged_in_user", "group", "tags",
+		"manufacturer", "model", "serial", "ip_address", "mac_address", "logged_in_user", "employee_name", "group", "tags",
 		"agent_version", "enrolled_at", "last_seen_at", "cpu_pct", "mem_pct", "disk_pct", "battery_pct",
 		"software_count", "gambling_apps", "games",
 	})
@@ -77,7 +78,7 @@ func (s *Server) exportDevices(w http.ResponseWriter, r *http.Request) {
 		_ = cw.Write([]string{
 			csvSafe(d.Name), csvSafe(d.Hostname), d.Status, d.ComplianceState, d.OSFamily, csvSafe(d.OSName),
 			csvSafe(d.OSVersion), csvSafe(d.OSBuild), d.Arch, csvSafe(d.Manufacturer), csvSafe(d.Model),
-			csvSafe(d.Serial), d.IPAddress, d.MACAddress, csvSafe(d.LoggedInUser), csvSafe(deref(d.GroupName)),
+			csvSafe(d.Serial), d.IPAddress, d.MACAddress, csvSafe(d.LoggedInUser), csvSafe(d.EmployeeName), csvSafe(deref(d.GroupName)),
 			csvSafe(strings.Join(d.Tags, "; ")), d.AgentVersion, d.EnrolledAt.UTC().Format(time.RFC3339), lastSeen,
 			pct(d.CPUPct), pct(d.MemPct), pct(d.DiskPct), pct(d.BatteryPct),
 			strconv.Itoa(len(software[d.ID])), csvSafe(strings.Join(gambling, "; ")), csvSafe(strings.Join(games, "; ")),
@@ -104,9 +105,10 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name    *string         `json:"name"`
-		GroupID json.RawMessage `json:"group_id"` // absent = unchanged, null = remove from group
-		Tags    []string        `json:"tags"`
+		Name     *string         `json:"name"`
+		Employee *string         `json:"employee_name"` // once set, the name is generated from group and employee
+		GroupID  json.RawMessage `json:"group_id"`      // absent = unchanged, null = remove from group
+		Tags     []string        `json:"tags"`
 	}
 	if err := decode(r, &req); err != nil {
 		fail(w, err)
@@ -117,6 +119,17 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) {
 		*req.Name = strings.TrimSpace(*req.Name)
 		if *req.Name == "" {
 			fail(w, badRequest("name cannot be empty"))
+			return
+		}
+	}
+	if req.Employee != nil {
+		*req.Employee = strings.TrimSpace(*req.Employee)
+		if *req.Employee == "" {
+			fail(w, badRequest("employee_name cannot be empty"))
+			return
+		}
+		if utf8.RuneCountInString(*req.Employee) > 128 {
+			fail(w, badRequest("employee_name is too long (128 characters at most)"))
 			return
 		}
 	}
@@ -142,13 +155,16 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	d, err := s.store.UpdateDevice(r.Context(), org, id, req.Name, groupID, clearGroup, req.Tags)
+	if before.EmployeeName != "" || req.Employee != nil {
+		req.Name = nil // generated from group and employee
+	}
+	d, err := s.store.UpdateDevice(r.Context(), org, id, req.Name, req.Employee, groupID, clearGroup, req.Tags)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	s.record(r, "device.update", "device", id, map[string]any{
-		"device_name": d.Name, "name": req.Name, "group_id": d.GroupID, "tags": req.Tags})
+		"device_name": d.Name, "name": req.Name, "employee_name": req.Employee, "group_id": d.GroupID, "tags": req.Tags})
 	if !equalPtr(before.GroupID, d.GroupID) {
 		s.core.PushPolicy(r.Context(), id)
 	}

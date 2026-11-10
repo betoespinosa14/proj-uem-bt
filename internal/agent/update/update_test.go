@@ -92,8 +92,9 @@ func TestCleanupRemovesLeftovers(t *testing.T) {
 	exe := filepath.Join(dir, "uem-agent")
 	os.WriteFile(newPath(exe), nil, 0o644)
 	os.WriteFile(oldPath(exe), nil, 0o644)
+	os.WriteFile(sibling(exe, "old-20261110153000"), nil, 0o644)
 	Cleanup(exe)
-	for _, f := range []string{newPath(exe), oldPath(exe)} {
+	for _, f := range []string{newPath(exe), oldPath(exe), sibling(exe, "old-20261110153000")} {
 		if _, err := os.Stat(f); !os.IsNotExist(err) {
 			t.Errorf("%s left behind", f)
 		}

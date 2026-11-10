@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -116,7 +117,10 @@ func swap(exe, staged string) error {
 		return os.Rename(staged, exe)
 	}
 	old := oldPath(exe)
-	os.Remove(old)
+	if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
+		// An earlier copy is still running (its restart hasn't happened): park this one elsewhere.
+		old = sibling(exe, "old-"+time.Now().Format("20060102150405"))
+	}
 	if err := os.Rename(exe, old); err != nil {
 		return err
 	}
@@ -132,4 +136,8 @@ func swap(exe, staged string) error {
 func Cleanup(exe string) {
 	os.Remove(newPath(exe))
 	os.Remove(oldPath(exe))
+	parked, _ := filepath.Glob(sibling(exe, "old-*"))
+	for _, f := range parked {
+		os.Remove(f)
+	}
 }

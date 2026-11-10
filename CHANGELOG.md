@@ -7,6 +7,17 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.8 (2026-11-10): Agent update fixes
+
+### Fixed
+- **The one-time agent update now restarts laptops that are on battery.** Windows scheduled tasks start only on
+  mains power by default, so a laptop on battery got the new agent file but kept running the old agent until it
+  was plugged in. The restart task is now allowed to run on battery.
+- **Retrying an agent update after a missed restart works.** If the new agent is already in place, the script
+  just restarts the service. On Windows, an older copy that is still running is moved aside under another name
+  instead of failing with "Cannot create a file when that file already exists". The agent removes these copies
+  when it starts.
+
 ## 2026.11.7 (2026-11-10): Update agents from the console
 
 ### Added

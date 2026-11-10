@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Area, AreaChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { UsageAppStat, UsageSummary } from "@/lib/api";
 import { formatHours } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -67,25 +67,37 @@ export function UsageDashboard({
             />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Top users</CardTitle>
-            <CardDescription>By active time: how long they were actually typing or using the mouse.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Ranked
-              rows={data.top_users.map((u) => ({
-                key: u.user,
-                label: u.user,
-                value: u.active_seconds,
-                note: device
-                  ? `${u.apps} ${u.apps === 1 ? "app" : "apps"}`
-                  : `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
-                hint: device ? undefined : `On ${u.device_names.join(", ")}`,
-              }))}
-            />
-          </CardContent>
-        </Card>
+        {device ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle>Active hours by weekday</CardTitle>
+              <CardDescription>Average active time on each day of the week, from the first report in this period.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WeekdayPattern daily={data.daily} days={days} />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle>Top users</CardTitle>
+              <CardDescription>By active time: how long they were actually typing or using the mouse.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Ranked
+                rows={data.top_users.map((u) => ({
+                  key: u.user,
+                  label: u.user,
+                  value: u.active_seconds,
+                  note: device
+                    ? `${u.apps} ${u.apps === 1 ? "app" : "apps"}`
+                    : `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
+                  hint: device ? undefined : `On ${u.device_names.join(", ")}`,
+                }))}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
@@ -334,6 +346,77 @@ export function Trend({
           {device
             ? "Shaded: the device reported no usage (agent not installed yet, device off, or tracking off)."
             : "Shaded: no device reported usage (agent not installed yet, devices off, or tracking off)."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/**
+ * Average active hours per weekday, Mon to Sun. Each weekday's total is divided
+ * by how many times it occurred from the first report in the period to today:
+ * days before the first report (agent not installed yet) are left out, and days
+ * after it with no report count as 0 (the device was off).
+ */
+function WeekdayPattern({ daily, days }: { daily: UsageSummary["daily"]; days: number }) {
+  const byDay = new Map(daily.map((d) => [d.day, d.active_seconds]));
+  const today = new Date();
+  const totals = Array(7).fill(0) as number[];
+  const counts = Array(7).fill(0) as number[];
+  let started = false;
+  let span = 0;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const secs = byDay.get(localDay(d));
+    if (!started && secs === undefined) continue;
+    started = true;
+    span++;
+    const w = (d.getDay() + 6) % 7; // Monday = 0
+    totals[w] = (totals[w] ?? 0) + (secs ?? 0);
+    counts[w] = (counts[w] ?? 0) + 1;
+  }
+  if (span < 7) return <p className="py-6 text-center text-sm text-muted-foreground">Not enough days yet. Check back after a week of use.</p>;
+  const bars = WEEKDAYS.map((name, i) => {
+    const n = counts[i] ?? 0;
+    return { name, short: name.slice(0, 3), hours: n ? (totals[i] ?? 0) / n / 3600 : 0, count: n };
+  });
+  const busiest = bars.reduce((a, b) => (b.hours > a.hours ? b : a));
+  return (
+    <div>
+      <div className="h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={bars} margin={{ left: -12, right: 8, top: 8 }}>
+            <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
+            <XAxis dataKey="short" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
+            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}h`} allowDecimals width={44} />
+            <Tooltip
+              cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.5 }}
+              content={({ active, payload }) => {
+                const b = active ? (payload?.[0]?.payload as (typeof bars)[number] | undefined) : undefined;
+                if (!b) return null;
+                return (
+                  <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lift">
+                    <p className="mb-1 font-medium">{b.name}</p>
+                    <p>
+                      <span className="font-semibold tabular">{formatHours(b.hours * 3600)}</span> <span className="text-muted-foreground">average</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      over {b.count} {b.name}
+                      {b.count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                );
+              }}
+            />
+            <Bar dataKey="hours" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {busiest.hours > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Busiest: <span className="font-medium text-foreground">{busiest.name}</span> · {formatHours(busiest.hours * 3600)} average
         </p>
       )}
     </div>

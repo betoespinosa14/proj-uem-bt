@@ -20,6 +20,9 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **App usage summary on a device's Overview:** active hours per day and the top 5 apps for the last 30
   days, with a link to the Usage tab. It's hidden when tracking is off, the device has no recorded use, or it
   runs Linux.
+- **A device's Usage dashboard shows active hours by weekday** in place of Top users, which mostly repeated the
+  employee's name: the average active time for each day of the week, from the device's first report in the
+  period. The App usage page keeps Top users.
 
 ## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 

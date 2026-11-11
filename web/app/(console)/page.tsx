@@ -24,7 +24,7 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
-import { api, qk, type Command, type Dashboard } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type Dashboard } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
 import { cn, formatDuration, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -121,8 +121,9 @@ const tileTone: Record<Tone, { tile: string; value: string; icon: string }> = {
   default: { tile: "", value: "text-foreground", icon: "text-muted-foreground" },
   brand: { tile: "", value: "text-primary", icon: "text-primary" },
   success: { tile: "", value: "text-success dark:text-neon", icon: "text-success dark:text-neon" },
-  warning: { tile: "border-warning/50 bg-warning/5", value: "text-warning", icon: "text-warning" },
-  danger: { tile: "border-destructive/50 bg-destructive/5", value: "text-destructive", icon: "text-destructive" },
+  // Problem tiles share one treatment: a clear border and a soft tint of their colour.
+  warning: { tile: "border-warning/60 bg-warning/10", value: "text-warning", icon: "text-warning" },
+  danger: { tile: "border-destructive/60 bg-destructive/10", value: "text-destructive", icon: "text-destructive" },
 };
 
 function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) => string }) {
@@ -187,6 +188,42 @@ function TilesSkeleton() {
 // Needs attention: failing rules and open alerts in one place
 // ---------------------------------------------------------------------------
 
+type AlertGroup = {
+  key: string;
+  name: string;
+  severity?: Dashboard["failing_rules"][number]["severity"];
+  devices?: number;
+  alerts: Dashboard["recent_alerts"];
+};
+
+/** Open alerts grouped under their compliance rule (in failing-rule order); the rest under "Other alerts". */
+function alertGroups(data: Dashboard): AlertGroup[] {
+  const groups = new Map<string, AlertGroup>();
+  for (const r of data.failing_rules) {
+    groups.set(r.rule_id, { key: r.rule_id, name: r.name, severity: r.severity, devices: r.devices, alerts: [] });
+  }
+  for (const a of data.recent_alerts) {
+    const key = a.rule_id ?? "other";
+    let g = groups.get(key);
+    if (!g) {
+      g = key === "other" ? { key, name: "Other alerts", alerts: [] } : { key, name: a.title, severity: a.severity, alerts: [] };
+      groups.set(key, g);
+    }
+    g.alerts.push(a);
+  }
+  const list = [...groups.values()];
+  // "Other alerts" last.
+  return [...list.filter((g) => g.key !== "other"), ...list.filter((g) => g.key === "other")];
+}
+
+/** The quoted names in a finding such as `Games: found "Candy Crush Saga", "Riot Vanguard"`, without repeats. */
+function findings(message: string): { kind: string; items: string[] } | null {
+  const items = [...new Set([...message.matchAll(/"([^"]+)"/g)].map((m) => m[1]!))];
+  if (!items.length) return null;
+  const kind = message.split(":")[0]!.trim();
+  return { kind: kind.length < 30 && kind !== message ? kind : "", items };
+}
+
 function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
   const qc = useQueryClient();
   const can = useCan();
@@ -217,8 +254,15 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
         <CardTitle>Needs attention</CardTitle>
         <div className="flex items-center gap-2">
           {can("compliance.write") && (
-            <Button variant="outline" size="sm" loading={recheck.isPending} onClick={() => recheck.mutate()}>
-              <RefreshCw /> Re-check compliance
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              loading={recheck.isPending}
+              onClick={() => recheck.mutate()}
+              title="Run every compliance rule on every device now"
+            >
+              <RefreshCw /> Re-check
             </Button>
           )}
           <Link href="/alerts" className="text-xs font-semibold text-primary hover:underline">
@@ -233,57 +277,70 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
           </div>
         ) : (
           <>
-            {data.failing_rules.length > 0 && (
-              <div className="flex flex-wrap gap-2 px-5 pb-3">
-                {data.failing_rules.map((r) => (
-                  <Link
-                    key={r.rule_id}
-                    href={inGroup("/devices?compliance=non_compliant")}
-                    className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 py-1 pl-1 pr-3 text-xs transition-colors hover:bg-muted"
-                  >
-                    <SeverityBadge severity={r.severity} />
-                    <span className="font-medium">{r.name}</span>
-                    <span className="text-muted-foreground tabular">
-                      {r.devices} of {data.devices_total}
-                    </span>
-                  </Link>
+            {data.recent_alerts.length || data.failing_rules.length ? (
+              <div className="divide-y divide-border/60 border-t border-border/60">
+                {alertGroups(data).map((g) => (
+                  <section key={g.key}>
+                    <Link
+                      href={inGroup("/devices?compliance=non_compliant")}
+                      className="flex flex-wrap items-center gap-2 bg-muted/40 px-5 py-2 text-sm transition-colors hover:bg-muted/70"
+                    >
+                      {g.severity && <SeverityBadge severity={g.severity} />}
+                      <span className="font-semibold">{g.name}</span>
+                      {g.devices != null && (
+                        <span className="text-xs text-muted-foreground tabular">
+                          {g.devices} of {data.devices_total} device{data.devices_total === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </Link>
+                    <ul className="divide-y divide-border/40">
+                      {g.alerts.map((a) => {
+                        const found = findings(a.message);
+                        return (
+                          <li key={a.id} className="flex items-start gap-3 px-5 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm">
+                                {a.device_id ? (
+                                  <Link href={`/devices/${a.device_id}`} className="font-semibold hover:underline">
+                                    {a.device_name ?? "Device"}
+                                  </Link>
+                                ) : (
+                                  <span className="font-semibold">{a.title}</span>
+                                )}
+                                <span className="text-xs text-muted-foreground"> · {relativeTime(a.created_at)}</span>
+                              </p>
+                              {found ? (
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  {found.kind && <span className="text-xs text-muted-foreground">{found.kind}:</span>}
+                                  {found.items.map((name) => (
+                                    <span key={name} className="rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mt-0.5 break-words text-sm text-muted-foreground">{a.message}</p>
+                              )}
+                            </div>
+                            {can("alerts.write") && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0"
+                                loading={resolve.isPending && resolve.variables === a.id}
+                                onClick={() => resolve.mutate(a.id)}
+                                title="Mark as handled. It opens again if the device still fails the rule at the next check."
+                              >
+                                Resolve
+                              </Button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
                 ))}
               </div>
-            )}
-            {data.recent_alerts.length ? (
-              <ul className="divide-y divide-border/60 border-t border-border/60">
-                {data.recent_alerts.map((a) => (
-                  <li key={a.id} className="flex items-start gap-3 px-5 py-3">
-                    <SeverityBadge severity={a.severity} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm">
-                        {a.device_id ? (
-                          <Link href={`/devices/${a.device_id}`} className="font-semibold hover:underline">
-                            {a.device_name ?? "Device"}
-                          </Link>
-                        ) : (
-                          <span className="font-semibold">Organization</span>
-                        )}
-                        <span className="text-muted-foreground"> · {a.title}</span>
-                      </p>
-                      <p className="mt-0.5 break-words text-sm text-muted-foreground">{a.message}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Opened {relativeTime(a.created_at)}</p>
-                    </div>
-                    {can("alerts.write") && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0"
-                        loading={resolve.isPending && resolve.variables === a.id}
-                        onClick={() => resolve.mutate(a.id)}
-                        title="Mark as handled. It opens again if the device still fails the rule at the next check."
-                      >
-                        Resolve
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
             ) : (
               <EmptyState icon={ShieldCheck} title="Nothing needs attention" description="No open alerts and no failing compliance checks." className="py-8" />
             )}
@@ -366,7 +423,11 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
   if (!data) return <Skeleton className="mt-5 h-28 rounded-xl" />;
   if (data.devices_total === 0) return null;
   const total = data.devices_total;
-  const current = data.latest_agent ? (data.agent_versions.find((v) => v.version === data.latest_agent)?.count ?? 0) : null;
+  // A staged in-between build (e.g. 2026.11.14-8-gce97569) counts as its release, like Update agents.
+  const current = data.latest_agent
+    ? data.agent_versions.filter((v) => v.version && !agentOutdated(v.version, data.latest_agent)).reduce((n, v) => n + v.count, 0)
+    : null;
+  const release = data.latest_agent.split("-")[0];
   const meters: { label: string; good: number | null; icon: LucideIcon; href: string; note?: string }[] = [
     { label: "Disk encryption", good: data.posture.encrypted, icon: Lock, href: inGroup("/devices?posture=unencrypted") },
     { label: "Firewall on", good: data.posture.firewall, icon: BrickWall, href: inGroup("/devices?posture=firewall_off") },
@@ -383,7 +444,7 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
       good: current,
       icon: ArrowUpCircle,
       href: inGroup("/devices"),
-      note: data.latest_agent ? `Version ${data.latest_agent}` : "No agent build published",
+      note: data.latest_agent ? `Version ${release}` : "No agent build published",
     },
   ];
   return (
@@ -415,13 +476,19 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
                   {m.good == null ? "—" : Math.max(0, m.good)}
                   <span className="text-sm font-normal text-muted-foreground"> / {total}</span>
                 </span>
-                <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                {/* Always one line, so every card's bar sits at the same height. */}
+                <span className="min-h-4 text-xs leading-4 text-muted-foreground">{m.note ?? " "}</span>
+                <span
+                  className={cn(
+                    "mt-auto flex h-1.5 overflow-hidden rounded-full",
+                    ok || m.good == null ? "bg-muted" : ratio >= 0.5 ? "bg-warning/20" : "bg-destructive/20",
+                  )}
+                >
                   <span
                     className={cn("h-full", ok ? "bg-success dark:bg-neon" : ratio >= 0.5 ? "bg-warning" : "bg-destructive")}
                     style={{ width: `${ratio * 100}%` }}
                   />
                 </span>
-                {m.note && <span className="text-xs text-muted-foreground">{m.note}</span>}
               </Link>
             );
           })}
@@ -451,7 +518,7 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
         ) : !data.by_os.length ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>
         ) : (
-          <div className="flex flex-col items-center gap-5 sm:flex-row">
+          <div className="flex flex-col items-center gap-5 2xl:flex-row">
             <div className="relative h-44 w-44 shrink-0" role="img" aria-label={data.by_os.map((o) => `${osLabel(o.os_family)} ${o.count}`).join(", ")}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -506,8 +573,10 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
                     >
                       <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: osColor(o.os_family) }} />
                       <OsIcon os={o.os_family} />
-                      <span className="min-w-0 flex-1 truncate font-medium">{osLabel(o.os_family)}</span>
-                      {offline > 0 && <span className="text-xs font-medium text-warning">{offline} offline</span>}
+                      <span className="min-w-0 flex-1 font-medium leading-tight">
+                        {osLabel(o.os_family)}
+                        {offline > 0 && <span className="block text-xs font-medium text-warning">{offline} offline</span>}
+                      </span>
                       <span className="w-8 text-right font-semibold tabular">{o.count}</span>
                       <span className="w-10 text-right text-xs text-muted-foreground tabular">{pct(o.count)}%</span>
                     </Link>

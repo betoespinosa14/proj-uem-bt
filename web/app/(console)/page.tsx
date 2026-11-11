@@ -35,7 +35,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { commandLabel } from "@/components/commands";
 import { CommandStatusBadge, DeviceSearch, EmptyState, ErrorState, OsIcon, PageHeader, SeverityBadge } from "@/components/common";
 import { toast } from "@/components/toast";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 
 function greeting(d = new Date()) {
   const h = d.getHours();
@@ -536,8 +536,12 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
 const osColor = (os: string) => `var(--os-${["windows", "macos", "linux"].includes(os) ? os : "other"})`;
 
 function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
+  // The slice or legend row under the cursor (or keyboard focus); its details fill the middle of the ring.
+  const [hovered, setHovered] = useState<string | null>(null);
   const total = data?.devices_total ?? 0;
   const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
+  const active = data?.by_os.find((o) => o.os_family === hovered);
+  const activeOffline = active ? active.count - active.online : 0;
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -549,48 +553,69 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
         ) : !data.by_os.length ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>
         ) : (
-          <div className="flex flex-col items-center gap-5 2xl:flex-row">
-            <div className="relative h-44 w-44 shrink-0" role="img" aria-label={data.by_os.map((o) => `${osLabel(o.os_family)} ${o.count}`).join(", ")}>
+          <div className="flex flex-col items-center gap-6 2xl:flex-row">
+            <div className="relative h-60 w-60 shrink-0" role="img" aria-label={data.by_os.map((o) => `${osLabel(o.os_family)} ${o.count}`).join(", ")}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={data.by_os}
                     dataKey="count"
                     nameKey="os_family"
-                    innerRadius="58%"
-                    outerRadius="100%"
+                    innerRadius="60%"
+                    outerRadius="94%"
                     paddingAngle={data.by_os.length > 1 ? 2 : 0}
                     stroke="hsl(var(--card))"
                     strokeWidth={2}
                     startAngle={90}
                     endAngle={-270}
                     isAnimationActive={false}
+                    onMouseEnter={(_, i) => setHovered(data.by_os[i]?.os_family ?? null)}
+                    onMouseLeave={() => setHovered(null)}
                   >
                     {data.by_os.map((o) => (
-                      <Cell key={o.os_family} fill={osColor(o.os_family)} />
+                      <Cell
+                        key={o.os_family}
+                        fill={osColor(o.os_family)}
+                        fillOpacity={hovered && hovered !== o.os_family ? 0.35 : 1}
+                        className="cursor-pointer transition-[fill-opacity] duration-150"
+                      />
                     ))}
                   </Pie>
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      const o = active ? (payload?.[0]?.payload as Dashboard["by_os"][number] | undefined) : undefined;
-                      if (!o) return null;
-                      const offline = o.count - o.online;
-                      return (
-                        <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lift">
-                          <p className="font-medium">{osLabel(o.os_family)}</p>
-                          <p className="tabular">
-                            {o.count} device{o.count === 1 ? "" : "s"} ({pct(o.count)}%)
-                            {offline > 0 && <span className="text-warning"> · {offline} offline</span>}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
+                  {/* The hovered slice again, slightly larger, so it stands out from the ring. */}
+                  {hovered && (
+                    <Pie
+                      data={data.by_os}
+                      dataKey="count"
+                      innerRadius="58%"
+                      outerRadius="100%"
+                      paddingAngle={data.by_os.length > 1 ? 2 : 0}
+                      stroke="none"
+                      startAngle={90}
+                      endAngle={-270}
+                      isAnimationActive={false}
+                      pointerEvents="none"
+                    >
+                      {data.by_os.map((o) => (
+                        <Cell key={o.os_family} fill={o.os_family === hovered ? osColor(o.os_family) : "transparent"} />
+                      ))}
+                    </Pie>
+                  )}
                 </PieChart>
               </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-semibold tabular">{total}</span>
-                <span className="text-xs text-muted-foreground">devices</span>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center" aria-live="polite">
+                {active ? (
+                  <>
+                    <span className="text-sm font-medium">{osLabel(active.os_family)}</span>
+                    <span className="text-4xl font-semibold leading-tight tabular">{active.count}</span>
+                    <span className="text-xs text-muted-foreground tabular">{pct(active.count)}% of devices</span>
+                    {activeOffline > 0 && <span className="text-xs font-medium text-warning">{activeOffline} offline</span>}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-4xl font-semibold leading-tight tabular">{total}</span>
+                    <span className="text-sm text-muted-foreground">devices</span>
+                  </>
+                )}
               </div>
             </div>
             <ul className="w-full min-w-0 flex-1 space-y-1">
@@ -600,9 +625,16 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
                   <li key={o.os_family}>
                     <Link
                       href={inGroup(`/devices?os=${encodeURIComponent(o.os_family)}`)}
-                      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/60"
+                      onMouseEnter={() => setHovered(o.os_family)}
+                      onMouseLeave={() => setHovered(null)}
+                      onFocus={() => setHovered(o.os_family)}
+                      onBlur={() => setHovered(null)}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                        hovered === o.os_family && "bg-muted/60",
+                      )}
                     >
-                      <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: osColor(o.os_family) }} />
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: osColor(o.os_family) }} />
                       <OsIcon os={o.os_family} />
                       <span className="min-w-0 flex-1 font-medium leading-tight">
                         {osLabel(o.os_family)}

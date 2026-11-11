@@ -270,15 +270,43 @@ type FailingRule struct {
 }
 
 type Dashboard struct {
-	DevicesTotal   int           `json:"devices_total"`
-	Online         int           `json:"online"`
-	Offline        int           `json:"offline"`
-	Compliant      int           `json:"compliant"`
-	NonCompliant   int           `json:"non_compliant"`
-	Unknown        int           `json:"unknown"`
-	OpenAlerts     int           `json:"open_alerts"`
-	ByOS           []OSCount     `json:"by_os"`
-	FailingRules   []FailingRule `json:"failing_rules"`
-	RecentAlerts   []Alert       `json:"recent_alerts"`
-	RecentCommands []Command     `json:"recent_commands"`
+	DevicesTotal   int            `json:"devices_total"`
+	Online         int            `json:"online"`
+	Offline        int            `json:"offline"`
+	Compliant      int            `json:"compliant"`
+	NonCompliant   int            `json:"non_compliant"`
+	Unknown        int            `json:"unknown"`
+	OpenAlerts     int            `json:"open_alerts"`
+	ByOS           []OSCount      `json:"by_os"`
+	FailingRules   []FailingRule  `json:"failing_rules"`
+	RecentAlerts   []Alert        `json:"recent_alerts"` // open alerts, most severe first
+	RecentCommands []Command      `json:"recent_commands"`
+	Health         []HealthIssue  `json:"health"`
+	Posture        Posture        `json:"posture"`
+	AgentVersions  []VersionCount `json:"agent_versions"`
+	LatestAgent    string         `json:"latest_agent"` // set by the API from the published agent builds
+}
+
+// HealthIssue is one device needing attention on the Device health card.
+// Kind is disk, cpu or memory (Value in percent) or offline (Value in seconds).
+type HealthIssue struct {
+	DeviceID   string     `json:"device_id"`
+	Name       string     `json:"name"`
+	Kind       string     `json:"kind"`
+	Value      float64    `json:"value"`
+	LastSeenAt *time.Time `json:"last_seen_at"`
+}
+
+// Posture counts devices by security setting; Reported is how many have sent an inventory.
+type Posture struct {
+	Reported       int `json:"reported"`
+	Encrypted      int `json:"encrypted"`
+	Firewall       int `json:"firewall"`
+	Antivirus      int `json:"antivirus"`
+	UpdatesPending int `json:"updates_pending"`
+}
+
+type VersionCount struct {
+	Version string `json:"version"`
+	Count   int    `json:"count"`
 }

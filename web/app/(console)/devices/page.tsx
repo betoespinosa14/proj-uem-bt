@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus } from "lucide-react";
+import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide-react";
 import { agentOutdated, api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
@@ -36,6 +36,13 @@ export default function DevicesPage() {
   );
 }
 
+const POSTURE_LABELS: Record<string, string> = {
+  unencrypted: "Disk not encrypted",
+  firewall_off: "Firewall off",
+  no_antivirus: "No antivirus",
+  updates_pending: "OS updates pending",
+};
+
 function DevicesView() {
   const router = useRouter();
   const params = useSearchParams();
@@ -46,7 +53,9 @@ function DevicesView() {
   useEffect(() => {
     if (urlQ !== null) setQ(urlQ);
   }, [urlQ]);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(params.get("status") ?? "");
+  // Set by the Dashboard's Security posture links, e.g. ?posture=unencrypted.
+  const [posture, setPosture] = useState(params.get("posture") ?? "");
   const [os, setOs] = useState(params.get("os") ?? "");
   const [compliance, setCompliance] = useState(params.get("compliance") ?? "");
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
@@ -55,7 +64,7 @@ function DevicesView() {
   // Devices for "Update agents (N)"; null means the action applies to the selection.
   const [targets, setTargets] = useState<string[] | null>(null);
 
-  const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId };
+  const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId, posture };
   const devices = useQuery({ queryKey: qk.devices(filters), queryFn: () => api.devices.list(filters), placeholderData: (p) => p });
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
   const items = useMemo(() => devices.data?.items ?? [], [devices.data]);
@@ -80,7 +89,7 @@ function DevicesView() {
       else next.add(id);
       return next;
     });
-  const filtered = !!(q || status || os || compliance || groupId);
+  const filtered = !!(q || status || os || compliance || groupId || posture);
 
   return (
     <>
@@ -161,6 +170,16 @@ function DevicesView() {
           placeholder="Any group"
           options={(groups.data?.items ?? []).map((g) => ({ value: g.id, label: g.name }))}
         />
+        {posture && (
+          <button
+            type="button"
+            onClick={() => setPosture("")}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-nav-accent/40 bg-nav-accent/15 px-3 text-sm font-medium text-nav-accent"
+            title="Clear this filter"
+          >
+            {POSTURE_LABELS[posture] ?? posture} <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && can("commands.run") && (

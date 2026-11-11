@@ -99,7 +99,8 @@ function applyCommand(qc: QueryClient, c: Command) {
   qc.setQueryData<Items<Command>>(qk.deviceCommands(c.device_id), (old) =>
     old ? { ...old, items: upsertCommand(old.items, c) } : old,
   );
-  qc.setQueryData<Dashboard>(qk.dashboard, (old) => {
+  // Every department view of the Dashboard (keys start with qk.dashboard).
+  qc.setQueriesData<Dashboard>({ queryKey: qk.dashboard }, (old) => {
     if (!old) return old;
     const idx = old.recent_commands.findIndex((x) => x.id === c.id);
     const recent =

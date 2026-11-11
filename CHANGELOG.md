@@ -10,6 +10,14 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Dashboard redesign.** Headline tiles that turn amber or red when there's a problem; a **Department** filter
+  that narrows the whole page; **Needs attention** combines failing compliance rules and open alerts, shows each
+  finding in full (no more "…") and lets you **Resolve** an alert or **Re-check compliance** from the card;
+  **Device health** lists disks 85% full or more, CPU or memory at 90% or more and devices offline for over a day;
+  **Security posture** shows how many devices have disk encryption, the firewall, antivirus, an up-to-date OS and
+  the latest agent, each linking to the devices missing it; repeated commands (such as an agent update on 8 devices)
+  are grouped into one expandable line with an All / Failed / Pending filter. The Devices list accepts the new
+  `status` and `posture` links.
 - **Two-step sign-in for the console (optional per user).** Under your name → **Account security**, scan a QR code
   with an authenticator app; from then on sign-in asks for the 6-digit code after the password, with 10 one-time
   recovery codes for a lost phone. "Remember this browser for 30 days" skips the code on a trusted browser. Owners and

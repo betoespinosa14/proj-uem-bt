@@ -182,7 +182,17 @@ type DeviceFilter struct {
 	OSFamily   string
 	Compliance string
 	GroupID    string
+	Posture    string // a gap to show: see postureFilters
 	IDs        []string
+}
+
+// postureFilters list devices missing a security setting or needing attention,
+// as linked from the Dashboard. Devices that haven't reported count as missing.
+var postureFilters = map[string]string{
+	"unencrypted":     `COALESCE(i.data->'security'->>'disk_encrypted', '') <> 'true'`,
+	"firewall_off":    `COALESCE(i.data->'security'->>'firewall_enabled', '') <> 'true'`,
+	"no_antivirus":    `COALESCE(i.data->'security'->>'antivirus', '') = ''`,
+	"updates_pending": `(i.data->'security'->>'pending_updates')::int > 0`,
 }
 
 func (s *Store) ListDevices(ctx context.Context, orgID string, f DeviceFilter) ([]Device, error) {
@@ -208,6 +218,10 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, f DeviceFilter) (
 	}
 	if f.GroupID != "" {
 		add("d.group_id::text = $%d", f.GroupID)
+	}
+	if cond, ok := postureFilters[f.Posture]; ok {
+		where = append(where, `EXISTS (SELECT 1 FROM devices x LEFT JOIN device_inventory i ON i.device_id = x.id
+			WHERE x.id = d.id AND `+cond+`)`)
 	}
 	if f.IDs != nil {
 		add("d.id::text = ANY($%d)", f.IDs)
@@ -496,8 +510,18 @@ func (s *Store) BlockedAppsForDevice(ctx context.Context, id string) ([]string, 
 	return nonNil(apps), mapErr(err)
 }
 
-func (s *Store) Dashboard(ctx context.Context, orgID string) (Dashboard, error) {
+// Dashboard thresholds for the Device health card.
+const (
+	HealthDiskPct      = 85.0           // disk this full or more
+	HealthLoadPct      = 90.0           // CPU or memory this busy or more, right now
+	HealthOfflineAfter = 24 * time.Hour // offline for longer than this
+)
+
+// Dashboard summarizes the fleet, or one department (group) when groupID is set.
+func (s *Store) Dashboard(ctx context.Context, orgID, groupID string) (Dashboard, error) {
 	var d Dashboard
+	// $2 = group filter ('' = all departments); every query below applies it to devices.
+	const inGroup = `($2 = '' OR dv.group_id::text = $2)`
 	err := s.Pool.QueryRow(ctx, `
 		SELECT count(*),
 		       count(*) FILTER (WHERE status = 'online'),
@@ -505,15 +529,16 @@ func (s *Store) Dashboard(ctx context.Context, orgID string) (Dashboard, error) 
 		       count(*) FILTER (WHERE compliance_state = 'compliant'),
 		       count(*) FILTER (WHERE compliance_state = 'non_compliant'),
 		       count(*) FILTER (WHERE compliance_state = 'unknown'),
-		       (SELECT count(*) FROM alerts WHERE org_id = $1 AND status = 'open')
-		FROM devices WHERE org_id = $1 AND retired_at IS NULL`, orgID).
+		       (SELECT count(*) FROM alerts a JOIN devices dv ON dv.id = a.device_id
+		        WHERE a.org_id = $1 AND a.status = 'open' AND dv.retired_at IS NULL AND `+inGroup+`)
+		FROM devices dv WHERE org_id = $1 AND retired_at IS NULL AND `+inGroup, orgID, groupID).
 		Scan(&d.DevicesTotal, &d.Online, &d.Offline, &d.Compliant, &d.NonCompliant, &d.Unknown, &d.OpenAlerts)
 	if err != nil {
-		return d, err
+		return d, mapErr(err)
 	}
 	rows, err := s.Pool.Query(ctx, `
 		SELECT COALESCE(NULLIF(os_family, ''), 'unknown'), count(*), count(*) FILTER (WHERE status = 'online')
-		FROM devices WHERE org_id = $1 AND retired_at IS NULL GROUP BY 1 ORDER BY 2 DESC`, orgID)
+		FROM devices dv WHERE org_id = $1 AND retired_at IS NULL AND `+inGroup+` GROUP BY 1 ORDER BY 2 DESC`, orgID, groupID)
 	if d.ByOS, err = collect(rows, err, func(r pgx.Rows) (OSCount, error) {
 		var c OSCount
 		return c, r.Scan(&c.OSFamily, &c.Count, &c.Online)
@@ -526,19 +551,78 @@ func (s *Store) Dashboard(ctx context.Context, orgID string) (Dashboard, error) 
 		FROM compliance_results cr
 		JOIN compliance_rules r ON r.id = cr.rule_id
 		JOIN devices dv ON dv.id = cr.device_id AND dv.retired_at IS NULL
-		WHERE cr.org_id = $1 AND NOT cr.passed AND r.enabled
+		WHERE cr.org_id = $1 AND NOT cr.passed AND r.enabled AND `+inGroup+`
 		GROUP BY r.id, r.name, r.severity
 		ORDER BY array_position(ARRAY['critical','high','medium','low'], r.severity), count(*) DESC, r.name
-		LIMIT 6`, orgID)
+		LIMIT 6`, orgID, groupID)
 	if d.FailingRules, err = collect(rows, err, func(r pgx.Rows) (FailingRule, error) {
 		var f FailingRule
 		return f, r.Scan(&f.RuleID, &f.Name, &f.Severity, &f.Devices)
 	}); err != nil {
 		return d, err
 	}
-	if d.RecentAlerts, err = s.ListAlerts(ctx, orgID, "open", 8); err != nil {
+	// Open alerts, most severe first. Alerts without a device show only on "All".
+	rows, err = s.Pool.Query(ctx, alertSelect+`
+		LEFT JOIN devices dv ON dv.id = a.device_id
+		WHERE a.org_id = $1 AND a.status = 'open'
+		  AND (a.device_id IS NULL AND $2 = '' OR dv.retired_at IS NULL AND `+inGroup+`)
+		ORDER BY array_position(ARRAY['critical','high','medium','low','info'], a.severity), a.created_at DESC
+		LIMIT 50`, orgID, groupID)
+	if d.RecentAlerts, err = collect(rows, err, func(r pgx.Rows) (Alert, error) { return scanAlert(r) }); err != nil {
 		return d, err
 	}
-	d.RecentCommands, err = s.listCommands(ctx, `c.org_id = $1`, 8, orgID)
+	cmds, err := s.listCommands(ctx, `c.org_id = $1 AND ($2 = '' OR d.group_id::text = $2)`, 40, orgID, groupID)
+	if err != nil {
+		return d, err
+	}
+	for i := range cmds { // the dashboard lists commands; output is on the command page
+		cmds[i].Stdout, cmds[i].Stderr = "", ""
+	}
+	d.RecentCommands = cmds
+
+	// Device health: full disks, busy devices, devices offline for a while.
+	rows, err = s.Pool.Query(ctx, `
+		SELECT id, name, kind, value, last_seen_at FROM (
+			SELECT dv.id, dv.name, 'disk' AS kind, dv.disk_pct AS value, dv.last_seen_at, 1 AS o
+			FROM devices dv WHERE dv.org_id = $1 AND dv.retired_at IS NULL AND `+inGroup+` AND dv.disk_pct >= $3
+			UNION ALL
+			SELECT dv.id, dv.name, 'cpu', dv.cpu_pct, dv.last_seen_at, 2
+			FROM devices dv WHERE dv.org_id = $1 AND dv.retired_at IS NULL AND `+inGroup+` AND dv.status = 'online' AND dv.cpu_pct >= $4
+			UNION ALL
+			SELECT dv.id, dv.name, 'memory', dv.mem_pct, dv.last_seen_at, 2
+			FROM devices dv WHERE dv.org_id = $1 AND dv.retired_at IS NULL AND `+inGroup+` AND dv.status = 'online' AND dv.mem_pct >= $4
+			UNION ALL
+			SELECT dv.id, dv.name, 'offline', EXTRACT(EPOCH FROM now() - dv.last_seen_at), dv.last_seen_at, 3
+			FROM devices dv WHERE dv.org_id = $1 AND dv.retired_at IS NULL AND `+inGroup+` AND dv.status = 'offline'
+			  AND dv.last_seen_at < now() - make_interval(secs => $5)
+		) h ORDER BY o, value DESC, name LIMIT 30`,
+		orgID, groupID, HealthDiskPct, HealthLoadPct, HealthOfflineAfter.Seconds())
+	if d.Health, err = collect(rows, err, func(r pgx.Rows) (HealthIssue, error) {
+		var h HealthIssue
+		return h, r.Scan(&h.DeviceID, &h.Name, &h.Kind, &h.Value, &h.LastSeenAt)
+	}); err != nil {
+		return d, err
+	}
+
+	// Security posture from each device's latest inventory.
+	err = s.Pool.QueryRow(ctx, `
+		SELECT count(i.device_id),
+		       count(*) FILTER (WHERE i.data->'security'->>'disk_encrypted' = 'true'),
+		       count(*) FILTER (WHERE i.data->'security'->>'firewall_enabled' = 'true'),
+		       count(*) FILTER (WHERE COALESCE(i.data->'security'->>'antivirus', '') <> ''),
+		       count(*) FILTER (WHERE (i.data->'security'->>'pending_updates')::int > 0)
+		FROM devices dv LEFT JOIN device_inventory i ON i.device_id = dv.id
+		WHERE dv.org_id = $1 AND dv.retired_at IS NULL AND `+inGroup, orgID, groupID).
+		Scan(&d.Posture.Reported, &d.Posture.Encrypted, &d.Posture.Firewall, &d.Posture.Antivirus, &d.Posture.UpdatesPending)
+	if err != nil {
+		return d, err
+	}
+	rows, err = s.Pool.Query(ctx, `
+		SELECT COALESCE(agent_version, ''), count(*) FROM devices dv
+		WHERE org_id = $1 AND retired_at IS NULL AND `+inGroup+` GROUP BY 1 ORDER BY 2 DESC`, orgID, groupID)
+	d.AgentVersions, err = collect(rows, err, func(r pgx.Rows) (VersionCount, error) {
+		var v VersionCount
+		return v, r.Scan(&v.Version, &v.Count)
+	})
 	return d, err
 }

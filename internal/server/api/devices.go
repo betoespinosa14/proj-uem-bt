@@ -13,15 +13,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/uem/uem/internal/agentdist"
 	"github.com/uem/uem/internal/server/compliance"
 	"github.com/uem/uem/internal/server/store"
 )
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.Dashboard(r.Context(), orgOf(r))
+	d, err := s.store.Dashboard(r.Context(), orgOf(r), r.URL.Query().Get("group_id"))
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	if m, err := agentdist.Load(s.cfg.AgentDistDir); err == nil {
+		d.LatestAgent = m.Version
 	}
 	writeJSON(w, http.StatusOK, d)
 }
@@ -30,7 +34,7 @@ func deviceFilter(r *http.Request) store.DeviceFilter {
 	q := r.URL.Query()
 	return store.DeviceFilter{
 		Query: strings.TrimSpace(q.Get("q")), Status: q.Get("status"), OSFamily: q.Get("os"),
-		Compliance: q.Get("compliance"), GroupID: q.Get("group_id"),
+		Compliance: q.Get("compliance"), GroupID: q.Get("group_id"), Posture: q.Get("posture"),
 	}
 }
 

@@ -444,8 +444,15 @@ export type Dashboard = {
   by_os: { os_family: string; count: number; online: number }[];
   /** Enabled compliance rules that devices currently fail, most severe first (at most 6). */
   failing_rules: { rule_id: string; name: string; severity: Severity; devices: number }[];
+  /** Open alerts, most severe first. */
   recent_alerts: Alert[];
   recent_commands: Command[];
+  /** Devices needing attention: disk/cpu/memory in percent, offline in seconds. */
+  health: { device_id: string; name: string; kind: "disk" | "cpu" | "memory" | "offline"; value: number; last_seen_at: string | null }[];
+  /** Devices with each setting on; reported = devices that sent an inventory. */
+  posture: { reported: number; encrypted: number; firewall: number; antivirus: number; updates_pending: number };
+  agent_versions: { version: string; count: number }[];
+  latest_agent: string;
 };
 
 export type AuditEntry = {
@@ -496,6 +503,8 @@ export type DeviceFilters = {
   os?: string;
   compliance?: string;
   group_id?: string;
+  /** Devices missing a security setting, as linked from the Dashboard. */
+  posture?: string;
 };
 
 export type Items<T> = { items: T[] };
@@ -634,7 +643,7 @@ export const api = {
       forgetBrowsers: () => del<Ok>("/api/auth/mfa/trusted-browsers"),
     },
   },
-  dashboard: () => get<Dashboard>("/api/dashboard"),
+  dashboard: (groupId = "") => get<Dashboard>("/api/dashboard", { group_id: groupId }),
   devices: {
     list: (f: DeviceFilters = {}) => get<Items<Device>>("/api/devices", f),
     get: (id: string) => get<DeviceDetail>(`/api/devices/${enc(id)}`),

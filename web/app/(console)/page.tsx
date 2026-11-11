@@ -1,237 +1,627 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { Bell, CheckCircle2, Monitor, ShieldCheck, Terminal, Wifi, WifiOff } from "lucide-react";
-import { api, qk, type Dashboard } from "@/lib/api";
-import { osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowUpCircle,
+  Bell,
+  BrickWall,
+  Bug,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Cpu,
+  Download,
+  HardDrive,
+  Lock,
+  MemoryStick,
+  Monitor,
+  RefreshCw,
+  ShieldCheck,
+  Terminal,
+  Wifi,
+  WifiOff,
+  type LucideIcon,
+} from "lucide-react";
+import { api, qk, type Command, type Dashboard } from "@/lib/api";
+import { useCan, useMe } from "@/lib/session";
+import { cn, formatDuration, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Segmented } from "@/components/ui/tabs";
 import { commandLabel } from "@/components/commands";
 import { CommandStatusBadge, DeviceSearch, EmptyState, ErrorState, OsIcon, PageHeader, SeverityBadge } from "@/components/common";
-import { useMe } from "@/lib/session";
+import { toast } from "@/components/toast";
 
 function greeting(d = new Date()) {
   const h = d.getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
+type Tone = "default" | "brand" | "success" | "warning" | "danger";
+
 export default function DashboardPage() {
-  const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.dashboard, queryFn: api.dashboard });
   const { data: me } = useMe();
+  const [groupId, setGroupId] = useState("");
+  const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: [...qk.dashboard, groupId || "all"],
+    queryFn: () => api.dashboard(groupId),
+    placeholderData: (p) => p,
+  });
+  const firstName = (me?.user.name || "").split(" ")[0];
+  // Links into other pages keep the chosen department.
+  const inGroup = (path: string) => (groupId ? `${path}${path.includes("?") ? "&" : "?"}group=${encodeURIComponent(groupId)}` : path);
 
   if (error) return <ErrorState error={error} onRetry={refetch} />;
-
-  const compliancePct =
-    data && data.devices_total > 0 ? Math.round((data.compliant / data.devices_total) * 100) : null;
-  const firstName = (me?.user.name || "").split(" ")[0];
 
   return (
     <>
       <PageHeader
         title={`${greeting()}${firstName ? `, ${firstName}` : ""}`}
         description="Fleet health at a glance. Updates live as devices check in."
-        statsAside={<DeviceSearch />}
-        stats={
-          data
-            ? [
-                { label: "Devices", value: data.devices_total, icon: Monitor, tone: "brand" },
-                { label: "Online", value: data.online, icon: Wifi, tone: "success" },
-                { label: "Offline", value: data.offline, icon: WifiOff, tone: data.offline > 0 ? "warning" : "default" },
-                {
-                  label: `Compliant · ${data.non_compliant} non-compliant`,
-                  value: compliancePct == null ? "—" : `${compliancePct}%`,
-                  icon: CheckCircle2,
-                  tone: data.non_compliant > 0 ? "danger" : "success",
-                },
-                { label: "Open alerts", value: data.open_alerts, icon: Bell, tone: data.open_alerts > 0 ? "danger" : "default" },
-              ]
-            : undefined
+        actions={
+          <>
+            <Select
+              aria-label="Department"
+              className="w-44"
+              value={groupId}
+              onValueChange={setGroupId}
+              placeholder="All departments"
+              options={(groups.data?.items ?? []).map((g) => ({ value: g.id, label: g.name }))}
+            />
+            <DeviceSearch />
+          </>
         }
       />
-      {isLoading && (
-        <div className="-mt-2 mb-7 flex flex-wrap gap-8">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-10 w-28" />
-          ))}
-        </div>
-      )}
+
+      {data ? <StatTiles data={data} inGroup={inGroup} /> : isLoading && <TilesSkeleton />}
 
       {data && data.devices_total === 0 && (
-        <Card className="mb-6">
+        <Card className="mb-5">
           <EmptyState
             icon={Monitor}
-            title="No devices enrolled yet"
-            description="Create an enrollment token and run the one-line installer on a Windows, macOS or Linux device."
+            title={groupId ? "No devices in this department" : "No devices enrolled yet"}
+            description={groupId ? "Assign devices to it from the Devices page." : "Create an enrollment token and run the one-line installer on a Windows, macOS or Linux device."}
             action={
-              <Link href="/enrollment" className="text-sm font-medium text-primary hover:underline">
-                Go to Enrollment →
-              </Link>
+              !groupId && (
+                <Link href="/enrollment" className="text-sm font-medium text-primary hover:underline">
+                  Go to Enrollment →
+                </Link>
+              )
             }
           />
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle>Devices by operating system</CardTitle>
-            {data && (
-              <span className="flex items-center gap-3 text-xs text-muted-foreground">
-                <Legend className="bg-success dark:bg-neon" label="Online" />
-                <Legend className="bg-warning" label="Offline" />
-              </span>
-            )}
-          </CardHeader>
-          <CardContent>{data ? <OsBreakdown data={data} /> : <ListSkeleton rows={3} />}</CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle>Failing compliance checks</CardTitle>
-            <Link href="/compliance" className="text-xs font-semibold text-primary hover:underline">
-              View compliance →
-            </Link>
-          </CardHeader>
-          <CardContent className="px-0 pb-3">
-            {!data ? (
-              <div className="px-5">
-                <ListSkeleton rows={3} />
-              </div>
-            ) : data.failing_rules.length ? (
-              <ul className="divide-y divide-border/60">
-                {data.failing_rules.map((r) => (
-                  <li key={r.rule_id}>
-                    <Link
-                      href="/devices?compliance=non_compliant"
-                      className="flex items-center gap-3 px-5 py-2 text-sm transition-colors hover:bg-muted/60"
-                    >
-                      <SeverityBadge severity={r.severity} />
-                      <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground tabular">
-                        {r.devices} of {data.devices_total} {data.devices_total === 1 ? "device" : "devices"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={ShieldCheck} title="All checks passing" description="No device fails an enabled compliance rule." className="py-8" />
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
+        <NeedsAttention data={data} className="xl:col-span-3" inGroup={inGroup} />
+        <DeviceHealth data={data} className="xl:col-span-2" />
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle>Open alerts</CardTitle>
-            <Link href="/alerts" className="text-xs font-semibold text-primary hover:underline">
-              View all
-            </Link>
-          </CardHeader>
-          <CardContent className="px-0 pb-2">
-            {data?.recent_alerts.length ? (
-              <ul className="divide-y divide-border/60">
-                {data.recent_alerts.map((a) => (
-                  <li key={a.id} className="flex items-start gap-3 px-5 py-2 transition-colors hover:bg-muted/60">
-                    <SeverityBadge severity={a.severity} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {a.device_id ? (
-                          <Link href={`/devices/${a.device_id}`} className="hover:underline">
-                            {a.title}
-                          </Link>
-                        ) : (
-                          a.title
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">{a.message}</p>
-                    </div>
-                    <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(a.created_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={Bell} title="No open alerts" className="py-8" />
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent commands</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0 pb-2">
-            {data?.recent_commands.length ? (
-              <ul className="divide-y divide-border/60">
-                {data.recent_commands.slice(0, 8).map((c) => (
-                  <li key={c.id} className="flex items-center gap-3 px-5 py-2 transition-colors hover:bg-muted/60">
-                    <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">
-                        <span className="font-medium">{commandLabel(c.type, c.payload)}</span>{" "}
-                        <span className="text-muted-foreground">on</span>{" "}
-                        <Link href={`/devices/${c.device_id}`} className="hover:underline">
-                          {c.device_name}
-                        </Link>
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {c.issued_by_email ?? titleCase(c.source)} · {relativeTime(c.created_at)}
-                      </p>
-                    </div>
-                    <CommandStatusBadge status={c.status} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={Terminal} title="No commands yet" className="py-8" />
-            )}
-          </CardContent>
-        </Card>
+      <SecurityPosture data={data} inGroup={inGroup} />
+
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-5">
+        <OsMix data={data} className="xl:col-span-2" inGroup={inGroup} />
+        <RecentActivity data={data} className="xl:col-span-3" />
       </div>
     </>
   );
 }
 
-function Legend({ className, label }: { className: string; label: string }) {
+// ---------------------------------------------------------------------------
+// Headline tiles
+// ---------------------------------------------------------------------------
+
+const tileTone: Record<Tone, { tile: string; value: string; icon: string }> = {
+  default: { tile: "", value: "text-foreground", icon: "text-muted-foreground" },
+  brand: { tile: "", value: "text-primary", icon: "text-primary" },
+  success: { tile: "", value: "text-success dark:text-neon", icon: "text-success dark:text-neon" },
+  warning: { tile: "border-warning/50 bg-warning/5", value: "text-warning", icon: "text-warning" },
+  danger: { tile: "border-destructive/50 bg-destructive/5", value: "text-destructive", icon: "text-destructive" },
+};
+
+function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) => string }) {
+  const pct = data.devices_total > 0 ? Math.round((data.compliant / data.devices_total) * 100) : null;
+  const tiles: { label: string; value: React.ReactNode; sub?: string; icon: LucideIcon; tone: Tone; href: string }[] = [
+    { label: "Devices", value: data.devices_total, icon: Monitor, tone: "brand", href: inGroup("/devices") },
+    { label: "Online", value: data.online, icon: Wifi, tone: "success", href: inGroup("/devices?status=online") },
+    {
+      label: "Offline",
+      value: data.offline,
+      icon: WifiOff,
+      tone: data.offline > 0 ? "warning" : "default",
+      href: inGroup("/devices?status=offline"),
+    },
+    {
+      label: "Compliant",
+      value: pct == null ? "—" : `${pct}%`,
+      sub: data.non_compliant > 0 ? `${data.non_compliant} non-compliant` : "All passing",
+      icon: CheckCircle2,
+      tone: data.non_compliant > 0 ? "danger" : "success",
+      href: inGroup("/devices?compliance=non_compliant"),
+    },
+    { label: "Open alerts", value: data.open_alerts, icon: Bell, tone: data.open_alerts > 0 ? "danger" : "default", href: "/alerts" },
+  ];
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`h-2 w-2 rounded-full ${className}`} />
-      {label}
-    </span>
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {tiles.map((t) => {
+        const tone = tileTone[t.tone];
+        return (
+          <Link
+            key={t.label}
+            href={t.href}
+            className={cn(
+              "group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40",
+              tone.tile,
+            )}
+          >
+            <span className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              {t.label}
+              <t.icon className={cn("h-4 w-4", tone.icon)} />
+            </span>
+            <span className={cn("text-3xl font-semibold tracking-tight tabular", tone.value)}>{t.value}</span>
+            {t.sub && <span className={cn("text-xs", t.tone === "danger" ? "font-medium text-destructive" : "text-muted-foreground")}>{t.sub}</span>}
+          </Link>
+        );
+      })}
+    </div>
   );
 }
 
-/** One compact row per OS: a bar split into online and offline devices. */
-function OsBreakdown({ data }: { data: Dashboard }) {
-  if (!data.by_os.length) return <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>;
-  const max = Math.max(...data.by_os.map((o) => o.count));
+function TilesSkeleton() {
   return (
-    <ul className="space-y-1">
-      {data.by_os.map((o) => {
-        const offline = o.count - o.online;
-        return (
-          <li key={o.os_family}>
-            <Link
-              href={`/devices?os=${encodeURIComponent(o.os_family)}`}
-              className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-3 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/60"
-            >
-              <span className="flex items-center gap-2 truncate font-medium">
-                <OsIcon os={o.os_family} />
-                {osLabel(o.os_family)}
-              </span>
-              <span className="flex h-2.5 overflow-hidden rounded-full bg-muted" title={`${o.online} online, ${offline} offline`}>
-                <span className="h-full bg-success dark:bg-neon" style={{ width: `${(o.online / max) * 100}%` }} />
-                <span className="h-full bg-warning" style={{ width: `${(offline / max) * 100}%` }} />
-              </span>
-              <span className="w-32 text-right text-xs text-muted-foreground tabular">
-                <span className="font-semibold text-foreground">{o.online}</span> online ·{" "}
-                <span className={offline > 0 ? "font-semibold text-foreground" : undefined}>{offline} offline</span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <Skeleton key={i} className="h-24 rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Needs attention: failing rules and open alerts in one place
+// ---------------------------------------------------------------------------
+
+function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
+  const qc = useQueryClient();
+  const can = useCan();
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: qk.dashboard });
+    void qc.invalidateQueries({ queryKey: qk.alerts() });
+  };
+  const resolve = useMutation({
+    mutationFn: (id: string) => api.alerts.resolve(id),
+    onSuccess: () => {
+      toast.success("Alert resolved");
+      refresh();
+    },
+    onError: (e) => toast.error("Couldn't resolve the alert", e),
+  });
+  const recheck = useMutation({
+    mutationFn: api.compliance.evaluate,
+    onSuccess: (r) => {
+      toast.success("Compliance re-checked", `${r.evaluated} device${r.evaluated === 1 ? "" : "s"} evaluated.`);
+      refresh();
+    },
+    onError: (e) => toast.error("Couldn't re-check compliance", e),
+  });
+
+  return (
+    <Card className={className}>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-3">
+        <CardTitle>Needs attention</CardTitle>
+        <div className="flex items-center gap-2">
+          {can("compliance.write") && (
+            <Button variant="outline" size="sm" loading={recheck.isPending} onClick={() => recheck.mutate()}>
+              <RefreshCw /> Re-check compliance
+            </Button>
+          )}
+          <Link href="/alerts" className="text-xs font-semibold text-primary hover:underline">
+            All alerts →
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent className="px-0 pb-3">
+        {!data ? (
+          <div className="px-5">
+            <ListSkeleton rows={4} />
+          </div>
+        ) : (
+          <>
+            {data.failing_rules.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-5 pb-3">
+                {data.failing_rules.map((r) => (
+                  <Link
+                    key={r.rule_id}
+                    href={inGroup("/devices?compliance=non_compliant")}
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 py-1 pl-1 pr-3 text-xs transition-colors hover:bg-muted"
+                  >
+                    <SeverityBadge severity={r.severity} />
+                    <span className="font-medium">{r.name}</span>
+                    <span className="text-muted-foreground tabular">
+                      {r.devices} of {data.devices_total}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {data.recent_alerts.length ? (
+              <ul className="divide-y divide-border/60 border-t border-border/60">
+                {data.recent_alerts.map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 px-5 py-3">
+                    <SeverityBadge severity={a.severity} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        {a.device_id ? (
+                          <Link href={`/devices/${a.device_id}`} className="font-semibold hover:underline">
+                            {a.device_name ?? "Device"}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold">Organization</span>
+                        )}
+                        <span className="text-muted-foreground"> · {a.title}</span>
+                      </p>
+                      <p className="mt-0.5 break-words text-sm text-muted-foreground">{a.message}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Opened {relativeTime(a.created_at)}</p>
+                    </div>
+                    {can("alerts.write") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        loading={resolve.isPending && resolve.variables === a.id}
+                        onClick={() => resolve.mutate(a.id)}
+                        title="Mark as handled. It opens again if the device still fails the rule at the next check."
+                      >
+                        Resolve
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState icon={ShieldCheck} title="Nothing needs attention" description="No open alerts and no failing compliance checks." className="py-8" />
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Device health
+// ---------------------------------------------------------------------------
+
+const healthInfo: Record<Dashboard["health"][number]["kind"], { icon: LucideIcon; label: string }> = {
+  disk: { icon: HardDrive, label: "Disk" },
+  cpu: { icon: Cpu, label: "CPU" },
+  memory: { icon: MemoryStick, label: "Memory" },
+  offline: { icon: WifiOff, label: "Offline" },
+};
+
+function DeviceHealth({ data, className }: { data?: Dashboard; className?: string }) {
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-3">
+        <CardTitle>Device health</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pb-3">
+        {!data ? (
+          <div className="px-5">
+            <ListSkeleton rows={3} />
+          </div>
+        ) : data.health.length ? (
+          <ul className="divide-y divide-border/60">
+            {data.health.map((h) => {
+              const info = healthInfo[h.kind];
+              const pct = h.kind !== "offline";
+              const critical = pct ? h.value >= 95 : h.value >= 7 * 86400;
+              return (
+                <li key={`${h.device_id}-${h.kind}`}>
+                  <Link href={`/devices/${h.device_id}`} className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-muted/60">
+                    <info.icon className={cn("h-4 w-4 shrink-0", critical ? "text-destructive" : "text-warning")} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{h.name}</p>
+                      {pct ? (
+                        <span className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-muted">
+                          <span className={cn("h-full", critical ? "bg-destructive" : "bg-warning")} style={{ width: `${Math.min(h.value, 100)}%` }} />
+                        </span>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Last seen {relativeTime(h.last_seen_at)}</p>
+                      )}
+                    </div>
+                    <span className={cn("shrink-0 text-right text-sm font-semibold tabular", critical ? "text-destructive" : "text-warning")}>
+                      {pct ? `${Math.round(h.value)}%` : formatDuration(h.value)}
+                      <span className="block text-xs font-normal text-muted-foreground">{pct ? `${info.label} used` : "offline"}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={CheckCircle2}
+            title="All devices healthy"
+            description="No disk 85% full or more, no CPU or memory at 90% or more, and nothing offline for over a day."
+            className="py-8"
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Security posture
+// ---------------------------------------------------------------------------
+
+function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: string) => string }) {
+  if (!data) return <Skeleton className="mt-5 h-28 rounded-xl" />;
+  if (data.devices_total === 0) return null;
+  const total = data.devices_total;
+  const current = data.latest_agent ? (data.agent_versions.find((v) => v.version === data.latest_agent)?.count ?? 0) : null;
+  const meters: { label: string; good: number | null; icon: LucideIcon; href: string; note?: string }[] = [
+    { label: "Disk encryption", good: data.posture.encrypted, icon: Lock, href: inGroup("/devices?posture=unencrypted") },
+    { label: "Firewall on", good: data.posture.firewall, icon: BrickWall, href: inGroup("/devices?posture=firewall_off") },
+    { label: "Antivirus", good: data.posture.antivirus, icon: Bug, href: inGroup("/devices?posture=no_antivirus") },
+    {
+      label: "OS up to date",
+      good: total - data.posture.updates_pending - (total - data.posture.reported),
+      icon: Download,
+      href: inGroup("/devices?posture=updates_pending"),
+      note: data.posture.updates_pending ? `${data.posture.updates_pending} with pending updates` : undefined,
+    },
+    {
+      label: "Latest agent",
+      good: current,
+      icon: ArrowUpCircle,
+      href: inGroup("/devices"),
+      note: data.latest_agent ? `Version ${data.latest_agent}` : "No agent build published",
+    },
+  ];
+  return (
+    <Card className="mt-5">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-3">
+        <CardTitle>Security posture</CardTitle>
+        {data.posture.reported < total && (
+          <span className="text-xs text-muted-foreground">
+            {total - data.posture.reported} device{total - data.posture.reported === 1 ? " hasn't" : "s haven't"} reported yet and count as missing
+          </span>
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {meters.map((m) => {
+            const ok = m.good == null ? null : m.good >= total;
+            const ratio = m.good == null ? 0 : Math.max(0, m.good) / total;
+            return (
+              <Link
+                key={m.label}
+                href={m.href}
+                className="flex flex-col gap-2 rounded-lg border border-border p-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
+              >
+                <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <m.icon className="h-4 w-4" />
+                  {m.label}
+                </span>
+                <span className="text-xl font-semibold tabular">
+                  {m.good == null ? "—" : Math.max(0, m.good)}
+                  <span className="text-sm font-normal text-muted-foreground"> / {total}</span>
+                </span>
+                <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className={cn("h-full", ok ? "bg-success dark:bg-neon" : ratio >= 0.5 ? "bg-warning" : "bg-destructive")}
+                    style={{ width: `${ratio * 100}%` }}
+                  />
+                </span>
+                {m.note && <span className="text-xs text-muted-foreground">{m.note}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// OS mix
+// ---------------------------------------------------------------------------
+
+const osColor: Record<string, string> = {
+  windows: "bg-brand",
+  macos: "bg-foreground/70",
+  linux: "bg-warning",
+};
+
+function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
+  return (
+    <Card className={className}>
+      <CardHeader className="pb-3">
+        <CardTitle>Operating systems</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!data ? (
+          <ListSkeleton rows={2} />
+        ) : !data.by_os.length ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>
+        ) : (
+          <div className="space-y-4">
+            <span className="flex h-3 gap-0.5 overflow-hidden rounded-full" aria-hidden>
+              {data.by_os.map((o) => (
+                <span key={o.os_family} className={cn("h-full", osColor[o.os_family] ?? "bg-muted-foreground")} style={{ width: `${(o.count / data.devices_total) * 100}%` }} />
+              ))}
+            </span>
+            <ul className="space-y-1">
+              {data.by_os.map((o) => {
+                const offline = o.count - o.online;
+                return (
+                  <li key={o.os_family}>
+                    <Link
+                      href={inGroup(`/devices?os=${encodeURIComponent(o.os_family)}`)}
+                      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/60"
+                    >
+                      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", osColor[o.os_family] ?? "bg-muted-foreground")} />
+                      <OsIcon os={o.os_family} />
+                      <span className="flex-1 font-medium">{osLabel(o.os_family)}</span>
+                      {offline > 0 && <span className="text-xs font-medium text-warning">{offline} offline</span>}
+                      <span className="w-8 text-right font-semibold tabular">{o.count}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Recent activity: commands grouped when the same action ran on several devices
+// ---------------------------------------------------------------------------
+
+type ActivityFilter = "all" | "failed" | "pending";
+const PENDING = new Set(["queued", "sent", "running"]);
+const FAILED = new Set(["failed", "timeout", "cancelled"]);
+
+type Batch = { key: string; label: string; by: string; at: string; items: Command[] };
+
+/** Groups commands with the same action and issuer created within 10 minutes of each other. */
+function batches(cmds: Command[]): Batch[] {
+  const out: Batch[] = [];
+  for (const c of cmds) {
+    const label = commandLabel(c.type, c.payload);
+    const by = c.issued_by_email ?? titleCase(c.source);
+    const last = out[out.length - 1];
+    const prev = last?.items[last.items.length - 1];
+    if (last && last.label === label && last.by === by && prev && Math.abs(Date.parse(prev.created_at) - Date.parse(c.created_at)) < 10 * 60_000) {
+      last.items.push(c);
+    } else {
+      out.push({ key: c.id, label, by, at: c.created_at, items: [c] });
+    }
+  }
+  return out;
+}
+
+function RecentActivity({ data, className }: { data?: Dashboard; className?: string }) {
+  const [filter, setFilter] = useState<ActivityFilter>("all");
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const list = useMemo(() => {
+    const cmds = (data?.recent_commands ?? []).filter((c) =>
+      filter === "all" ? true : filter === "failed" ? FAILED.has(c.status) : PENDING.has(c.status),
+    );
+    return batches(cmds).slice(0, 8);
+  }, [data, filter]);
+
+  return (
+    <Card className={className}>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-3">
+        <CardTitle>Recent activity</CardTitle>
+        <Segmented
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: "All" },
+            { value: "failed", label: "Failed" },
+            { value: "pending", label: "Pending" },
+          ]}
+        />
+      </CardHeader>
+      <CardContent className="px-0 pb-2">
+        {!data ? (
+          <div className="px-5">
+            <ListSkeleton rows={4} />
+          </div>
+        ) : list.length ? (
+          <ul className="divide-y divide-border/60">
+            {list.map((b) => {
+              const single = b.items.length === 1 ? b.items[0]! : null;
+              const expanded = open.has(b.key);
+              const counts = b.items.reduce<Record<string, number>>((m, c) => ({ ...m, [c.status]: (m[c.status] ?? 0) + 1 }), {});
+              return (
+                <li key={b.key}>
+                  <div className="flex items-center gap-3 px-5 py-2.5">
+                    {single ? (
+                      <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-label={expanded ? "Hide devices" : "Show devices"}
+                        className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        onClick={() =>
+                          setOpen((s) => {
+                            const n = new Set(s);
+                            if (n.has(b.key)) n.delete(b.key);
+                            else n.add(b.key);
+                            return n;
+                          })
+                        }
+                      >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </button>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">
+                        <span className="font-medium">{b.label}</span> <span className="text-muted-foreground">on</span>{" "}
+                        {single ? (
+                          <Link href={`/devices/${single.device_id}`} className="hover:underline">
+                            {single.device_name}
+                          </Link>
+                        ) : (
+                          <span>{b.items.length} devices</span>
+                        )}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {b.by} · {relativeTime(b.at)}
+                      </p>
+                    </div>
+                    {single ? (
+                      <CommandStatusBadge status={single.status} />
+                    ) : (
+                      <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                        {Object.entries(counts).map(([status, n]) => (
+                          <span key={status} className="inline-flex items-center gap-1">
+                            <CommandStatusBadge status={status as Command["status"]} />
+                            <span className="text-xs font-semibold tabular">×{n}</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+                  {expanded && (
+                    <ul className="mb-2 ml-12 mr-5 space-y-1 border-l border-border pl-3">
+                      {b.items.map((c) => (
+                        <li key={c.id} className="flex items-center gap-2 text-sm">
+                          <Link href={`/devices/${c.device_id}`} className="min-w-0 flex-1 truncate hover:underline">
+                            {c.device_name}
+                          </Link>
+                          <CommandStatusBadge status={c.status} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={Terminal}
+            title={filter === "all" ? "No commands yet" : filter === "failed" ? "No failed commands" : "Nothing pending"}
+            className="py-8"
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

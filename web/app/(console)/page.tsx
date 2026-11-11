@@ -553,7 +553,7 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
         ) : !data.by_os.length ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>
         ) : (
-          <div className="flex flex-col items-center gap-6 2xl:flex-row">
+          <div className="flex flex-col items-center gap-5">
             <div className="relative h-60 w-60 shrink-0" role="img" aria-label={data.by_os.map((o) => `${osLabel(o.os_family)} ${o.count}`).join(", ")}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -618,7 +618,7 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
                 )}
               </div>
             </div>
-            <ul className="w-full min-w-0 flex-1 space-y-1">
+            <ul className="w-full max-w-sm space-y-1">
               {data.by_os.map((o) => {
                 const offline = o.count - o.online;
                 return (
@@ -636,7 +636,7 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
                     >
                       <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: osColor(o.os_family) }} />
                       <OsIcon os={o.os_family} />
-                      <span className="min-w-0 flex-1 font-medium leading-tight">
+                      <span className="min-w-0 flex-1 whitespace-nowrap font-medium leading-tight">
                         {osLabel(o.os_family)}
                         {offline > 0 && <span className="block text-xs font-medium text-warning">{offline} offline</span>}
                       </span>

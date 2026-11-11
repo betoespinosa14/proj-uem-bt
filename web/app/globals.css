@@ -49,6 +49,11 @@
   --nav: 200 24% 93%;
   --nav-foreground: 200 35% 16%;
   --nav-accent: 155 75% 22%;
+  /* Dashboard OS pie: categorical, validated for colour-blind separation; not the warning/danger hues. */
+  --os-windows: #0089b8;
+  --os-macos: #7a5af8;
+  --os-linux: #d4497a;
+  --os-other: #8a959b;
   --tint-mint: 160 30% 97%;
   --tint-sky: 198 40% 97%;
   --tint-sand: 40 30% 97%;
@@ -91,6 +96,10 @@
   --nav: 196 45% 5%;
   --nav-foreground: 190 25% 90%;
   --nav-accent: 119 97% 75%;
+  --os-windows: #0aa3c7;
+  --os-macos: #8c72f2;
+  --os-linux: #de5c8c;
+  --os-other: #7d878c;
   --tint-mint: 160 14% 12%;
   --tint-sky: 200 18% 12%;
   --tint-sand: 38 10% 12%;

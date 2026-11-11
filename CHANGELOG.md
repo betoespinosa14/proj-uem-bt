@@ -16,7 +16,8 @@ commits after 2026.11.0, at commit `60f25a5`.
   **Device health** lists disks 85% full or more, CPU or memory at 90% or more and devices offline for over a day;
   **Security posture** shows how many devices have disk encryption, the firewall, antivirus, an up-to-date OS and
   the latest agent, each linking to the devices missing it; repeated commands (such as an agent update on 8 devices)
-  are grouped into one expandable line with an All / Failed / Pending filter. The Devices list accepts the new
+  are grouped into one expandable line with an All / Failed / Pending filter; the operating-system mix is a pie
+  chart with the total in the middle. The Devices list accepts the new
   `status` and `posture` links.
 - **Two-step sign-in for the console (optional per user).** Under your name → **Account security**, scan a QR code
   with an authenticator app; from then on sign-in asks for the 6-digit code after the password, with 10 one-time

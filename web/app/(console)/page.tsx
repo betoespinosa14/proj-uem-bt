@@ -35,6 +35,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { commandLabel } from "@/components/commands";
 import { CommandStatusBadge, DeviceSearch, EmptyState, ErrorState, OsIcon, PageHeader, SeverityBadge } from "@/components/common";
 import { toast } from "@/components/toast";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 function greeting(d = new Date()) {
   const h = d.getHours();
@@ -434,13 +435,11 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
 // OS mix
 // ---------------------------------------------------------------------------
 
-const osColor: Record<string, string> = {
-  windows: "bg-brand",
-  macos: "bg-foreground/70",
-  linux: "bg-warning",
-};
+const osColor = (os: string) => `var(--os-${["windows", "macos", "linux"].includes(os) ? os : "other"})`;
 
 function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
+  const total = data?.devices_total ?? 0;
+  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -448,17 +447,55 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
       </CardHeader>
       <CardContent>
         {!data ? (
-          <ListSkeleton rows={2} />
+          <ListSkeleton rows={3} />
         ) : !data.by_os.length ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No devices yet</p>
         ) : (
-          <div className="space-y-4">
-            <span className="flex h-3 gap-0.5 overflow-hidden rounded-full" aria-hidden>
-              {data.by_os.map((o) => (
-                <span key={o.os_family} className={cn("h-full", osColor[o.os_family] ?? "bg-muted-foreground")} style={{ width: `${(o.count / data.devices_total) * 100}%` }} />
-              ))}
-            </span>
-            <ul className="space-y-1">
+          <div className="flex flex-col items-center gap-5 sm:flex-row">
+            <div className="relative h-44 w-44 shrink-0" role="img" aria-label={data.by_os.map((o) => `${osLabel(o.os_family)} ${o.count}`).join(", ")}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data.by_os}
+                    dataKey="count"
+                    nameKey="os_family"
+                    innerRadius="58%"
+                    outerRadius="100%"
+                    paddingAngle={data.by_os.length > 1 ? 2 : 0}
+                    stroke="hsl(var(--card))"
+                    strokeWidth={2}
+                    startAngle={90}
+                    endAngle={-270}
+                    isAnimationActive={false}
+                  >
+                    {data.by_os.map((o) => (
+                      <Cell key={o.os_family} fill={osColor(o.os_family)} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      const o = active ? (payload?.[0]?.payload as Dashboard["by_os"][number] | undefined) : undefined;
+                      if (!o) return null;
+                      const offline = o.count - o.online;
+                      return (
+                        <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lift">
+                          <p className="font-medium">{osLabel(o.os_family)}</p>
+                          <p className="tabular">
+                            {o.count} device{o.count === 1 ? "" : "s"} ({pct(o.count)}%)
+                            {offline > 0 && <span className="text-warning"> · {offline} offline</span>}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-semibold tabular">{total}</span>
+                <span className="text-xs text-muted-foreground">devices</span>
+              </div>
+            </div>
+            <ul className="w-full min-w-0 flex-1 space-y-1">
               {data.by_os.map((o) => {
                 const offline = o.count - o.online;
                 return (
@@ -467,11 +504,12 @@ function OsMix({ data, className, inGroup }: { data?: Dashboard; className?: str
                       href={inGroup(`/devices?os=${encodeURIComponent(o.os_family)}`)}
                       className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/60"
                     >
-                      <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", osColor[o.os_family] ?? "bg-muted-foreground")} />
+                      <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: osColor(o.os_family) }} />
                       <OsIcon os={o.os_family} />
-                      <span className="flex-1 font-medium">{osLabel(o.os_family)}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{osLabel(o.os_family)}</span>
                       {offline > 0 && <span className="text-xs font-medium text-warning">{offline} offline</span>}
                       <span className="w-8 text-right font-semibold tabular">{o.count}</span>
+                      <span className="w-10 text-right text-xs text-muted-foreground tabular">{pct(o.count)}%</span>
                     </Link>
                   </li>
                 );

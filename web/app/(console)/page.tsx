@@ -224,9 +224,20 @@ function findings(message: string): { kind: string; items: string[] } | null {
   return { kind: kind.length < 30 && kind !== message ? kind : "", items };
 }
 
+/** App badges shown per alert row before a "+N more" button. */
+const BADGE_LIMIT = 4;
+
 function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; className?: string; inGroup: (p: string) => string }) {
   const qc = useQueryClient();
   const can = useCan();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: qk.dashboard });
     void qc.invalidateQueries({ queryKey: qk.alerts() });
@@ -313,11 +324,25 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
                               {found ? (
                                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                   {found.kind && <span className="text-xs text-muted-foreground">{found.kind}:</span>}
-                                  {found.items.map((name) => (
-                                    <span key={name} className="max-w-full break-words rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium">
+                                  {(expanded.has(a.id) ? found.items : found.items.slice(0, BADGE_LIMIT)).map((name) => (
+                                    // One line each; a very long name ends in "…" with the full name on hover.
+                                    <span
+                                      key={name}
+                                      title={name}
+                                      className="max-w-[220px] truncate rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium"
+                                    >
                                       {name}
                                     </span>
                                   ))}
+                                  {found.items.length > BADGE_LIMIT && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpanded(a.id)}
+                                      className="rounded-md px-1.5 py-0.5 text-xs font-semibold text-primary hover:bg-muted hover:underline"
+                                    >
+                                      {expanded.has(a.id) ? "Show less" : `+${found.items.length - BADGE_LIMIT} more`}
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 <p className="mt-0.5 break-words text-sm text-muted-foreground">{a.message}</p>
@@ -366,8 +391,13 @@ const healthInfo: Record<Dashboard["health"][number]["kind"], { icon: LucideIcon
 function DeviceHealth({ data, className }: { data?: Dashboard; className?: string }) {
   return (
     <Card className={className}>
-      <CardHeader className="pb-3">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-3">
         <CardTitle>Device health</CardTitle>
+        {data && data.devices_total > 0 && (
+          <span className="text-xs text-muted-foreground tabular">
+            {data.devices_total - new Set(data.health.map((h) => h.device_id)).size} of {data.devices_total} healthy
+          </span>
+        )}
       </CardHeader>
       <CardContent className="px-0 pb-3">
         {!data ? (

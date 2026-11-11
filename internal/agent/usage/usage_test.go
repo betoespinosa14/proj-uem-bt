@@ -16,7 +16,7 @@ func TestAppFor(t *testing.T) {
 		{Name: "Microsoft 365 Apps for enterprise - en-us", InstallLocation: `C:\Program Files\Microsoft Office`},
 		{Name: "Microsoft Word", InstallLocation: `C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE`},
 		{Name: "Microsoft Teams", InstallLocation: `C:\Program Files\WindowsApps\MSTeams_25153.1010.3727.5483_x64__8wekyb3d8bbwe`},
-		{Name: "WhatsApp", InstallLocation: `C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2525.4.0_x64__cv1g1gvanyjgm`},
+		{Name: "WhatsApp", InstallLocation: `C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2525.4.0_x64__cv1g1gvanyjgm`}, {Name: "Google Chrome", InstallLocation: `C:\Program Files\Google\Chrome\Application`}, // filled from App Paths
 	})
 	lin := NewIndex("linux", []protocol.Software{{Name: "firefox"}, {Name: "libreoffice-calc"}})
 	mac := NewIndex("darwin", nil)
@@ -26,6 +26,8 @@ func TestAppFor(t *testing.T) {
 		want string
 	}{
 		{mac, "/Applications/Slack.app/Contents/MacOS/Slack", "Slack"},
+		{win, `C:\Program Files\Google\Chrome\Application\chrome.exe`, "Google Chrome"},
+		{win, `C:\Program Files\Google\Chrome\Application\157.0.8103.50\chrome_proxy.exe`, "Google Chrome"},
 		{mac, "/Applications/Adobe Photoshop 2024/Adobe Photoshop 2024.app/Contents/MacOS/Adobe Photoshop 2024", "Adobe Photoshop 2024"},
 		{mac, "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper", ""},
 		{mac, "/System/Applications/Weather.app/Contents/PlugIns/WeatherWidget.appex/Contents/MacOS/WeatherWidget", ""},

@@ -7,7 +7,7 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.11 (2026-11-11): App usage Today and 7 days, Chrome usage on Windows
 
 ### Added
 - **"Today" and "7 days" periods in App usage**, on the fleet page and each device's Usage tab, so Top users
@@ -29,6 +29,12 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **App usage "Top users" shows employee names** instead of signed-in accounts: each account is shown as the
   employee of the device it was most active on, with the account on hover. Accounts without an employee name
   show as before.
+
+### Fixed
+- **Google Chrome usage on Windows wasn't counted when Chrome was installed with Google's enterprise MSI.** That
+  installer leaves Chrome's uninstall entry without an install folder, so its running programs couldn't be matched.
+  The agent now takes a missing folder from the Windows "App Paths" registry when the registered program's product
+  name equals the app's name. Usage is counted from the agent update on.
 
 ## 2026.11.10 (2026-11-10): Per-device App usage, Windows Store and Office apps
 

@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -111,10 +112,91 @@ func software(ctx context.Context) []protocol.Software {
 			}
 		}
 	}
+	out = fillFromAppPaths(out, appPaths())
 	for _, sw := range storeApps(ctx) {
 		add(sw)
 	}
 	return out
+}
+
+// appPaths lists the programs registered under App Paths, machine-wide and
+// for each signed-in user, with the product name from each program's version
+// info.
+func appPaths() []appPath {
+	type root struct {
+		key  registry.Key
+		path string
+	}
+	roots := []root{
+		{registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths`},
+		{registry.LOCAL_MACHINE, `SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths`},
+	}
+	for _, sid := range userSIDs() {
+		roots = append(roots, root{registry.USERS, sid + `\Software\Microsoft\Windows\CurrentVersion\App Paths`})
+	}
+	var out []appPath
+	for _, root := range roots {
+		k, err := registry.OpenKey(root.key, root.path, registry.ENUMERATE_SUB_KEYS)
+		if err != nil {
+			continue
+		}
+		names, _ := k.ReadSubKeyNames(-1)
+		k.Close()
+		for _, n := range names {
+			if !strings.HasSuffix(strings.ToLower(n), ".exe") {
+				continue
+			}
+			sk, err := registry.OpenKey(root.key, root.path+`\`+n, registry.QUERY_VALUE)
+			if err != nil {
+				continue
+			}
+			exe, _, err := sk.GetStringValue("")
+			sk.Close()
+			if err != nil {
+				continue
+			}
+			exe = strings.Trim(exe, `" `)
+			if x, err := registry.ExpandString(exe); err == nil {
+				exe = x
+			}
+			if !strings.HasSuffix(strings.ToLower(exe), ".exe") {
+				continue
+			}
+			if fi, err := os.Stat(exe); err != nil || fi.IsDir() {
+				continue
+			}
+			if name := productName(exe); name != "" {
+				out = append(out, appPath{Exe: exe, ProductName: name})
+			}
+		}
+	}
+	return out
+}
+
+// productName reads ProductName from a program's version info, in the first
+// language it lists, or "".
+func productName(exe string) string {
+	size, err := windows.GetFileVersionInfoSize(exe, nil)
+	if err != nil || size == 0 {
+		return ""
+	}
+	buf := make([]byte, size)
+	block := unsafe.Pointer(&buf[0])
+	if err := windows.GetFileVersionInfo(exe, 0, size, block); err != nil {
+		return ""
+	}
+	var tr unsafe.Pointer
+	var n uint32
+	if err := windows.VerQueryValue(block, `\VarFileInfo\Translation`, unsafe.Pointer(&tr), &n); err != nil || n < 4 {
+		return ""
+	}
+	lang, cp := *(*uint16)(tr), *(*uint16)(unsafe.Add(tr, 2))
+	var p unsafe.Pointer
+	sub := fmt.Sprintf(`\StringFileInfo\%04x%04x\ProductName`, lang, cp)
+	if err := windows.VerQueryValue(block, sub, unsafe.Pointer(&p), &n); err != nil || n == 0 {
+		return ""
+	}
+	return strings.TrimSpace(windows.UTF16PtrToString((*uint16)(p)))
 }
 
 var userSID = regexp.MustCompile(`^S-1-5-21-[0-9-]+$`)

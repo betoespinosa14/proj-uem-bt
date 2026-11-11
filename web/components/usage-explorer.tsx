@@ -47,7 +47,7 @@ export function UsageExplorer({
   const viewKey = scoped ? "device-usage-view" : "usage-view";
   const { data: me } = useMe();
   const [q, setQ] = useState("");
-  const [period, setPeriod] = useState<keyof typeof PERIODS>("30");
+  const [period, setPeriod] = useState<keyof typeof PERIODS>("1"); // opens on Today
   const [group, setGroup] = useState<UsageGroup>("app");
   const [unused, setUnused] = useState(false);
   const [groupId, setGroupId] = useState("");

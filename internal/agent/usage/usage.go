@@ -21,6 +21,9 @@ type Proc struct {
 	Exe  string
 	User string
 	UID  int64 // -1 when unknown (always on Windows)
+	// Service is set for Windows processes in session 0, where services run
+	// and no one signs in, so their account isn't a person's.
+	Service bool
 }
 
 // Index maps executables to installed application names. It is rebuilt from
@@ -34,6 +37,14 @@ type Index struct {
 }
 
 type prefix struct{ dir, name string }
+
+// linuxNonApps are packages whose programs run for every login or SSH
+// session (shells, the per-user service manager), not apps anyone uses.
+var linuxNonApps = map[string]bool{
+	"systemd": true, "dbus": true, "sudo": true, "openssh-server": true, "openssh-client": true,
+	"bash": true, "dash": true, "zsh": true, "fish": true, "ksh": true, "tcsh": true, "csh": true,
+	"tmux": true, "screen": true,
+}
 
 // NewIndex builds an index from the installed software list.
 func NewIndex(goos string, software []protocol.Software) *Index {
@@ -54,7 +65,9 @@ func NewIndex(goos string, software []protocol.Software) *Index {
 			}
 			ix.prefixes = append(ix.prefixes, prefix{dir + `\`, s.Name})
 		case "linux":
-			ix.packages[strings.ToLower(s.Name)] = s.Name
+			if !linuxNonApps[strings.ToLower(s.Name)] {
+				ix.packages[strings.ToLower(s.Name)] = s.Name
+			}
 		}
 	}
 	sort.Slice(ix.prefixes, func(i, j int) bool { return len(ix.prefixes[i].dir) > len(ix.prefixes[j].dir) })
@@ -152,7 +165,7 @@ func macApp(exe string) string {
 // a service or system account.
 func IsHuman(goos string, p Proc) bool {
 	u := strings.TrimSpace(p.User)
-	if u == "" {
+	if u == "" || p.Service {
 		return false
 	}
 	switch goos {

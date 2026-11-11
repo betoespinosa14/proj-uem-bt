@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.14 (2026-11-11): Service accounts out of App usage
+
+### Fixed
+- **Service accounts no longer show up in App usage.** On Windows the agent skips processes in session 0, where
+  services run and no one signs in, so accounts such as Reckon's `QBDataServiceUser28` stop appearing as users
+  (with Reckon open around the clock). Every real sign-in, Remote Desktop included, has its own session and still
+  counts. On Linux, shells and the per-user service manager (`bash`, `systemd`, `sudo`, `tmux` and similar) are
+  no longer listed as apps; they run for every login or SSH session.
+
 ## 2026.11.13 (2026-11-11): Fallback server addresses for agents
 
 ### Added

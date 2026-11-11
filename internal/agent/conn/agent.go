@@ -609,7 +609,7 @@ func (a *Agent) trackUsage(ctx context.Context) {
 			if uids, err := p.UidsWithContext(ctx); err == nil && len(uids) > 0 {
 				uid = int64(uids[0])
 			}
-			sample = append(sample, usage.Proc{Exe: exe, User: user, UID: uid})
+			sample = append(sample, usage.Proc{Exe: exe, User: user, UID: uid, Service: inServiceSession(p.Pid)})
 		}
 		a.usage.Sample(time.Now(), sample)
 		if samples++; samples < usageReportEvery {

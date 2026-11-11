@@ -18,13 +18,16 @@ func TestAppFor(t *testing.T) {
 		{Name: "Microsoft Teams", InstallLocation: `C:\Program Files\WindowsApps\MSTeams_25153.1010.3727.5483_x64__8wekyb3d8bbwe`},
 		{Name: "WhatsApp", InstallLocation: `C:\Program Files\WindowsApps\5319275A.WhatsAppDesktop_2.2525.4.0_x64__cv1g1gvanyjgm`}, {Name: "Google Chrome", InstallLocation: `C:\Program Files\Google\Chrome\Application`}, // filled from App Paths
 	})
-	lin := NewIndex("linux", []protocol.Software{{Name: "firefox"}, {Name: "libreoffice-calc"}})
+	lin := NewIndex("linux", []protocol.Software{{Name: "firefox"}, {Name: "libreoffice-calc"}, {Name: "bash"}, {Name: "systemd"}})
 	mac := NewIndex("darwin", nil)
 	cases := []struct {
 		ix   *Index
 		exe  string
 		want string
 	}{
+		{lin, "/usr/bin/bash", ""},
+		{lin, "/usr/lib/systemd/systemd", ""},
+		{lin, "/usr/bin/firefox", "firefox"},
 		{mac, "/Applications/Slack.app/Contents/MacOS/Slack", "Slack"},
 		{win, `C:\Program Files\Google\Chrome\Application\chrome.exe`, "Google Chrome"},
 		{win, `C:\Program Files\Google\Chrome\Application\157.0.8103.50\chrome_proxy.exe`, "Google Chrome"},
@@ -70,6 +73,8 @@ func TestIsHuman(t *testing.T) {
 		{"darwin", Proc{User: "_spotlight", UID: 89}, false},
 		{"linux", Proc{User: "ana", UID: 1000}, true},
 		{"linux", Proc{User: "zabbix", UID: 112}, false},
+		{"windows", Proc{User: `SPROUT-SERVER\QBDataServiceUser28`, UID: -1, Service: true}, false},
+		{"windows", Proc{User: `SPROUT-SERVER\ITSD1`, UID: -1}, true},
 		{"windows", Proc{User: `CORP\ana`, UID: -1}, true},
 		{"windows", Proc{User: `NT AUTHORITY\SYSTEM`, UID: -1}, false},
 		{"windows", Proc{User: `Window Manager\DWM-1`, UID: -1}, false},

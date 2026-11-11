@@ -299,7 +299,8 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
                         return (
                           <li key={a.id} className="flex items-start gap-3 px-5 py-2.5">
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm">
+                              {/* As tall as the Resolve button, so the two sit level however many badges wrap below. */}
+                              <p className="flex min-h-8 flex-wrap items-center gap-x-1.5 text-sm">
                                 {a.device_id ? (
                                   <Link href={`/devices/${a.device_id}`} className="font-semibold hover:underline">
                                     {a.device_name ?? "Device"}
@@ -307,13 +308,13 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
                                 ) : (
                                   <span className="font-semibold">{a.title}</span>
                                 )}
-                                <span className="text-xs text-muted-foreground"> · {relativeTime(a.created_at)}</span>
+                                <span className="text-xs text-muted-foreground">· {relativeTime(a.created_at)}</span>
                               </p>
                               {found ? (
-                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                   {found.kind && <span className="text-xs text-muted-foreground">{found.kind}:</span>}
                                   {found.items.map((name) => (
-                                    <span key={name} className="rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium">
+                                    <span key={name} className="max-w-full break-words rounded-md border border-border bg-muted/60 px-2 py-0.5 text-xs font-medium">
                                       {name}
                                     </span>
                                   ))}

@@ -338,7 +338,7 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
                                     <button
                                       type="button"
                                       onClick={() => toggleExpanded(a.id)}
-                                      className="rounded-md px-1.5 py-0.5 text-xs font-semibold text-primary hover:bg-muted hover:underline"
+                                      className="rounded-md px-1.5 py-0.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                     >
                                       {expanded.has(a.id) ? "Show less" : `+${found.items.length - BADGE_LIMIT} more`}
                                     </button>

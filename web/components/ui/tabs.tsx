@@ -89,7 +89,10 @@ export function TabsTrigger({
       className={cn(
         "relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50",
-        active ? "bg-card text-foreground shadow-[inset_0_-2px_0_hsl(var(--brand))] dark:shadow-[inset_0_-2px_0_hsl(var(--neon))]" : "text-muted-foreground hover:text-foreground",
+        // Same accent as the pickers and the sidebar; the underline keeps page tabs distinct from filters.
+        active
+          ? "bg-card font-semibold text-nav-accent shadow-[inset_0_-2px_0_hsl(var(--nav-accent))]"
+          : "text-muted-foreground hover:text-foreground",
         className,
       )}
     >

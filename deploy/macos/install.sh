@@ -1,7 +1,8 @@
 #!/bin/bash
 # BEACON on the office Mac Mini: run Postgres, the API server, the console and
 # Caddy as launchd daemons, so they start at boot without anyone logging in and
-# restart if they crash.
+# restart if they crash. com.beacon.backup dumps the database nightly at 02:30
+# (deploy/macos/backup.sh); it shows "not running" between runs.
 #
 #   deploy/macos/install.sh            build and stage (run as yourself, no sudo)
 #   sudo deploy/macos/install.sh --system
@@ -16,7 +17,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
-LABELS=(postgres server web caddy)
+LABELS=(postgres server web caddy backup)
 
 if [[ "${1:-}" == "--system" ]]; then
   [[ $EUID -eq 0 ]] || { echo "Run the --system step with sudo." >&2; exit 1; }
@@ -42,6 +43,7 @@ stage() {
   # Copy then rename, so a running server keeps its old binary until restarted.
   cp "$REPO/bin/uem-server" "$APP/bin/.uem-server.new"
   mv -f "$APP/bin/.uem-server.new" "$APP/bin/uem-server"
+  install -m 755 "$REPO/deploy/macos/backup.sh" "$APP/bin/backup.sh"
   rsync -a --delete "$REPO/dist/" "$APP/dist/"
   # The console is staged beside the running one and swapped in by --system
   # right before the restart: replacing the files under a running console

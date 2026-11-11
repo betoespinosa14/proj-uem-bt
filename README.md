@@ -83,7 +83,7 @@ The machine must stay awake and online: while it's down, no device can report. A
 
 ### Starting at boot on the office Mac Mini
 
-On the office Mac Mini, BEACON runs as four launchd daemons: `com.beacon.postgres`, `com.beacon.server`, `com.beacon.web` and `com.beacon.caddy`. They start at boot without anyone logging in, and restart if they crash. They run as your user from a copy in `~/Library/Application Support/BEACON`, because macOS blocks background processes from reading `~/Desktop`.
+On the office Mac Mini, BEACON runs as four launchd daemons, `com.beacon.postgres`, `com.beacon.server`, `com.beacon.web` and `com.beacon.caddy`, plus the nightly `com.beacon.backup` job. They start at boot without anyone logging in, and restart if they crash. They run as your user from a copy in `~/Library/Application Support/BEACON`, because macOS blocks background processes from reading `~/Desktop`.
 
 - **Install or redeploy:** run `make deploy-mac`, then `sudo deploy/macos/install.sh --system`. The first step builds and stages; the second installs the daemons and restarts them on the new build.
 - **Updating agents:** after a release, `make deploy-mac` also publishes the new agent builds. Devices on an older agent show **Update available**. Update one from its page (**⋯ → Update agent**), or all of them with **Update agents (N)** on the Devices list. Agents older than 2026.11.7 get a one-time script through Run script; from 2026.11.7 on they update themselves.
@@ -92,6 +92,7 @@ On the office Mac Mini, BEACON runs as four launchd daemons: `com.beacon.postgre
 - **Status:** `sudo launchctl print system/com.beacon.server`.
 - **Logs:** `~/Library/Logs/BEACON/`.
 - **Stop a service:** `sudo launchctl bootout system/com.beacon.caddy`. It comes back at the next boot unless you also delete its plist from `/Library/LaunchDaemons`.
+- **Backups:** `com.beacon.backup` saves the whole database every night at 02:30, and once after each deploy, to `~/Library/Application Support/BEACON/backups/uem-YYYY-MM-DD.dump`. It keeps the last 14 days and logs to `backup.log`. Run one now with `sudo launchctl kickstart system/com.beacon.backup`. To restore, stop the server (`sudo launchctl bootout system/com.beacon.server`), run `/opt/homebrew/opt/postgresql@16/bin/pg_restore -h localhost -U uem --clean --if-exists -d uem <file>`, then start it again with `sudo launchctl bootstrap system /Library/LaunchDaemons/com.beacon.server.plist`. The backups are on the same disk as the database, so copy one elsewhere now and then.
 
 ## Development
 
@@ -116,8 +117,10 @@ go run ./cmd/agent inventory          # print what the agent collects, as JSON
 Tests:
 
 ```sh
-make test     # go vet, then unit and integration tests with -race (integration tests need Postgres; set TEST_DB=…)
+make test     # go vet, then unit and integration tests with -race (integration tests use the uem_test database; set TEST_DB=… to change it)
 ```
+
+Create the test database once with `createdb -h localhost -U uem uem_test`. The tests refuse to run against a database whose name doesn't end in `_test`, so they can't write to the live one.
 
 The integration tests (`internal/server/api/api_test.go`) start the real HTTP server against Postgres. They cover:
 - cross-tenant isolation on every resource type;

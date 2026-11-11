@@ -7,7 +7,7 @@ VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' --dirty 2>/dev/nul
 LDFLAGS := -s -w -X main.Version=$(VERSION)
 GO_PKGS := ./cmd/... ./internal/...
 AGENT_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
-TEST_DB ?= postgres://uem:uem@localhost:5432/uem?sslmode=disable
+TEST_DB ?= postgres://uem:uem@localhost:5432/uem_test?sslmode=disable
 
 .PHONY: all build server agent build-agents version release test test-unit vet web up down logs clean deploy-mac
 

@@ -7,6 +7,18 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Added
+- **Nightly database backup on the office Mac Mini.** A new `com.beacon.backup` launchd job saves the whole
+  database at 02:30 every night (and once after each deploy) to `~/Library/Application Support/BEACON/backups`,
+  keeping 14 days. The README explains how to restore.
+
+### Changed
+- **Tests use their own database.** `make test` now runs against `uem_test` instead of the live `uem` database,
+  and the integration tests refuse to start unless the database name ends in `_test`. Test runs no longer add
+  organisations to production or apply new database changes to it before a deploy.
+
 ## 2026.11.14 (2026-11-11): Service accounts out of App usage
 
 ### Fixed

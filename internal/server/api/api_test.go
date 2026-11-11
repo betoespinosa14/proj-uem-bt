@@ -1,8 +1,9 @@
 package api_test
 
 // Integration tests against a real Postgres. Set UEM_TEST_DATABASE_URL to a
-// database the tests may migrate and write to (they use unique emails per
-// run, so a shared dev database works); the tests skip otherwise.
+// database the tests may migrate and write to (make test uses uem_test); the
+// tests skip otherwise. They refuse to run unless the database name ends in
+// "_test", so they can never write to the live database.
 
 import (
 	"bytes"
@@ -49,6 +50,9 @@ func setup(t *testing.T) *env {
 	if dsn == "" {
 		t.Skip("UEM_TEST_DATABASE_URL not set")
 	}
+	if err := checkTestDB(dsn); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -67,6 +71,21 @@ func setup(t *testing.T) *env {
 	srv := httptest.NewServer(api.New(api.Config{AllowSignup: true, AgentDistDir: dist}, c, sched).Handler())
 	t.Cleanup(srv.Close)
 	return &env{srv: srv, store: st, audit: al, dist: dist}
+}
+
+// checkTestDB refuses any database whose name doesn't end in "_test": the
+// tests create organisations and run migrations, which must never happen on
+// the live database.
+func checkTestDB(dsn string) error {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("UEM_TEST_DATABASE_URL: %w", err)
+	}
+	if name := cfg.ConnConfig.Database; !strings.HasSuffix(name, "_test") {
+		return fmt.Errorf("refusing to run integration tests against database %q: "+
+			"use a dedicated database whose name ends in _test (make test uses uem_test)", name)
+	}
+	return nil
 }
 
 // client is a logged-in browser session.

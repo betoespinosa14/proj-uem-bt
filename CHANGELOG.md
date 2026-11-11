@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.12 (2026-11-11): Linux agents back within seconds after an update
+
+### Fixed
+- **Linux devices showed "offline" for about 2 minutes after a console agent update** (and after any agent
+  crash). The systemd unit written by the service library hard-codes `RestartSec=120`. The agent now keeps a
+  drop-in, `/etc/systemd/system/uem-agent.service.d/10-beacon-restart.conf`, with `RestartSec=5`, written on
+  install and on every start (so existing devices get it with this update) and removed on uninstall. The update
+  to this version still takes 2 minutes on Linux; later ones come back in seconds.
+
 ## 2026.11.11 (2026-11-11): App usage Today and 7 days, Chrome usage on Windows
 
 ### Added

@@ -64,6 +64,7 @@ func (p *program) Start(s service.Service) error {
 		return config.Save(p.cfg, cfg)
 	}
 	if !service.Interactive() {
+		ensureFastRestart() // devices installed before the drop-in existed get it on their first start
 		a.OnUninstall = func() { selfUninstall(p.svc, p.cfg) }
 		if exe, err := os.Executable(); err == nil {
 			if resolved, err := filepath.EvalSymlinks(exe); err == nil {
@@ -100,6 +101,7 @@ func selfUninstall(s service.Service, cfgPath string) {
 	if err := s.Uninstall(); err != nil {
 		slog.Error("service uninstall failed", "err", err)
 	}
+	removeFastRestart()
 	_ = s.Stop()
 	os.Exit(0)
 }
@@ -154,6 +156,12 @@ func main() {
 	case "install", "uninstall", "start", "stop", "restart":
 		if err := service.Control(svc, cmd); err != nil {
 			fatal(err)
+		}
+		switch cmd {
+		case "install":
+			ensureFastRestart()
+		case "uninstall":
+			removeFastRestart()
 		}
 		fmt.Printf("uem-agent: %s ok\n", cmd)
 	case "status":

@@ -38,6 +38,7 @@ import (
 )
 
 type env struct {
+	core  *core.Core
 	srv   *httptest.Server
 	store *store.Store
 	audit *audit.Log
@@ -70,7 +71,7 @@ func setup(t *testing.T) *env {
 	sched := scheduler.New(c)
 	srv := httptest.NewServer(api.New(api.Config{AllowSignup: true, AgentDistDir: dist}, c, sched).Handler())
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, store: st, audit: al, dist: dist}
+	return &env{core: c, srv: srv, store: st, audit: al, dist: dist}
 }
 
 // checkTestDB refuses any database whose name doesn't end in "_test": the

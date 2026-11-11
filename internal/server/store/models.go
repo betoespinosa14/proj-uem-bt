@@ -285,6 +285,7 @@ type Dashboard struct {
 	Posture        Posture        `json:"posture"`
 	AgentVersions  []VersionCount `json:"agent_versions"`
 	LatestAgent    string         `json:"latest_agent"` // set by the API from the published agent builds
+	Trend          []Snapshot     `json:"trend"`        // daily history, oldest first; set by the API
 }
 
 // HealthIssue is one device needing attention on the Device health card.

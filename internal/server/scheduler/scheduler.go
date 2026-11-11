@@ -62,6 +62,11 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	go s.every(ctx, 15*time.Second, s.markOffline)
 	go s.every(ctx, time.Minute, s.expireCommands)
 	go s.every(ctx, time.Hour, s.retention)
+	// Dashboard trends: today's figures now, then refreshed every hour.
+	go func() {
+		s.snapshot(ctx)
+		s.every(ctx, time.Hour, s.snapshot)
+	}()
 	return nil
 }
 
@@ -187,8 +192,17 @@ func (s *Scheduler) expireCommands(ctx context.Context) {
 	}
 }
 
+func (s *Scheduler) snapshot(ctx context.Context) {
+	if err := s.core.SnapshotFleet(ctx, time.Now()); err != nil && ctx.Err() == nil {
+		slog.Error("dashboard snapshot", "err", err)
+	}
+}
+
 func (s *Scheduler) retention(ctx context.Context) {
 	now := time.Now()
+	if err := s.core.Store.PurgeSnapshots(ctx, now.Add(-core.SnapshotRetention)); err != nil {
+		slog.Error("purge dashboard snapshots", "err", err)
+	}
 	if err := s.core.Store.PurgeTelemetry(ctx, now.Add(-30*24*time.Hour)); err != nil {
 		slog.Error("purge telemetry", "err", err)
 	}

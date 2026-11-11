@@ -24,7 +24,7 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
-import { agentOutdated, api, qk, type Command, type Dashboard } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type Dashboard, type FleetSnapshot } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
 import { cn, formatDuration, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -128,15 +128,38 @@ const tileTone: Record<Tone, { tile: string; value: string; icon: string }> = {
 
 function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) => string }) {
   const pct = data.devices_total > 0 ? Math.round((data.compliant / data.devices_total) * 100) : null;
-  const tiles: { label: string; value: React.ReactNode; sub?: string; icon: LucideIcon; tone: Tone; href: string }[] = [
-    { label: "Devices", value: data.devices_total, icon: Monitor, tone: "brand", href: inGroup("/devices") },
-    { label: "Online", value: data.online, icon: Wifi, tone: "success", href: inGroup("/devices?status=online") },
+  const tiles: {
+    label: string;
+    value: React.ReactNode;
+    sub?: string;
+    icon: LucideIcon;
+    tone: Tone;
+    href: string;
+    trend: TrendSpec;
+  }[] = [
+    {
+      label: "Devices",
+      value: data.devices_total,
+      icon: Monitor,
+      tone: "brand",
+      href: inGroup("/devices"),
+      trend: { pick: (n) => n.devices, better: "none" },
+    },
+    {
+      label: "Online",
+      value: data.online,
+      icon: Wifi,
+      tone: "success",
+      href: inGroup("/devices?status=online"),
+      trend: { pick: (n) => n.online, better: "up" },
+    },
     {
       label: "Offline",
       value: data.offline,
       icon: WifiOff,
       tone: data.offline > 0 ? "warning" : "default",
       href: inGroup("/devices?status=offline"),
+      trend: { pick: (n) => n.offline, better: "down" },
     },
     {
       label: "Compliant",
@@ -145,8 +168,16 @@ function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) =>
       icon: CheckCircle2,
       tone: data.non_compliant > 0 ? "danger" : "success",
       href: inGroup("/devices?compliance=non_compliant"),
+      trend: { pick: (n) => (n.devices ? Math.round((n.compliant / n.devices) * 100) : 0), better: "up", unit: "pts", suffix: "%" },
     },
-    { label: "Open alerts", value: data.open_alerts, icon: Bell, tone: data.open_alerts > 0 ? "danger" : "default", href: "/alerts" },
+    {
+      label: "Open alerts",
+      value: data.open_alerts,
+      icon: Bell,
+      tone: data.open_alerts > 0 ? "danger" : "default",
+      href: "/alerts",
+      trend: { pick: (n) => n.open_alerts, better: "down" },
+    },
   ];
   return (
     <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -167,10 +198,88 @@ function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) =>
             </span>
             <span className={cn("text-3xl font-semibold tracking-tight tabular", tone.value)}>{t.value}</span>
             {t.sub && <span className={cn("text-xs", t.tone === "danger" ? "font-medium text-destructive" : "text-muted-foreground")}>{t.sub}</span>}
+            <Trend history={data.trend} spec={t.trend} className="mt-auto pt-2" />
           </Link>
         );
       })}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trends: a 30-day sparkline and the change against a week ago
+// ---------------------------------------------------------------------------
+
+type TrendSpec = {
+  pick: (n: FleetSnapshot) => number;
+  /** Which direction is good news; "none" shows the change in grey. */
+  better: "up" | "down" | "none";
+  /** Unit of the change, e.g. "pts" for a percentage. */
+  unit?: string;
+  /** Appended to values in the hover titles, e.g. "%". */
+  suffix?: string;
+};
+
+/** A local date as YYYY-MM-DD (toISOString would shift it to UTC, a day early in Manila). */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+const shortDay = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+function Trend({ history, spec, className }: { history: FleetSnapshot[]; spec: TrendSpec; className?: string }) {
+  if (history.length < 2) {
+    return (
+      <span className={cn("text-xs text-muted-foreground", className)}>
+        Trend builds daily from {shortDay(history[0]?.day ?? ymd(new Date()))}
+      </span>
+    );
+  }
+  const values = history.map(spec.pick);
+  const last = values[values.length - 1]!;
+  // Compare with 7 days ago, or the oldest day we have when the history is shorter.
+  const weekAgo = new Date(`${history[history.length - 1]!.day}T00:00:00`);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const target = ymd(weekAgo);
+  const baseIndex = Math.max(0, history.findIndex((n) => n.day >= target));
+  const base = values[baseIndex]!;
+  const diff = last - base;
+  const since = history[baseIndex]!.day === target ? "last week" : shortDay(history[baseIndex]!.day);
+  const good = spec.better === "none" || diff === 0 ? null : (diff > 0) === (spec.better === "up");
+  return (
+    <span className={cn("flex items-center gap-2", className)}>
+      <Sparkline values={values} days={history.map((n) => n.day)} suffix={spec.suffix ?? ""} />
+      <span
+        className={cn(
+          "whitespace-nowrap text-xs tabular",
+          good === null ? "text-muted-foreground" : good ? "font-medium text-success dark:text-neon" : "font-medium text-destructive",
+        )}
+      >
+        {diff === 0 ? "– same" : `${diff > 0 ? "▲" : "▼"} ${Math.abs(diff)}${spec.unit ? ` ${spec.unit}` : ""}`}
+        <span className="font-normal text-muted-foreground"> vs {since}</span>
+      </span>
+    </span>
+  );
+}
+
+/** A small line of daily values; hover a point for its day and value. */
+function Sparkline({ values, days, suffix }: { values: number[]; days: string[]; suffix: string }) {
+  const w = 96;
+  const h = 24;
+  const pad = 3;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const x = (i: number) => pad + (i * (w - 2 * pad)) / Math.max(1, values.length - 1);
+  const y = (v: number) => (max === min ? h / 2 : h - pad - ((v - min) * (h - 2 * pad)) / (max - min));
+  const path = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const lastI = values.length - 1;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0 overflow-visible" aria-hidden>
+      <path d={path} fill="none" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      {values.map((v, i) => (
+        <circle key={days[i]} cx={x(i)} cy={y(v)} r={i === lastI ? 2.5 : 6} fill={i === lastI ? "hsl(var(--foreground))" : "transparent"}>
+          <title>{`${shortDay(days[i]!)}: ${v}${suffix}`}</title>
+        </circle>
+      ))}
+    </svg>
   );
 }
 
@@ -459,16 +568,35 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
     ? data.agent_versions.filter((v) => v.version && !agentOutdated(v.version, data.latest_agent)).reduce((n, v) => n + v.count, 0)
     : null;
   const release = data.latest_agent.split("-")[0];
-  const meters: { label: string; good: number | null; icon: LucideIcon; href: string; note?: string }[] = [
-    { label: "Disk encryption", good: data.posture.encrypted, icon: Lock, href: inGroup("/devices?posture=unencrypted") },
-    { label: "Firewall on", good: data.posture.firewall, icon: BrickWall, href: inGroup("/devices?posture=firewall_off") },
-    { label: "Antivirus", good: data.posture.antivirus, icon: Bug, href: inGroup("/devices?posture=no_antivirus") },
+  const meters: { label: string; good: number | null; icon: LucideIcon; href: string; note?: string; trend: TrendSpec }[] = [
+    {
+      label: "Disk encryption",
+      good: data.posture.encrypted,
+      icon: Lock,
+      href: inGroup("/devices?posture=unencrypted"),
+      trend: { pick: (n) => n.encrypted, better: "up" },
+    },
+    {
+      label: "Firewall on",
+      good: data.posture.firewall,
+      icon: BrickWall,
+      href: inGroup("/devices?posture=firewall_off"),
+      trend: { pick: (n) => n.firewall, better: "up" },
+    },
+    {
+      label: "Antivirus",
+      good: data.posture.antivirus,
+      icon: Bug,
+      href: inGroup("/devices?posture=no_antivirus"),
+      trend: { pick: (n) => n.antivirus, better: "up" },
+    },
     {
       label: "OS up to date",
       good: total - data.posture.updates_pending - (total - data.posture.reported),
       icon: Download,
       href: inGroup("/devices?posture=updates_pending"),
       note: data.posture.updates_pending ? `${data.posture.updates_pending} with pending updates` : undefined,
+      trend: { pick: (n) => n.reported - n.updates_pending, better: "up" },
     },
     {
       label: "Latest agent",
@@ -476,6 +604,7 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
       icon: ArrowUpCircle,
       href: inGroup("/devices"),
       note: data.latest_agent ? `Version ${release}` : "No agent build published",
+      trend: { pick: (n) => n.agent_current, better: "up" },
     },
   ];
   return (
@@ -520,6 +649,7 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
                     style={{ width: `${ratio * 100}%` }}
                   />
                 </span>
+                <Trend history={data.trend} spec={m.trend} />
               </Link>
             );
           })}

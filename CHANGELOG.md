@@ -10,6 +10,10 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Dashboard trends.** The server records the Dashboard's figures every hour (one snapshot per day, for all
+  departments and for each one, kept for 400 days). Each headline tile and Security posture meter shows a 30-day
+  sparkline and the change against a week ago, green when it's good news and red when it isn't. History starts on
+  the day this release is installed.
 - **Dashboard redesign.** Headline tiles that turn amber or red when there's a problem; a **Department** filter
   that narrows the whole page; **Needs attention** combines failing compliance rules and open alerts, shows each
   finding in full (no more "…") and lets you **Resolve** an alert or **Re-check compliance** from the card;

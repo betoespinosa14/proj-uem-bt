@@ -453,6 +453,25 @@ export type Dashboard = {
   posture: { reported: number; encrypted: number; firewall: number; antivirus: number; updates_pending: number };
   agent_versions: { version: string; count: number }[];
   latest_agent: string;
+  /** Daily history (server local date), oldest first, up to 30 days. */
+  trend: FleetSnapshot[];
+};
+
+export type FleetSnapshot = {
+  day: string;
+  devices: number;
+  online: number;
+  offline: number;
+  compliant: number;
+  non_compliant: number;
+  open_alerts: number;
+  reported: number;
+  encrypted: number;
+  firewall: number;
+  antivirus: number;
+  updates_pending: number;
+  agent_current: number;
+  health_issues: number;
 };
 
 export type AuditEntry = {

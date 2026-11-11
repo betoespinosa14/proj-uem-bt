@@ -27,6 +27,13 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if m, err := agentdist.Load(s.cfg.AgentDistDir); err == nil {
 		d.LatestAgent = m.Version
 	}
+	if d.Trend, err = s.core.Trend(r.Context(), orgOf(r), r.URL.Query().Get("group_id"), time.Now()); err != nil {
+		fail(w, err)
+		return
+	}
+	if d.Trend == nil {
+		d.Trend = []store.Snapshot{}
+	}
 	writeJSON(w, http.StatusOK, d)
 }
 

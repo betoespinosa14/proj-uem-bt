@@ -171,6 +171,7 @@ update themselves yet: re-run the install command on a device to upgrade it.
 
 | Area | What's included |
 |---|---|
+| **Dashboard** | Headline figures, Needs attention (failing rules and open alerts, with Resolve), Device health (full disks, busy CPU or memory, devices offline for over a day), Security posture, the operating-system mix and grouped recent activity, all filterable by department. Each headline figure and posture meter shows a 30-day trend and the change against a week ago, from a snapshot the server saves every hour (one per day, kept for 400 days). |
 | **Enrollment** | Expiring and limited-use tokens, assignable to a group. One-line installers for Linux, macOS and Windows. Each device gets its own 256-bit credential; only its hash is stored. |
 | **Inventory** | OS, version and build, kernel, CPU, RAM, disks, battery health, serial, model, network interfaces, IP and MAC, Wi-Fi SSID, logged-in users. Installed software: dpkg, rpm and snap on Linux; the application list on macOS; the Uninstall registry keys on Windows. |
 | **Security posture** | Disk encryption (BitLocker, FileVault, LUKS), firewall, antivirus (Windows Security Center), screen-lock policy, and pending OS updates. |

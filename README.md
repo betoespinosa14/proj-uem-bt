@@ -193,6 +193,8 @@ update themselves yet: re-run the install command on a device to upgrade it.
 
 - Sessions are opaque random tokens; only their SHA-256 hash is stored, which makes them revocable. Cookies are httpOnly and SameSite=Strict, CSRF uses a double-submit token, and passwords are hashed with argon2id.
 - Logins are rate-limited per IP and email. The login response takes the same time whether or not the account exists.
+- **Two-step sign-in** (optional per user): each person turns it on under their name → **Account security**, scanning a QR code with an authenticator app (Google or Microsoft Authenticator and similar; standard 6-digit TOTP codes). After the password, sign-in asks for the current code, or one of 10 one-time recovery codes. A code can't be used twice, and wrong codes are limited to 5 per sign-in attempt and 10 per 15 minutes. "Remember this browser" skips the code on that browser for 30 days; a password change or turning two-step sign-in off forgets every remembered browser. Turning it off or making new recovery codes asks for the password again. Recovery codes are stored hashed; the authenticator secret is stored in the database, so protect the database and its backups.
+- **Lost phone and recovery codes:** another owner or admin can reset that person's two-step sign-in from **Users** (owners only for another owner). As a last resort on the server: `set -a; . "$HOME/Library/Application Support/BEACON/server.env"; set +a; "$HOME/Library/Application Support/BEACON/bin/uem-server" reset-mfa <email>`. Both sign the person out everywhere and are recorded in the audit log.
 - Webhooks refuse loopback, private and link-local destinations, which blocks SSRF to cloud metadata endpoints. Set `UEM_WEBHOOK_ALLOW_PRIVATE=true` for on-premises receivers.
 - The agent config containing the device secret is mode `0600` on Linux and macOS. On Windows the installer restricts it to SYSTEM and Administrators.
 - App usage tracking monitors employee activity, so it is **off by default**. Turning it on or off is audit-logged. Inform staff before enabling it.
@@ -210,7 +212,7 @@ update themselves yet: re-run the install command on a device to upgrade it.
 
 ## Roadmap
 
-- **Phase 2:** OIDC SSO (Entra ID, Okta, Google Workspace), MFA, PDF reports and scheduled email reports, native Jira and Freshservice connectors.
+- **Phase 2:** OIDC SSO (Entra ID, Okta, Google Workspace), requiring two-step sign-in for everyone in an organization, PDF reports and scheduled email reports, native Jira and Freshservice connectors.
 - **Phase 3:** OS and third-party patch management, and software deployment (.msi, .pkg, .deb). Also BitLocker and FileVault key escrow.
 - **Phase 4:** Android Enterprise (Android Management API), kiosk mode, geofencing.
 - **Phase 5:** Apple MDM (APNs, ABM/ADE, VPP, DDM), native Windows MDM (OMA-DM), SCEP/PKI.

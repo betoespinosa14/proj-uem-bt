@@ -42,6 +42,8 @@ type Server struct {
 
 	loginLimiter  *limiter
 	enrollLimiter *limiter
+	mfaLimiter    *limiter    // wrong two-step codes per user
+	mfaPending    *challenges // sign-ins waiting for a two-step code
 }
 
 func New(cfg Config, c *core.Core, sched *scheduler.Scheduler) *Server {
@@ -52,6 +54,8 @@ func New(cfg Config, c *core.Core, sched *scheduler.Scheduler) *Server {
 		cfg: cfg, core: c, store: c.Store, audit: c.Audit, sched: sched,
 		loginLimiter:  newLimiter(10, 15*time.Minute),
 		enrollLimiter: newLimiter(30, time.Minute),
+		mfaLimiter:    newLimiter(10, 15*time.Minute),
+		mfaPending:    newChallenges(),
 	}
 }
 
@@ -79,12 +83,19 @@ func (s *Server) Handler() http.Handler {
 
 		r.Post("/auth/signup", s.signup)
 		r.Post("/auth/login", s.login)
+		r.Post("/auth/login/mfa", s.loginMFA)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireSession, s.csrf)
 
 			r.Post("/auth/logout", s.logout)
 			r.Get("/auth/me", s.me)
+			r.Get("/auth/mfa", s.mfaStatus)
+			r.Post("/auth/mfa/setup", s.mfaSetup)
+			r.Post("/auth/mfa/enable", s.mfaEnable)
+			r.Post("/auth/mfa/disable", s.mfaDisable)
+			r.Post("/auth/mfa/recovery-codes", s.mfaRecoveryCodes)
+			r.Delete("/auth/mfa/trusted-browsers", s.mfaForgetBrowsers)
 			r.Get("/live", s.live)
 			r.Get("/dashboard", s.dashboard)
 
@@ -152,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 			r.With(s.perm(auth.PermUsersWrite)).Post("/users", s.createUser)
 			r.With(s.perm(auth.PermUsersWrite)).Patch("/users/{id}", s.updateUser)
 			r.With(s.perm(auth.PermUsersWrite)).Delete("/users/{id}", s.deleteUser)
+			r.With(s.perm(auth.PermUsersWrite)).Post("/users/{id}/reset-mfa", s.resetUserMFA)
 
 			r.With(s.perm(auth.PermWebhooksWrite)).Get("/webhooks", s.listWebhooks)
 			r.With(s.perm(auth.PermWebhooksWrite)).Post("/webhooks", s.createWebhook)

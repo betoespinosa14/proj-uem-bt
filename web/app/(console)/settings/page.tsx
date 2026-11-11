@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, qk, type Me } from "@/lib/api";
@@ -149,6 +150,12 @@ export default function SettingsPage() {
                     ["Email", me.user.email],
                     ["Role", titleCase(me.user.role)],
                     ["Member since", formatDate(me.user.created_at)],
+                    [
+                      "Two-step sign-in",
+                      <Link key="mfa" href="/account" className="font-medium text-primary hover:underline">
+                        {me.user.mfa_enabled ? "On" : "Off"} · Manage
+                      </Link>,
+                    ],
                     ["Organization ID", <span key="id" className="font-mono text-xs">{me.org.id}</span>],
                     ["Latest agent on server", <span key="agent" className="font-mono text-xs">{latestAgent ?? "—"}</span>],
                   ]}

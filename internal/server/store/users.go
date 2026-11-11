@@ -9,11 +9,11 @@ import (
 
 const orgCols = `id, name, server_url, usage_tracking, idle_threshold_sec, created_at`
 
-const userCols = `id, org_id, email, name, role, password_hash, created_at, last_login_at`
+const userCols = `id, org_id, email, name, role, password_hash, created_at, last_login_at, mfa_enabled_at IS NOT NULL`
 
 func scanUser(r pgx.Row) (User, error) {
 	var u User
-	err := r.Scan(&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.LastLoginAt)
+	err := r.Scan(&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.LastLoginAt, &u.MFAEnabled)
 	return u, err
 }
 
@@ -130,11 +130,12 @@ func (s *Store) GetSession(ctx context.Context, id string) (Session, User, error
 	var u User
 	err := s.Pool.QueryRow(ctx, `
 		SELECT s.id, s.user_id, s.org_id, s.csrf_token, s.expires_at,
-		       u.id, u.org_id, u.email, u.name, u.role, u.password_hash, u.created_at, u.last_login_at
+		       u.id, u.org_id, u.email, u.name, u.role, u.password_hash, u.created_at, u.last_login_at,
+		       u.mfa_enabled_at IS NOT NULL
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1 AND s.expires_at > now()`, id).
 		Scan(&sess.ID, &sess.UserID, &sess.OrgID, &sess.CSRFToken, &sess.ExpiresAt,
-			&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.LastLoginAt)
+			&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.LastLoginAt, &u.MFAEnabled)
 	return sess, u, mapErr(err)
 }
 

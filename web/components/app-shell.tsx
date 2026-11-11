@@ -331,6 +331,7 @@ function initials(name: string) {
 }
 
 function UserMenu({ name, email, role, onLogout }: { name: string; email: string; role: string; onLogout: () => void }) {
+  const router = useRouter();
   return (
     <Dropdown>
       <DropdownTrigger>
@@ -352,6 +353,9 @@ function UserMenu({ name, email, role, onLogout }: { name: string; email: string
           <p className="mt-1 text-xs text-muted-foreground">{role}</p>
         </div>
         <DropdownSeparator />
+        <DropdownItem onSelect={() => router.push("/account")}>
+          <ShieldCheck /> Account security
+        </DropdownItem>
         <DropdownItem onSelect={onLogout}>
           <LogOut /> Sign out
         </DropdownItem>

@@ -10,6 +10,11 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Two-step sign-in for the console (optional per user).** Under your name → **Account security**, scan a QR code
+  with an authenticator app; from then on sign-in asks for the 6-digit code after the password, with 10 one-time
+  recovery codes for a lost phone. "Remember this browser for 30 days" skips the code on a trusted browser. Owners and
+  admins can reset it for someone from **Users**, and `uem-server reset-mfa <email>` does it on the server as a last
+  resort. Users shows a **2-step** badge for people who have it on. Every change is in the audit log.
 - **Nightly database backup on the office Mac Mini.** A new `com.beacon.backup` launchd job saves the whole
   database at 02:30 every night (and once after each deploy) to `~/Library/Application Support/BEACON/backups`,
   keeping 14 days. The README explains how to restore.

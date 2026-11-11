@@ -847,11 +847,15 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	// Role and password changes revoke the user's other sessions.
+	// Role and password changes revoke the user's other sessions. A new
+	// password also makes remembered browsers ask for a two-step code again.
 	if (req.Role != nil && *req.Role != target.Role) || hash != nil {
 		if id != me.ID {
 			_ = s.store.DeleteUserSessions(r.Context(), id)
 		}
+	}
+	if hash != nil {
+		_ = s.store.ForgetTrustedBrowsers(r.Context(), id)
 	}
 	s.record(r, "user.update", "user", id, map[string]any{
 		"email": u.Email, "role_from": target.Role, "role_to": u.Role, "password_changed": hash != nil})

@@ -112,6 +112,20 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.loginLimiter.reset(key)
+	if user.MFAEnabled {
+		if !s.trustedBrowser(r, user.ID) {
+			s.beginMFA(w, user)
+			return
+		}
+		s.finishLogin(w, r, user, "remembered_browser")
+		return
+	}
+	s.finishLogin(w, r, user, "password")
+}
+
+// finishLogin records a completed sign-in and starts the session. method says
+// how the second step was passed (or "password" when it is off).
+func (s *Server) finishLogin(w http.ResponseWriter, r *http.Request, user store.User, method string) {
 	org, err := s.store.GetOrg(r.Context(), user.OrgID)
 	if err != nil {
 		fail(w, err)
@@ -120,7 +134,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.TouchLogin(r.Context(), user.ID)
 	s.audit.Record(r.Context(), audit.Event{OrgID: org.ID,
 		Actor:  audit.Actor{Type: "user", ID: user.ID, Email: user.Email, IP: clientIP(r)},
-		Action: "auth.login", TargetType: "user", TargetID: user.ID})
+		Action: "auth.login", TargetType: "user", TargetID: user.ID, Details: map[string]any{"method": method}})
 	s.startSession(w, r, user, org)
 }
 

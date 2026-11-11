@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, ShieldOff, Trash2, Users } from "lucide-react";
 import { api, qk, ROLES, type Role, type User } from "@/lib/api";
 import { useMe } from "@/lib/session";
 import { relativeTime, titleCase } from "@/lib/utils";
@@ -30,6 +30,7 @@ export default function UsersPage() {
   const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.users, queryFn: api.users.list });
   const [editing, setEditing] = useState<User | "new" | null>(null);
   const [deleting, setDeleting] = useState<User | null>(null);
+  const [resetting, setResetting] = useState<User | null>(null);
   const isOwner = me?.user.role === "owner";
   const remove = useMutation({
     mutationFn: (id: string) => api.users.remove(id),
@@ -39,6 +40,15 @@ export default function UsersPage() {
       void qc.invalidateQueries({ queryKey: qk.users });
     },
     onError: (e) => toast.error("Couldn't remove user", e),
+  });
+  const resetMfa = useMutation({
+    mutationFn: (id: string) => api.users.resetMfa(id),
+    onSuccess: () => {
+      toast.success("Two-step sign-in reset", "They can sign in with their password and turn it on again.");
+      setResetting(null);
+      void qc.invalidateQueries({ queryKey: qk.users });
+    },
+    onError: (e) => toast.error("Couldn't reset two-step sign-in", e),
   });
 
   return (
@@ -77,7 +87,7 @@ export default function UsersPage() {
                   <TH>User</TH>
                   <TH>Role</TH>
                   <TH className="hidden md:table-cell">Last sign-in</TH>
-                  <TH className="w-24" />
+                  <TH className="w-32" />
                 </TR>
               </THead>
               <TBody>
@@ -93,7 +103,14 @@ export default function UsersPage() {
                         <p className="text-xs text-muted-foreground">{u.email}</p>
                       </TD>
                       <TD>
-                        <Badge variant={u.role === "owner" ? "primary" : "outline"}>{titleCase(u.role)}</Badge>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant={u.role === "owner" ? "primary" : "outline"}>{titleCase(u.role)}</Badge>
+                          {u.mfa_enabled && (
+                            <Badge variant="success" title="Two-step sign-in is on">
+                              2-step
+                            </Badge>
+                          )}
+                        </div>
                       </TD>
                       <TD className="hidden text-muted-foreground md:table-cell">{u.last_login_at ? relativeTime(u.last_login_at) : "Never"}</TD>
                       <TD>
@@ -102,6 +119,17 @@ export default function UsersPage() {
                             <Button variant="ghost" size="icon-sm" onClick={() => setEditing(u)} aria-label={`Edit ${u.email}`}>
                               <Pencil />
                             </Button>
+                            {!self && u.mfa_enabled && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => setResetting(u)}
+                                aria-label={`Reset two-step sign-in for ${u.email}`}
+                                title="Reset two-step sign-in"
+                              >
+                                <ShieldOff />
+                              </Button>
+                            )}
                             {!self && (
                               <Button variant="ghost" size="icon-sm" onClick={() => setDeleting(u)} aria-label={`Remove ${u.email}`}>
                                 <Trash2 />
@@ -127,6 +155,15 @@ export default function UsersPage() {
         confirmLabel="Remove user"
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
+      />
+      <ConfirmDialog
+        open={!!resetting}
+        onOpenChange={(o) => !o && setResetting(null)}
+        title={`Reset two-step sign-in for ${resetting?.email}?`}
+        description="Use this when they've lost their phone and recovery codes. Two-step sign-in is turned off and they're signed out everywhere. Their password alone then signs them in until they turn it on again."
+        confirmLabel="Reset two-step sign-in"
+        loading={resetMfa.isPending}
+        onConfirm={() => resetting && resetMfa.mutate(resetting.id)}
       />
     </>
   );

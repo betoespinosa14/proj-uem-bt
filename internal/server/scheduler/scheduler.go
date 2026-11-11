@@ -198,4 +198,7 @@ func (s *Scheduler) retention(ctx context.Context) {
 	if err := s.core.Store.PurgeExpiredSessions(ctx, now); err != nil {
 		slog.Error("purge sessions", "err", err)
 	}
+	if err := s.core.Store.PurgeExpiredTrustedBrowsers(ctx, now); err != nil {
+		slog.Error("purge remembered browsers", "err", err)
+	}
 }

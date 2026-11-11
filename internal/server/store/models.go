@@ -25,6 +25,7 @@ type User struct {
 	PasswordHash string     `json:"-"`
 	CreatedAt    time.Time  `json:"created_at"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
+	MFAEnabled   bool       `json:"mfa_enabled"`
 }
 
 type Session struct {

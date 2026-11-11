@@ -38,11 +38,20 @@ export type User = {
   role: Role;
   created_at: string;
   last_login_at: string | null;
+  mfa_enabled: boolean;
 };
 
 export type Org = { id: string; name: string; server_url: string; usage_tracking: boolean; idle_threshold_sec: number; created_at: string };
 
 export type Me = { user: User; org: Org; permissions: string[] };
+
+/** A correct password either signs in, or asks for a two-step code first. */
+export type LoginResult = Me | { mfa_required: true };
+export const needsCode = (r: LoginResult): r is { mfa_required: true } => "mfa_required" in r;
+
+export type MfaStatus = { enabled: boolean; enabled_at: string | null; recovery_codes_left: number; trusted_browsers: number };
+export type MfaSetup = { secret: string; uri: string };
+export type RecoveryCodes = { recovery_codes: string[] };
 
 export type DeviceStatus = "online" | "offline";
 export type ComplianceState = "compliant" | "non_compliant" | "unknown";
@@ -520,7 +529,7 @@ export function getCookie(name: string): string | null {
   return null;
 }
 
-const NO_REDIRECT_PATHS = ["/api/auth/login", "/api/auth/signup", "/api/auth/logout"];
+const NO_REDIRECT_PATHS = ["/api/auth/login", "/api/auth/login/mfa", "/api/auth/signup", "/api/auth/logout"];
 const PUBLIC_PAGES = ["/login", "/signup"];
 
 let redirecting = false;
@@ -612,9 +621,18 @@ export const api = {
   auth: {
     signup: (b: { org_name: string; name: string; email: string; password: string }) =>
       post<Me>("/api/auth/signup", b),
-    login: (b: { email: string; password: string }) => post<Me>("/api/auth/login", b),
+    login: (b: { email: string; password: string }) => post<LoginResult>("/api/auth/login", b),
+    loginCode: (b: { code: string; remember: boolean }) => post<Me>("/api/auth/login/mfa", b),
     logout: () => post<Ok>("/api/auth/logout"),
     me: () => get<Me>("/api/auth/me"),
+    mfa: {
+      status: () => get<MfaStatus>("/api/auth/mfa"),
+      setup: () => post<MfaSetup>("/api/auth/mfa/setup"),
+      enable: (code: string) => post<RecoveryCodes>("/api/auth/mfa/enable", { code }),
+      disable: (password: string) => post<Ok>("/api/auth/mfa/disable", { password }),
+      newRecoveryCodes: (password: string) => post<RecoveryCodes>("/api/auth/mfa/recovery-codes", { password }),
+      forgetBrowsers: () => del<Ok>("/api/auth/mfa/trusted-browsers"),
+    },
   },
   dashboard: () => get<Dashboard>("/api/dashboard"),
   devices: {
@@ -686,6 +704,7 @@ export const api = {
     create: (b: UserInput) => post<User>("/api/users", b),
     update: (id: string, b: UserPatch) => patch<User>(`/api/users/${enc(id)}`, b),
     remove: (id: string) => del<Ok>(`/api/users/${enc(id)}`),
+    resetMfa: (id: string) => post<Ok>(`/api/users/${enc(id)}/reset-mfa`),
   },
   webhooks: {
     list: () => get<Items<Webhook>>("/api/webhooks"),
@@ -724,6 +743,7 @@ export function errorMessage(err: unknown): string {
 /** Query keys, centralised so the live hook can patch/invalidate them. */
 export const qk = {
   me: ["me"] as const,
+  mfa: ["mfa"] as const,
   dashboard: ["dashboard"] as const,
   devices: (f?: DeviceFilters) => (f ? (["devices", f] as const) : (["devices"] as const)),
   device: (id: string) => ["device", id] as const,

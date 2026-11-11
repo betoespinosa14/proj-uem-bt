@@ -48,6 +48,10 @@ func New(c *core.Core) *Scheduler {
 	}
 }
 
+// SnapshotStartDelay gives agents time to reconnect after a server start before the
+// first Dashboard snapshot is taken.
+const SnapshotStartDelay = 5 * time.Minute
+
 // Start loads tasks and begins the cron and housekeeping loops.
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.ctx = ctx
@@ -62,8 +66,15 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	go s.every(ctx, 15*time.Second, s.markOffline)
 	go s.every(ctx, time.Minute, s.expireCommands)
 	go s.every(ctx, time.Hour, s.retention)
-	// Dashboard trends: today's figures now, then refreshed every hour.
+	// Dashboard trends: today's figures, refreshed every hour. The first one waits a few
+	// minutes: at start every device is marked offline until its agent reconnects, and a
+	// snapshot taken then would record the whole fleet as offline.
 	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(SnapshotStartDelay):
+		}
 		s.snapshot(ctx)
 		s.every(ctx, time.Hour, s.snapshot)
 	}()

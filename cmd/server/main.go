@@ -96,6 +96,9 @@ func run() error {
 
 	publicURL := env("UEM_PUBLIC_URL", "")
 	c.PublicURL = publicURL
+	if f := os.Getenv("UEM_FALLBACK_URLS"); f != "" {
+		c.FallbackURLs = strings.Split(f, ",")
+	}
 	c.AgentDist = env("UEM_AGENT_DIST", "dist")
 	var origins []string
 	if o := os.Getenv("UEM_ALLOWED_ORIGINS"); o != "" {

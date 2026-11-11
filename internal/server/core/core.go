@@ -33,6 +33,9 @@ type Core struct {
 	// PublicURL is the server address agents should use when the org
 	// hasn't set one (UEM_PUBLIC_URL).
 	PublicURL string
+	// FallbackURLs are other addresses of this server that agents use while
+	// the main one is unreachable (UEM_FALLBACK_URLS).
+	FallbackURLs []string
 	// AgentDist is the directory with the agent builds and their manifest (UEM_AGENT_DIST).
 	AgentDist string
 }
@@ -233,11 +236,19 @@ func (c *Core) PolicyFor(ctx context.Context, deviceID string) protocol.Policy {
 	if serverURL == "" {
 		serverURL = c.PublicURL
 	}
+	serverURL = strings.TrimRight(serverURL, "/")
+	var fallbacks []string
+	for _, f := range c.FallbackURLs {
+		if f = strings.TrimRight(strings.TrimSpace(f), "/"); f != "" && !strings.EqualFold(f, serverURL) {
+			fallbacks = append(fallbacks, f)
+		}
+	}
 	return protocol.Policy{
+		FallbackURLs:         fallbacks,
 		BlockedApps:          apps,
 		UsageTracking:        org.UsageTracking,
 		IdleThresholdSec:     org.IdleThresholdSec,
-		ServerURL:            strings.TrimRight(serverURL, "/"),
+		ServerURL:            serverURL,
 		TelemetryIntervalSec: int(c.TelemetryInterval.Seconds()),
 		InventoryIntervalSec: int(c.InventoryInterval.Seconds()),
 	}

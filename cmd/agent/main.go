@@ -63,6 +63,10 @@ func (p *program) Start(s service.Service) error {
 		cfg.ServerURL = url
 		return config.Save(p.cfg, cfg)
 	}
+	a.SaveFallbacks = func(urls []string) error {
+		cfg.FallbackURLs = urls
+		return config.Save(p.cfg, cfg)
+	}
 	if !service.Interactive() {
 		ensureFastRestart() // devices installed before the drop-in existed get it on their first start
 		a.OnUninstall = func() { selfUninstall(p.svc, p.cfg) }

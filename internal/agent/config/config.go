@@ -13,6 +13,9 @@ type Config struct {
 	ServerURL    string `json:"server_url"`
 	DeviceID     string `json:"device_id"`
 	DeviceSecret string `json:"device_secret"`
+	// FallbackURLs are other addresses of the server, announced in its policy,
+	// used while ServerURL is unreachable.
+	FallbackURLs []string `json:"fallback_urls,omitempty"`
 }
 
 var ErrNotEnrolled = errors.New("agent is not enrolled; run `uem-agent enroll --server URL --token TOKEN`")

@@ -53,6 +53,14 @@ Agents only make *outgoing* connections to the server address they know. A devic
 
 If the address is unreachable or rejects the device, the agent stays on its current address and retries after 10 minutes. A typo can't strand devices. This needs agents built from this version or later. Older agents keep their address until their install command is re-run.
 
+**Fallback addresses.** Set `UEM_FALLBACK_URLS` (comma-separated) to other addresses of the same server, e.g. its
+public IP next to its DNS name (`UEM_FALLBACK_URLS=https://203.0.113.5`). Agents receive the list in their policy
+and keep it. After 3 failed connections in a row to the main address (about a minute), an agent connects through
+the first fallback whose `/healthz` answers. It never saves the fallback as its address: it re-checks the main
+address every 5 minutes and returns as soon as it answers. This covers DNS problems (an outage at the DNS provider,
+a lapsed domain, a network whose DNS can't resolve the name), not the server itself being down. Each fallback needs
+a certificate agents trust.
+
 **Running on a single machine behind office port forwarding** (no Docker):
 1. Network admin:
    - reserve the machine's LAN IP;

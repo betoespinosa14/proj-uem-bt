@@ -93,6 +93,9 @@ func (a *Agent) serverTarget() (string, bool) {
 	if a.trialURL != "" {
 		return a.trialURL, true
 	}
+	if a.fallbackURL != "" {
+		return a.fallbackURL, false
+	}
 	return a.cfg.ServerURL, false
 }
 

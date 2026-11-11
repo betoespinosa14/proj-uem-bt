@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.13 (2026-11-11): Fallback server addresses for agents
+
+### Added
+- **Fallback server addresses for agents** (`UEM_FALLBACK_URLS`, comma-separated). The server sends them in
+  each device's policy and agents save them. If the main address fails 3 times in a row (about a minute), for
+  example because its DNS name stops resolving, the agent connects through the first fallback that answers its
+  health check, re-checks the main address every 5 minutes, and goes back to it as soon as it answers. The main
+  address is never replaced.
+
 ## 2026.11.12 (2026-11-11): Linux agents back within seconds after an update
 
 ### Fixed

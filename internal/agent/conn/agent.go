@@ -62,6 +62,8 @@ type Agent struct {
 	// SaveServerURL persists a new server address once the agent has
 	// connected to it. When nil, the agent never changes address.
 	SaveServerURL func(url string) error
+	// SaveFallbacks persists the fallback addresses announced by the server.
+	SaveFallbacks func(urls []string) error
 
 	mu      sync.Mutex
 	policy  protocol.Policy
@@ -79,6 +81,14 @@ type Agent struct {
 	failedMoves map[string]time.Time // address → when switching to it last failed
 	endSession  context.CancelFunc   // ends the current connection
 
+	// Fallback addresses (guarded by mu); see fallback.go.
+	primaryFails int    // failed connections in a row to the main address
+	fallbackURL  string // fallback in use while the main address is unreachable
+	reconnectNow bool   // connect again without waiting (switching addresses)
+
+	health       func(ctx context.Context, server string) error // checkHealth; replaced in tests
+	primaryEvery time.Duration                                  // see primaryCheckEvery; shorter in tests
+
 	pingEvery, pingWait time.Duration // see pingInterval; shorter in tests
 }
 
@@ -91,9 +101,11 @@ func New(cfg config.Config, version string, log *slog.Logger) *Agent {
 		refresh:  make(chan struct{}, 1),
 		usage:    usage.NewTracker(runtime.GOOS),
 
-		failedMoves: map[string]time.Time{},
-		pingEvery:   pingInterval,
-		pingWait:    pingTimeout,
+		failedMoves:  map[string]time.Time{},
+		health:       checkHealth,
+		primaryEvery: primaryCheckEvery,
+		pingEvery:    pingInterval,
+		pingWait:     pingTimeout,
 	}
 }
 
@@ -119,6 +131,9 @@ func (a *Agent) Run(ctx context.Context) {
 		case errors.Is(err, errUnauthorized):
 			// Retired or credential revoked: retry rarely in case it's transient.
 			wait = 5 * time.Minute
+		}
+		if a.pickFallback(ctx) || a.takeReconnectNow() {
+			wait = 0
 		}
 		a.log.Warn("disconnected from server", "err", err, "retry_in", wait.Round(time.Second))
 		select {
@@ -148,6 +163,9 @@ func wsURL(server string) string {
 
 func (a *Agent) session(ctx context.Context) error {
 	server, trial := a.serverTarget()
+	a.mu.Lock()
+	viaFallback := !trial && server == a.fallbackURL
+	a.mu.Unlock()
 	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	c, resp, err := websocket.Dial(dialCtx, wsURL(server), &websocket.DialOptions{
@@ -161,6 +179,11 @@ func (a *Agent) session(ctx context.Context) error {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
 			return errUnauthorized
 		}
+		if viaFallback {
+			a.fallbackFailed()
+		} else {
+			a.primaryFailed()
+		}
 		return err
 	}
 	defer c.CloseNow()
@@ -168,10 +191,16 @@ func (a *Agent) session(ctx context.Context) error {
 	if trial {
 		a.moveSucceeded(server)
 	}
-	a.log.Info("connected to server", "server", server)
+	if !viaFallback {
+		a.connectedToPrimary()
+	}
+	a.log.Info("connected to server", "server", server, "fallback", viaFallback)
 
 	sctx, scancel := context.WithCancel(ctx)
 	defer scancel()
+	if viaFallback {
+		go a.watchPrimary(sctx, scancel)
+	}
 	out := make(chan []byte, 64)
 	a.mu.Lock()
 	a.endSession = scancel
@@ -264,6 +293,7 @@ func (a *Agent) readLoop(ctx context.Context, c *websocket.Conn) error {
 				a.policy = p
 				a.mu.Unlock()
 				a.log.Info("policy updated", "blocked_apps", len(p.BlockedApps), "usage_tracking", p.UsageTracking)
+				a.setFallbacks(p.FallbackURLs)
 				go a.maybeMove(ctx, p.ServerURL)
 			}
 		}

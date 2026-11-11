@@ -272,6 +272,10 @@ type Policy struct {
 	// ServerURL is the address agents should use. When it differs from
 	// theirs, agents check it is reachable and switch to it.
 	ServerURL string `json:"server_url,omitempty"`
+	// FallbackURLs are other addresses of the same server. Agents keep them
+	// and connect through one while ServerURL is unreachable (e.g. its DNS
+	// name fails), returning to ServerURL once it answers again.
+	FallbackURLs []string `json:"fallback_urls,omitempty"`
 }
 
 // Usage reports application running time accumulated since the last report.

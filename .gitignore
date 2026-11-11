@@ -6,3 +6,4 @@ web/.next/
 *.log
 /server
 /agent
+.DS_Store

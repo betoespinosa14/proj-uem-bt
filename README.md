@@ -197,12 +197,12 @@ update themselves yet: re-run the install command on a device to upgrade it.
 
 ## Known limitations
 
-- The Windows and macOS collectors are cross-compiled and reviewed, but in this milestone they have only been *executed* on Linux. Validate them on real Windows and macOS hosts before relying on them.
+- The collectors run in production on Windows 10/11, macOS and Ubuntu. Other Linux distributions and older Windows or macOS versions haven't been tested.
 - Some posture data can't be read by a system service: screen-lock state on macOS and Linux, and Wi-Fi SSID on recent macOS (redacted). These fields report unknown.
 - Login rate limits and the live-update hub are in-memory, so run a single server replica (or add a shared store) for now.
 - Active time comes from a small probe (`uem-agent session-probe`) that the agent starts in each interactive session: the console user on macOS, and the console and Remote Desktop sessions on Windows. It reads only the front app and the time since the last input. It is not available on Linux.
 - Open time counts the time an app is *running*. On macOS only an app's main process counts; widgets and background helpers don't. Menu-bar and login-item apps still count while they run, so active time is the better measure of real use.
-- To upgrade an agent, re-run its install command. An enrolled device keeps its identity. Agents don't update themselves yet.
+- Agents update themselves when you click **Update agents** in the console (or Update on a single device). Only tagged releases are offered. If an update fails, retry it, or re-run the device's install command: an enrolled device keeps its identity.
 - **Lock** on macOS sleeps the display, which locks only if "require password after sleep" is enabled. On Windows it disconnects the console session.
 
 ## Roadmap

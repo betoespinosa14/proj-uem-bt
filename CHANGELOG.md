@@ -20,6 +20,9 @@ commits after 2026.11.0, at commit `60f25a5`.
   keeping 14 days. The README explains how to restore.
 
 ### Changed
+- **The selected option in pill pickers is now easy to see.** App usage's Today / 7 days / 30 days / 90 days / 1 year
+  (and the other pill pickers on device, alert, compliance and task pages) mark the chosen option like the sidebar's
+  current page: accent-coloured bold text on an accent tint with a thin outline, in light and dark mode.
 - **Tests use their own database.** `make test` now runs against `uem_test` instead of the live `uem` database,
   and the integration tests refuse to start unless the database name ends in `_test`. Test runs no longer add
   organisations to production or apply new database changes to it before a deploy.

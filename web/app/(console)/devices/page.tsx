@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpCircle, ChevronDown, ChevronsUpDown, ChevronUp, Monitor, Search, UserPlus, X } from "lucide-react";
+import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide-react";
 import { agentOutdated, api, qk, type CommandType, type Device, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
 import { CommandDialog, useAgentLatest } from "@/components/commands";
@@ -61,35 +61,6 @@ function sortDevices(items: Device[], key: SortKey, dir: SortDir): Device[] {
     }
     return a.name.localeCompare(b.name);
   });
-}
-
-function SortButton({
-  label,
-  k,
-  sort,
-  onSort,
-}: {
-  label: string;
-  k: SortKey;
-  sort: { key: SortKey; dir: SortDir };
-  onSort: (k: SortKey) => void;
-}) {
-  const active = sort.key === k;
-  const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(k)}
-      className={cn(
-        "group -mx-1 inline-flex items-center gap-1 rounded px-1 uppercase tracking-wider hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active && "text-foreground",
-      )}
-      title={`Sort by ${label.toLowerCase()}`}
-    >
-      {label}
-      <Icon className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")} aria-hidden />
-    </button>
-  );
 }
 
 const BULK_ACTIONS: { type: CommandType; label: string }[] = [

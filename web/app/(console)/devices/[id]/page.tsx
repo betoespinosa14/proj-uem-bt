@@ -36,7 +36,7 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTri
 import { Field, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Segmented, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CommandStatusBadge,
@@ -698,10 +698,71 @@ const SOFTWARE_SOURCE: Record<string, string> = {
 // Long package lists (a Linux server can have 2,000) show this many rows until asked for all.
 const SOFTWARE_PAGE = 500;
 
+// Software sorting: name A–Z by default; dates newest first on the first click.
+// Apps with no date always go last, whichever way the column is sorted.
+type SoftwareSortKey = "name" | "installed" | "used";
+type SoftwareSort = { key: SoftwareSortKey; dir: "asc" | "desc" };
+
+function sortSoftware<T extends { name: string; install_date?: string | null; last_used?: string | null }>(items: T[], sort: SoftwareSort): T[] {
+  const sign = sort.dir === "asc" ? 1 : -1;
+  const date = (s: T) => {
+    const v = sort.key === "installed" ? s.install_date : s.last_used;
+    const t = v ? new Date(v).getTime() : NaN;
+    return Number.isNaN(t) ? null : t;
+  };
+  return [...items].sort((a, b) => {
+    if (sort.key !== "name") {
+      const da = date(a);
+      const db = date(b);
+      if (da !== db) {
+        if (da === null) return 1;
+        if (db === null) return -1;
+        return (da - db) * sign;
+      }
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) * sign;
+  });
+}
+
+// The warning banner names at most this many apps per line; "+N more" opens the Flagged filter.
+const BANNER_NAMES = 3;
+
+function FlaggedLine({ label, apps, onMore }: { label: string; apps: { name: string }[]; onMore: () => void }) {
+  const shown = apps.slice(0, BANNER_NAMES);
+  const more = apps.length - shown.length;
+  return (
+    <p className="min-w-0">
+      <span className="font-medium">
+        {label} ({apps.length}):
+      </span>{" "}
+      {shown.map((s, i) => (
+        <span key={`${s.name}-${i}`}>
+          {i > 0 && ", "}
+          <span className="inline-block max-w-[18rem] truncate align-bottom" title={s.name}>
+            {s.name}
+          </span>
+        </span>
+      ))}
+      {more > 0 && (
+        <>
+          {" "}
+          <button type="button" onClick={onMore} className="font-medium underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+            +{more} more
+          </button>
+        </>
+      )}
+    </p>
+  );
+}
+
 function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<"all" | "system" | "third_party" | "flagged">("all");
   const [showAll, setShowAll] = useState(false);
+  const [sort, setSort] = useState<SoftwareSort>({ key: "name", dir: "asc" });
+  const onSort = (key: SoftwareSortKey) =>
+    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
   const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceSoftware(id), queryFn: () => api.devices.software(id) });
   const all = useMemo(() => data?.items ?? [], [data]);
   const counts = useMemo(() => ({ system: all.filter((s) => s.category === "system").length, third_party: all.filter((s) => s.category === "third_party").length }), [all]);
@@ -710,8 +771,10 @@ function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) 
   const items = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const inCategory = (s: (typeof all)[number]) => category === "all" || (category === "flagged" ? !!s.flag : s.category === category);
-    return all.filter((s) => inCategory(s) && (!needle || `${s.name} ${s.publisher}`.toLowerCase().includes(needle)));
-  }, [all, q, category]);
+    const matched = all.filter((s) => inCategory(s) && (!needle || `${s.name} ${s.publisher}`.toLowerCase().includes(needle)));
+    // Sorted before the 500-row cap, so "newest installed" really is the newest of all of them.
+    return sort.key === "name" && sort.dir === "asc" ? matched : sortSoftware(matched, sort);
+  }, [all, q, category, sort]);
   const shown = showAll ? items : items.slice(0, SOFTWARE_PAGE);
   const copy = async (text: string, what: string) => {
     if (await copyToClipboard(text)) toast.success(`Copied ${what}`, text);
@@ -724,17 +787,9 @@ function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) 
       {(gambling.length > 0 || games.length > 0) && (
         <div role="alert" className="flex items-start gap-3 border-b border-warning/25 bg-warning/10 p-3 text-sm">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-          <div className="space-y-0.5">
-            {gambling.length > 0 && (
-              <p>
-                <span className="font-medium">Gambling apps installed ({gambling.length}):</span> {gambling.map((s) => s.name).join(", ")}
-              </p>
-            )}
-            {games.length > 0 && (
-              <p>
-                <span className="font-medium">Games installed ({games.length}):</span> {games.map((s) => s.name).join(", ")}
-              </p>
-            )}
+          <div className="min-w-0 space-y-0.5">
+            {gambling.length > 0 && <FlaggedLine label="Gambling apps installed" apps={gambling} onMore={() => setCategory("flagged")} />}
+            {games.length > 0 && <FlaggedLine label="Games installed" apps={games} onMore={() => setCategory("flagged")} />}
           </div>
         </div>
       )}
@@ -772,12 +827,18 @@ function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) 
           <Table stickyHeader>
             <THead>
               <TR>
-                <TH>Name / publisher</TH>
+                <TH>
+                  <SortButton label="Name / publisher" k="name" sort={sort} onSort={onSort} />
+                </TH>
                 <TH>Version</TH>
                 <TH>Type</TH>
                 <TH className="hidden sm:table-cell">Source</TH>
-                <TH className="hidden lg:table-cell">Installed</TH>
-                <TH className="hidden lg:table-cell">Last used</TH>
+                <TH className="hidden lg:table-cell">
+                  <SortButton label="Installed" k="installed" sort={sort} onSort={onSort} />
+                </TH>
+                <TH className="hidden lg:table-cell">
+                  <SortButton label="Last used" k="used" sort={sort} onSort={onSort} />
+                </TH>
                 <TH className="w-10" />
               </TR>
             </THead>

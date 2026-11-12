@@ -16,6 +16,8 @@ commits after 2026.11.0, at commit `60f25a5`.
   Mac App Store and so on. Apps marked as infrastructure in App usage show an **Infrastructure** badge (also in the
   CSV export). Each row has a menu to copy the name, version or both, and to jump to the device's usage. Long lists
   show the first 500 with **Show all** (a 1,931-package server renders all in about 0.2 s).
+  The **Name**, **Installed** and **Last used** headers sort (dates newest first; apps with no date go last), and
+  the games/gambling warning names at most 3 apps, with "+N more" opening the **Flagged** filter.
 
 ## 2026.11.17 (2026-11-12): One agent version across the fleet
 

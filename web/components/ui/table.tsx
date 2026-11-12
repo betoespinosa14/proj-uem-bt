@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -81,4 +82,37 @@ export function TH({ className, ...props }: React.ThHTMLAttributes<HTMLTableCell
 }
 export function TD({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
   return <td className={cn("px-2.5 py-2 align-middle", className)} {...props} />;
+}
+
+/**
+ * A column header that sorts. The arrow shows on the active column (up for
+ * ascending, down for descending) and faintly on hover for the others.
+ */
+export function SortButton<K extends string>({
+  label,
+  k,
+  sort,
+  onSort,
+}: {
+  label: string;
+  k: K;
+  sort: { key: K; dir: "asc" | "desc" };
+  onSort: (k: K) => void;
+}) {
+  const active = sort.key === k;
+  const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(k)}
+      className={cn(
+        "group -mx-1 inline-flex items-center gap-1 rounded px-1 uppercase tracking-wider hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active && "text-foreground",
+      )}
+      title={`Sort by ${label.toLowerCase()}`}
+    >
+      {label}
+      <Icon className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")} aria-hidden />
+    </button>
+  );
 }

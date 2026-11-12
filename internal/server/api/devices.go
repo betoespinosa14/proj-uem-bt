@@ -233,7 +233,7 @@ func (s *Server) exportSoftware(w http.ResponseWriter, r *http.Request) {
 	category := r.URL.Query().Get("category")
 	s.record(r, "device.software.export", "device", dev.ID, map[string]any{"device_name": dev.Name})
 	cw := csvResponse(w, "software-"+fileSafe(dev.Name))
-	_ = cw.Write([]string{"device", "name", "version", "publisher", "type", "flag", "source", "installed"})
+	_ = cw.Write([]string{"device", "name", "version", "publisher", "type", "flag", "infrastructure", "source", "installed"})
 	for _, sw := range list {
 		switch {
 		case category == "flagged" && sw.Flag == "",
@@ -247,7 +247,7 @@ func (s *Server) exportSoftware(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = cw.Write([]string{
 			csvSafe(dev.Name), csvSafe(sw.Name), csvSafe(sw.Version), csvSafe(sw.Publisher), typ, sw.Flag,
-			csvSafe(sw.Source), csvSafe(deref(sw.InstallDate)),
+			strconv.FormatBool(sw.Infrastructure), csvSafe(sw.Source), csvSafe(deref(sw.InstallDate)),
 		})
 	}
 	cw.Flush()

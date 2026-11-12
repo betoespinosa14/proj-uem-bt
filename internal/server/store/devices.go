@@ -446,12 +446,13 @@ func (s *Store) GetInventory(ctx context.Context, orgID, id string) (*protocol.I
 func (s *Store) ListSoftware(ctx context.Context, orgID, id string) ([]Software, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT s.name, s.version, s.publisher, s.source, s.install_date,
-			(SELECT max(u.last_used) FROM app_usage u WHERE u.device_id = s.device_id AND lower(u.app) = lower(s.name))
+			(SELECT max(u.last_used) FROM app_usage u WHERE u.device_id = s.device_id AND lower(u.app) = lower(s.name)),
+			lower(s.name) IN (SELECT lower(app) FROM usage_infrastructure_apps WHERE org_id = $1)
 		FROM device_software s
 		WHERE s.org_id = $1 AND s.device_id = $2 ORDER BY lower(s.name)`, orgID, id)
 	return collect(rows, err, func(r pgx.Rows) (Software, error) {
 		var sw Software
-		return sw, r.Scan(&sw.Name, &sw.Version, &sw.Publisher, &sw.Source, &sw.InstallDate, &sw.LastUsed)
+		return sw, r.Scan(&sw.Name, &sw.Version, &sw.Publisher, &sw.Source, &sw.InstallDate, &sw.LastUsed, &sw.Infrastructure)
 	})
 }
 

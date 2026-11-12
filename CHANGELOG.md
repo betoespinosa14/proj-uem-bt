@@ -9,6 +9,14 @@ commits after 2026.11.0, at commit `60f25a5`.
 
 ## Unreleased
 
+### Changed
+- **Device page Software tab.** The list scrolls with the page (no inner scroll box), with the column headers pinned
+  under the device's tab row; each app's publisher sits under its name so the table fits without sideways scrolling,
+  dates stay on one line ("9 Dec 2024", "7 min ago"), and sources read Microsoft Store, Registry, APT (dpkg),
+  Mac App Store and so on. Apps marked as infrastructure in App usage show an **Infrastructure** badge (also in the
+  CSV export). Each row has a menu to copy the name, version or both, and to jump to the device's usage. Long lists
+  show the first 500 with **Show all** (a 1,931-package server renders all in about 0.2 s).
+
 ## 2026.11.17 (2026-11-12): One agent version across the fleet
 
 ### Changed

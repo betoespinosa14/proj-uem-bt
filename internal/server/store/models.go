@@ -106,6 +106,8 @@ type Software struct {
 	LastUsed    *time.Time `json:"last_used"`      // most recent tracked use by any user
 	Category    string     `json:"category"`       // set by the API from the compliance catalog
 	Flag        string     `json:"flag,omitempty"` // set by the API from the compliance catalog
+	// Infrastructure: an admin marked this app as infrastructure in App usage.
+	Infrastructure bool `json:"infrastructure"`
 }
 
 type TelemetryPoint struct {

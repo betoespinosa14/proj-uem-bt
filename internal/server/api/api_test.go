@@ -329,8 +329,20 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 	}
 	rows, err := csv.NewReader(resp.Body).ReadAll()
 	resp.Body.Close()
-	if err != nil || len(rows) != 2 || rows[0][1] != "name" || rows[1][1] != "curl" || rows[1][4] != "Third-party" {
+	if err != nil || len(rows) != 2 || rows[0][1] != "name" || rows[1][1] != "curl" || rows[1][4] != "Third-party" || rows[1][6] != "false" {
 		t.Fatalf("software.csv rows = %v, err = %v", rows, err)
+	}
+	// Marking the app as infrastructure in App usage flags it on the Software tab (any case).
+	a.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "CURL"}, 204, nil)
+	var sw struct {
+		Items []struct {
+			Name           string
+			Infrastructure bool
+		}
+	}
+	a.do("GET", "/api/devices/"+dev.DeviceID+"/software", nil, 200, &sw)
+	if len(sw.Items) != 1 || !sw.Items[0].Infrastructure {
+		t.Fatalf("software = %+v, want curl marked infrastructure", sw.Items)
 	}
 
 	// The dashboard lists the failing rule and counts the device as online for its OS.

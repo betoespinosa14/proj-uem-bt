@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory } from "@/lib/api";
 import { useCan } from "@/lib/session";
-import { cn, RESOURCE_LIMITS, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { cn, RESOURCE_LIMITS, copyToClipboard, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, relativeTimeShort, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -205,7 +205,7 @@ export default function DevicePage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         {/* Sticky under the 4rem top bar, edge to edge on the same background so nothing shows through. */}
-        <div className="sticky top-16 z-10 -mx-4 -my-2 flex items-center gap-3 bg-[hsl(var(--canvas-from))] px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-16 z-20 -mx-4 -my-2 flex h-14 items-center gap-3 bg-[hsl(var(--canvas-from))] px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           {compact && (
             <span className="flex min-w-0 max-w-[16rem] shrink items-center gap-2 text-sm font-semibold motion-safe:animate-fade-in">
               <span
@@ -232,7 +232,7 @@ export default function DevicePage() {
           <Hardware d={d} />
         </TabsContent>
         <TabsContent value="software">
-          <Software id={id} />
+          <Software id={id} onOpenUsage={() => setTab("usage")} />
         </TabsContent>
         <TabsContent value="usage">
           <Usage id={id} os={d.os_family} />
@@ -682,9 +682,26 @@ function Hardware({ d }: { d: DeviceDetail }) {
   );
 }
 
-function Software({ id }: { id: string }) {
+const SOFTWARE_SOURCE: Record<string, string> = {
+  msstore: "Microsoft Store",
+  registry: "Registry",
+  dpkg: "APT (dpkg)",
+  rpm: "RPM",
+  snap: "Snap",
+  flatpak: "Flatpak",
+  apple: "Apple",
+  mac_app_store: "Mac App Store",
+  identified_developer: "Developer ID",
+  unknown: "Unknown",
+};
+
+// Long package lists (a Linux server can have 2,000) show this many rows until asked for all.
+const SOFTWARE_PAGE = 500;
+
+function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<"all" | "system" | "third_party" | "flagged">("all");
+  const [showAll, setShowAll] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceSoftware(id), queryFn: () => api.devices.software(id) });
   const all = useMemo(() => data?.items ?? [], [data]);
   const counts = useMemo(() => ({ system: all.filter((s) => s.category === "system").length, third_party: all.filter((s) => s.category === "third_party").length }), [all]);
@@ -695,9 +712,15 @@ function Software({ id }: { id: string }) {
     const inCategory = (s: (typeof all)[number]) => category === "all" || (category === "flagged" ? !!s.flag : s.category === category);
     return all.filter((s) => inCategory(s) && (!needle || `${s.name} ${s.publisher}`.toLowerCase().includes(needle)));
   }, [all, q, category]);
+  const shown = showAll ? items : items.slice(0, SOFTWARE_PAGE);
+  const copy = async (text: string, what: string) => {
+    if (await copyToClipboard(text)) toast.success(`Copied ${what}`, text);
+    else toast.error("Couldn't copy to clipboard");
+  };
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   return (
-    <Card className="overflow-hidden">
+    // The column headers pin under the device's sticky tab row (top bar 4rem + row 3.5rem).
+    <Card className="overflow-clip [--sticky-top:7.5rem]">
       {(gambling.length > 0 || games.length > 0) && (
         <div role="alert" className="flex items-start gap-3 border-b border-warning/25 bg-warning/10 p-3 text-sm">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -745,48 +768,91 @@ function Software({ id }: { id: string }) {
       ) : items.length === 0 ? (
         <EmptyState icon={Search} title={q || category !== "all" ? "No matching software" : "No software reported"} />
       ) : (
-        <div className="max-h-[36rem] overflow-auto">
-          <Table>
-            <THead className="sticky top-0 bg-card">
+        <>
+          <Table stickyHeader>
+            <THead>
               <TR>
-                <TH>Name</TH>
+                <TH>Name / publisher</TH>
                 <TH>Version</TH>
                 <TH>Type</TH>
-                <TH className="hidden md:table-cell">Publisher</TH>
                 <TH className="hidden sm:table-cell">Source</TH>
                 <TH className="hidden lg:table-cell">Installed</TH>
                 <TH className="hidden lg:table-cell">Last used</TH>
+                <TH className="w-10" />
               </TR>
             </THead>
             <TBody>
-              {items.slice(0, 1000).map((s, i) => (
+              {shown.map((s, i) => (
                 <TR key={`${s.name}-${s.version}-${i}`}>
                   <TD className="font-medium">
-                    {s.name}
-                    {s.flag && (
-                      <Badge variant={s.flag === "gambling" ? "danger" : "warning"} className="ml-2">
-                        {s.flag === "gambling" ? "Gambling" : "Game"}
-                      </Badge>
-                    )}
+                    {/* Name (and badges) on one line, publisher below; long text is cut with "…" and shown on hover. */}
+                    <span className="flex max-w-[20rem] items-center gap-2">
+                      <span className="min-w-0 truncate" title={s.name}>
+                        {s.name}
+                      </span>
+                      {s.flag && (
+                        <Badge variant={s.flag === "gambling" ? "danger" : "warning"} className="shrink-0">
+                          {s.flag === "gambling" ? "Gambling" : "Game"}
+                        </Badge>
+                      )}
+                      {s.infrastructure && (
+                        <Badge variant="neutral" className="shrink-0" title="Marked as infrastructure in App usage">
+                          Infrastructure
+                        </Badge>
+                      )}
+                    </span>
+                    <span className="block max-w-[20rem] truncate text-xs font-normal text-muted-foreground" title={s.publisher}>
+                      {s.publisher || "Unknown publisher"}
+                    </span>
                   </TD>
-                  <TD className="font-mono text-xs">{s.version}</TD>
+                  <TD className="max-w-[10rem] truncate font-mono text-xs" title={s.version}>
+                    {s.version}
+                  </TD>
                   <TD>
                     <Badge variant={s.category === "system" ? "primary" : "outline"}>{s.category === "system" ? "System" : "Third-party"}</Badge>
                   </TD>
-                  <TD className="hidden max-w-[16rem] truncate text-muted-foreground md:table-cell">{s.publisher}</TD>
                   <TD className="hidden sm:table-cell">
-                    <Badge variant="neutral">{s.source === "msstore" ? "Microsoft Store" : s.source}</Badge>
+                    <Badge variant="neutral" className="whitespace-nowrap">
+                      {SOFTWARE_SOURCE[s.source] ?? s.source}
+                    </Badge>
                   </TD>
-                  <TD className="hidden text-muted-foreground lg:table-cell">{s.install_date ? formatDate(s.install_date) : "—"}</TD>
-                  <TD className="hidden text-muted-foreground lg:table-cell" title={s.last_used ? formatDateTime(s.last_used) : undefined}>
-                    {s.last_used ? relativeTime(s.last_used) : "—"}
+                  <TD className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">{s.install_date ? formatDate(s.install_date) : "—"}</TD>
+                  <TD className="hidden whitespace-nowrap text-muted-foreground lg:table-cell" title={s.last_used ? formatDateTime(s.last_used) : undefined}>
+                    {s.last_used ? relativeTimeShort(s.last_used) : "—"}
+                  </TD>
+                  <TD className="pr-3 text-right">
+                    <Dropdown>
+                      <DropdownTrigger>
+                        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${s.name}`}>
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownTrigger>
+                      <DropdownContent align="end">
+                        <DropdownItem onSelect={() => void copy(s.name, "name")}>Copy name</DropdownItem>
+                        {s.version && <DropdownItem onSelect={() => void copy(s.version, "version")}>Copy version</DropdownItem>}
+                        {s.version && <DropdownItem onSelect={() => void copy(`${s.name} ${s.version}`, "name and version")}>Copy name and version</DropdownItem>}
+                        {s.last_used && (
+                          <>
+                            <DropdownSeparator />
+                            <DropdownItem onSelect={onOpenUsage}>Show usage</DropdownItem>
+                          </>
+                        )}
+                      </DropdownContent>
+                    </Dropdown>
                   </TD>
                 </TR>
               ))}
             </TBody>
           </Table>
-          {items.length > 1000 && <p className="p-3 text-center text-xs text-muted-foreground">Showing the first 1,000. Refine the filter to see more.</p>}
-        </div>
+          {!showAll && items.length > SOFTWARE_PAGE && (
+            <div className="border-t border-border p-3 text-center">
+              <Button variant="outline" size="sm" onClick={() => setShowAll(true)}>
+                Show all {items.length.toLocaleString()}
+              </Button>
+              <p className="mt-1.5 text-xs text-muted-foreground">Showing the first {SOFTWARE_PAGE}. The filter above searches all of them.</p>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );

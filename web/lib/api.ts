@@ -184,6 +184,8 @@ export type SoftwareItem = {
   last_used: string | null;
   category: "system" | "third_party";
   flag?: "gambling" | "game";
+  /** Marked as infrastructure in App usage. */
+  infrastructure?: boolean;
 };
 
 export type UsagePeriod = 1 | 7 | 30 | 90 | 365;

@@ -170,7 +170,8 @@
    inset shadow stands in for the row border, which doesn't travel with them. */
 .sticky-head thead th {
   position: sticky;
-  top: 4rem;
+  /* Under the top bar by default; pages with their own sticky row set --sticky-top lower. */
+  top: var(--sticky-top, 4rem);
   z-index: 10;
   background: hsl(var(--card));
   box-shadow: inset 0 -1px 0 hsl(var(--border));

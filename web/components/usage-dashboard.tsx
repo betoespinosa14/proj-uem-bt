@@ -7,7 +7,7 @@ import type { UsageAppStat, UsageSummary } from "@/lib/api";
 import { cn, formatHours } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { ServerCog } from "lucide-react";
+import { ChevronRight, ServerCog } from "lucide-react";
 
 // One series per chart, in the brand color (--primary: dark teal on light,
 // bright teal on dark). Idle time is a neutral remainder, never a hue, and
@@ -302,6 +302,8 @@ export function Trend({
   // Mark where reporting began when the period starts with no data.
   const firstReport = points[0]?.active === null ? points.find((p) => p.active !== null)?.t : undefined;
   const lastT = points[points.length - 1]?.t ?? 0;
+  // Near the right edge the label goes on the left of the line, so it isn't cut off.
+  const reportLabelLeft = firstReport !== undefined && lastT > first && (firstReport - first) / (lastT - first) > 0.75;
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const axis = durationAxis(Math.max(0, ...points.map((p) => p.active ?? 0)));
   return (
@@ -333,7 +335,7 @@ export function Trend({
                 x={firstReport}
                 stroke="hsl(var(--muted-foreground))"
                 strokeDasharray="3 3"
-                label={{ value: "First report", position: "insideTopLeft", fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                label={{ value: "First report", position: reportLabelLeft ? "insideTopRight" : "insideTopLeft", fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
               />
             )}
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} minTickGap={40} />
@@ -487,15 +489,20 @@ export function Ranked({ rows }: { rows: RankedRow[] }) {
             </span>
           </>
         );
-        const cls = "grid grid-cols-[minmax(0,9rem)_1fr_10.5rem] items-center gap-3 rounded-lg px-2 py-1.5 text-sm";
+        const cls = "grid items-center gap-3 rounded-lg px-2 py-1.5 text-sm";
         return (
           <li key={r.key}>
             {r.onClick ? (
-              <button type="button" onClick={r.onClick} className={`${cls} w-full text-left transition-colors hover:bg-muted/60`}>
+              <button
+                type="button"
+                onClick={r.onClick}
+                className={`${cls} group/row w-full grid-cols-[minmax(0,9rem)_1fr_10.5rem_1rem] text-left transition-colors hover:bg-muted/60`}
+              >
                 {body}
+                <RowChevron />
               </button>
             ) : (
-              <div className={cls}>{body}</div>
+              <div className={`${cls} grid-cols-[minmax(0,9rem)_1fr_10.5rem]`}>{body}</div>
             )}
           </li>
         );
@@ -532,7 +539,7 @@ function ActiveVsOpen({
               type="button"
               onClick={() => onPickApp(a.app)}
               title={`${a.app}: ${formatHours(open - active)} idle — ${formatHours(active)} active of ${formatHours(open)} open`}
-              className="grid min-w-0 flex-1 grid-cols-[minmax(0,9rem)_1fr_12rem] items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
+              className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,9rem)_1fr_12rem_1rem] items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
             >
               <span className="truncate font-medium">{a.app}</span>
               <span className="flex h-2.5" style={{ width: `${Math.max(width, 2)}%` }}>
@@ -547,12 +554,23 @@ function ActiveVsOpen({
               <span className="text-right text-xs text-muted-foreground tabular">
                 <span className="font-semibold text-foreground">{formatHours(open - active)} idle</span> · {share(active, a.minutes)} active
               </span>
+              <RowChevron />
             </button>
             {onInfrastructure && <MarkInfra app={a.app} onInfrastructure={onInfrastructure} device={device} />}
           </li>
         );
       })}
     </ul>
+  );
+}
+
+/** A faint "›" on rows that open the detailed table; stronger on hover. */
+function RowChevron() {
+  return (
+    <ChevronRight
+      className="h-4 w-4 justify-self-end text-muted-foreground opacity-40 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+      aria-hidden
+    />
   );
 }
 

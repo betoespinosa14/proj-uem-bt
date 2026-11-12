@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AppWindow, Clock, LayoutDashboard, PackageX, Search, Table2, Users } from "lucide-react";
 import { api, qk, type FleetAppRow, type FleetUsageFilters, type FleetUsageRow, type UsageGroup, type UsagePeriod } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/components/toast";
-import { formatDateTime, formatHours, relativeTime } from "@/lib/utils";
+import { formatDateTime, formatHours, relativeTimeShort } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/tabs";
-import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { EmptyState, ErrorState, ExportLink, type HeadlineStat } from "@/components/common";
 import { UsageDashboard } from "@/components/usage-dashboard";
 
@@ -91,7 +91,6 @@ export function UsageExplorer({
     queryKey: qk.usageSummary(summaryFilters),
     queryFn: () => api.usage.summary(summaryFilters),
     placeholderData: (p) => p,
-    enabled: view === "dashboard",
   });
   // From the dashboard: the license-reclamation list.
   const showUnused = () => {
@@ -123,7 +122,7 @@ export function UsageExplorer({
   });
   const totals = summary.data?.totals;
   const stats: HeadlineStat[] | undefined =
-    view === "dashboard" && totals
+    totals
       ? [
           { label: "Active", value: formatHours(totals.active_seconds), icon: Activity, tone: "brand" },
           {
@@ -248,7 +247,8 @@ export function UsageExplorer({
       ) : current.error ? (
         <ErrorState error={current.error} onRetry={current.refetch} />
       ) : (
-        <Card className="overflow-hidden">
+        // The column headers pin under the top bar, and on a device page under its tab row too.
+        <Card className={scoped ? "overflow-clip [--sticky-top:7.5rem]" : "overflow-clip"}>
           {current.isLoading ? (
             <TableSkeleton rows={8} cols={6} />
           ) : count === 0 ? (
@@ -257,14 +257,14 @@ export function UsageExplorer({
               title={unused ? "Every installed third-party app was used in this period" : q ? "No matching apps" : "No app usage recorded in this period"}
             />
           ) : (
-            <div className="max-h-[40rem] overflow-auto">
+            <>
               {group === "app" ? (
                 <ByAppTable items={byApp.data?.items ?? []} infra={infraSet} scoped={scoped} noActive={noActive} />
               ) : (
                 <ByUserTable items={byUser.data?.items ?? []} days={days} infra={infraSet} scoped={scoped} noActive={noActive} />
               )}
               {count >= 10000 && <p className="p-3 text-center text-xs text-muted-foreground">Showing the first 10,000 rows. Search an app to narrow it down.</p>}
-            </div>
+            </>
           )}
         </Card>
       )}
@@ -291,10 +291,39 @@ function DashboardSkeleton() {
   );
 }
 
+// Table sorting. Numbers and dates sort highest/newest first on the first click,
+// text A–Z; empty values ("—", never used) always go last. Ties keep app order.
+type Dir = "asc" | "desc";
+type SortValue = number | string | null;
+
+function useTableSort<K extends string>(textKeys: readonly K[], initial: K) {
+  const [sort, setSort] = useState<{ key: K; dir: Dir }>({ key: initial, dir: "desc" });
+  const onSort = (key: K) =>
+    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: textKeys.includes(key) ? "asc" : "desc" }));
+  return { sort, onSort };
+}
+
+function sortRows<T extends { app: string }>(items: T[], value: (r: T) => SortValue, dir: Dir): T[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va !== vb) {
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      const c = typeof va === "string" && typeof vb === "string" ? va.localeCompare(vb, undefined, { sensitivity: "base" }) : va < vb ? -1 : va > vb ? 1 : 0;
+      if (c !== 0) return c * sign;
+    }
+    return a.app.localeCompare(b.app, undefined, { sensitivity: "base" });
+  });
+}
+
+const time = (ts: string | null) => (ts ? new Date(ts).getTime() : null);
+
 function LastUsed({ ts }: { ts: string | null }) {
   return (
-    <TD className="text-muted-foreground" title={ts ? formatDateTime(ts) : undefined}>
-      {ts ? relativeTime(ts) : "Never"}
+    <TD className="whitespace-nowrap text-muted-foreground" title={ts ? formatDateTime(ts) : undefined}>
+      {ts ? relativeTimeShort(ts) : "Never"}
     </TD>
   );
 }
@@ -311,44 +340,69 @@ function InfraBadge({ app, infra }: { app: string; infra: Set<string> }) {
 /** Active time, or "—" where it isn't measured (Linux). */
 function ActiveCell({ seconds, used, noActive }: { seconds: number; used: boolean; noActive: boolean }) {
   return (
-    <TD className="text-right font-medium tabular" title={noActive && used ? "Active time isn't measured on Linux" : undefined}>
+    <TD className="whitespace-nowrap text-right font-medium tabular" title={noActive && used ? "Active time isn't measured on Linux" : undefined}>
       {!used ? <Badge variant="warning">Unused</Badge> : noActive ? "—" : formatHours(seconds)}
     </TD>
   );
 }
 
+const APP_TEXT_KEYS = ["app"] as const;
+type AppSortKey = "app" | "active" | "open" | "users" | "installed" | "last";
+
 function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; infra: Set<string>; scoped: boolean; noActive: boolean }) {
+  const { sort, onSort } = useTableSort<AppSortKey>(APP_TEXT_KEYS, "active");
+  const rows = useMemo(() => {
+    const value = (u: FleetAppRow): SortValue => {
+      const used = u.users > 0;
+      switch (sort.key) {
+        case "app":
+          return u.app;
+        case "active": // Linux has no active time: rank by open time instead.
+          return used ? (noActive ? u.minutes : u.active_seconds) : null;
+        case "open":
+          return used ? u.minutes : null;
+        case "users":
+          return u.users;
+        case "installed":
+          return scoped ? (u.installed_on ? 1 : 0) : u.devices;
+        case "last":
+          return time(u.last_used);
+      }
+    };
+    return sortRows(items, value, sort.dir);
+  }, [items, sort, scoped, noActive]);
+  const head = (label: string, k: AppSortKey) => <SortButton label={label} k={k} sort={sort} onSort={onSort} />;
   return (
-    <Table>
-      <THead className="sticky top-0 bg-card">
+    <Table stickyHeader>
+      <THead>
         <TR>
-          <TH>App</TH>
+          <TH>{head("App", "app")}</TH>
           <TH className="text-right" title={ACTIVE_HINT}>
-            Active
+            {head("Active", "active")}
           </TH>
           <TH className="text-right" title={OPEN_HINT}>
-            Open
+            {head("Open", "open")}
           </TH>
-          <TH className="text-right">Users</TH>
+          <TH className="text-right">{head("Users", "users")}</TH>
           {scoped ? (
-            <TH title="Whether the app is in this device's installed software list">Installed</TH>
+            <TH title="Whether the app is in this device's installed software list">{head("Installed", "installed")}</TH>
           ) : (
             <TH className="text-right" title="Devices it was used on in this period, of the devices it is installed on">
-              Used on / installed on
+              {head("Used on / installed on", "installed")}
             </TH>
           )}
-          <TH>Last used</TH>
+          <TH>{head("Last used", "last")}</TH>
         </TR>
       </THead>
       <TBody>
-        {items.map((u) => (
+        {rows.map((u) => (
           <TR key={u.app}>
             <TD className="font-medium">
               {u.app}
               <InfraBadge app={u.app} infra={infra} />
             </TD>
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
-            <TD className="text-right tabular text-muted-foreground">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
+            <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
             <TD className="text-right tabular">{u.users}</TD>
             {scoped ? (
               <TD className={u.installed_on ? "" : "text-muted-foreground"}>{u.installed_on ? "Yes" : "No"}</TD>
@@ -365,6 +419,9 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
   );
 }
 
+const USER_TEXT_KEYS = ["app", "device", "user"] as const;
+type UserSortKey = "app" | "device" | "user" | "active" | "open" | "days" | "last";
+
 function ByUserTable({
   items,
   days,
@@ -378,25 +435,49 @@ function ByUserTable({
   scoped: boolean;
   noActive: boolean;
 }) {
+  const { sort, onSort } = useTableSort<UserSortKey>(USER_TEXT_KEYS, "active");
+  const rows = useMemo(() => {
+    const value = (u: FleetUsageRow): SortValue => {
+      const used = !!u.user;
+      switch (sort.key) {
+        case "app":
+          return u.app;
+        case "device":
+          return u.device_name;
+        case "user":
+          return u.user || null;
+        case "active":
+          return used ? (noActive ? u.minutes : u.active_seconds) : null;
+        case "open":
+          return used ? u.minutes : null;
+        case "days":
+          return used ? u.days_used : null;
+        case "last":
+          return time(u.last_used);
+      }
+    };
+    return sortRows(items, value, sort.dir);
+  }, [items, sort, noActive]);
+  const head = (label: string, k: UserSortKey) => <SortButton label={label} k={k} sort={sort} onSort={onSort} />;
   return (
-    <Table>
-      <THead className="sticky top-0 bg-card">
+    <Table stickyHeader>
+      <THead>
         <TR>
-          <TH>App</TH>
-          {!scoped && <TH>Device</TH>}
-          <TH>User</TH>
+          <TH>{head("App", "app")}</TH>
+          {!scoped && <TH>{head("Device", "device")}</TH>}
+          <TH>{head("User", "user")}</TH>
           <TH className="text-right" title={ACTIVE_HINT}>
-            Active
+            {head("Active", "active")}
           </TH>
           <TH className="text-right" title={OPEN_HINT}>
-            Open
+            {head("Open", "open")}
           </TH>
-          <TH className="text-right">Days used</TH>
-          <TH>Last used</TH>
+          <TH className="text-right">{head("Days used", "days")}</TH>
+          <TH>{head("Last used", "last")}</TH>
         </TR>
       </THead>
       <TBody>
-        {items.map((u) => (
+        {rows.map((u) => (
           <TR key={`${u.device_id}-${u.app}-${u.user}`}>
             <TD className="font-medium">
               {u.app}
@@ -416,8 +497,8 @@ function ByUserTable({
             )}
             <TD className={u.user ? "" : "text-muted-foreground"}>{u.user || "—"}</TD>
             <ActiveCell seconds={u.active_seconds} used={!!u.user} noActive={noActive} />
-            <TD className="text-right tabular text-muted-foreground">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
-            <TD className="text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>
+            <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
+            <TD className="whitespace-nowrap text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>
             <LastUsed ts={u.last_used} />
           </TR>
         ))}

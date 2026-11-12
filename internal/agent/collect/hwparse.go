@@ -98,6 +98,12 @@ func oneOrMany[T any](raw json.RawMessage) []T {
 
 // ---- Windows ----
 
+// virtualDisplay matches the software display adapters that remote-desktop and
+// screen-sharing tools install (Parsec, RDP, Citrix, Splashtop, spacedesk…).
+// They aren't graphics hardware. "Microsoft Basic Display Adapter" is kept: it's
+// a real GPU running without its driver, which is worth seeing.
+var virtualDisplay = regexp.MustCompile(`(?i)virtual display|remote display|indirect display|parsec|splashtop|spacedesk|teamviewer|citrix|\bIddSample|meta virtual monitor`)
+
 // encodePS encodes a multi-line script for -EncodedCommand (UTF-16LE, base64),
 // so it reaches PowerShell intact whatever its quotes and line breaks.
 func encodePS(script string) string {
@@ -156,7 +162,7 @@ func parseWindowsHW(out string) hwExtras {
 	x.Firmware = fw
 
 	for _, g := range oneOrMany[struct{ Name, Driver string }](v.GPUs) {
-		if name := strings.TrimSpace(g.Name); name != "" {
+		if name := strings.TrimSpace(g.Name); name != "" && !virtualDisplay.MatchString(name) {
 			x.GPUs = append(x.GPUs, protocol.GPU{Name: name, DriverVersion: strings.TrimSpace(g.Driver)})
 		}
 	}

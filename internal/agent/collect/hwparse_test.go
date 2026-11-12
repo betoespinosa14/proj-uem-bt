@@ -17,7 +17,8 @@ func TestParseWindowsHW(t *testing.T) {
 	// A laptop: two GPUs, one LPDDR5 module reported, NVMe drive, TPM 2.0.
 	out := `{"bios":{"vendor":"LENOVO","version":"R2FET44W (1.24 )","date":"2025-03-18"},"secureBoot":true,
 	"tpm":{"spec":"2.0, 0, 1.59","enabled":true},
-	"gpus":[{"name":"Intel(R) Iris(R) Xe Graphics","driver":"31.0.101.5382"},{"name":"Microsoft Remote Display Adapter","driver":""}],
+	"gpus":[{"name":"Parsec Virtual Display Adapter","driver":"0.45.0.0"},{"name":"Intel(R) Iris(R) Xe Graphics","driver":"31.0.101.5382"},
+	        {"name":"Microsoft Remote Display Adapter","driver":""},{"name":"NVIDIA GeForce RTX 3050 Laptop GPU","driver":"32.0.15.6094"}],
 	"mem":{"slot":"Controller0-ChannelA-DIMM0","bytes":17179869184,"type":35,"speed":6400,"form":0},
 	"slots":8,
 	"disks":[{"model":"SKHynix_HFS512GEJ4X112N","media":"SSD","bus":"NVMe","size":512110190592,"health":"Healthy"},
@@ -29,7 +30,9 @@ func TestParseWindowsHW(t *testing.T) {
 		fw.SecureBoot == nil || !*fw.SecureBoot || fw.SecurityChip != "TPM 2.0" || fw.TPMEnabled == nil || !*fw.TPMEnabled {
 		t.Fatalf("firmware = %+v", fw)
 	}
-	if len(x.GPUs) != 2 || x.GPUs[0].Name != "Intel(R) Iris(R) Xe Graphics" || x.GPUs[0].DriverVersion != "31.0.101.5382" {
+	// Parsec's and RDP's virtual adapters are dropped; real GPUs stay.
+	if len(x.GPUs) != 2 || x.GPUs[0].Name != "Intel(R) Iris(R) Xe Graphics" || x.GPUs[0].DriverVersion != "31.0.101.5382" ||
+		x.GPUs[1].Name != "NVIDIA GeForce RTX 3050 Laptop GPU" {
 		t.Fatalf("gpus = %+v", x.GPUs)
 	}
 	m := x.Memory // a single module comes as an object, not an array
@@ -53,6 +56,9 @@ func TestParseWindowsHW(t *testing.T) {
 	}
 	if m := x.Memory; m == nil || m.Type != "DDR4" || m.SlotsUsed != 2 || m.SlotsTotal != 4 || m.Soldered {
 		t.Fatalf("memory = %+v", m)
+	}
+	if !virtualDisplay.MatchString("Citrix Indirect Display Adapter") || virtualDisplay.MatchString("Microsoft Basic Display Adapter") {
+		t.Fatal("virtual display filter")
 	}
 	if parseWindowsHW("not json").Firmware != nil {
 		t.Fatal("garbage should give nothing")

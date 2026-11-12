@@ -9,6 +9,13 @@ commits after 2026.11.0, at commit `60f25a5`.
 
 ## Unreleased
 
+## 2026.11.16 (2026-11-12): Graphics list without virtual display adapters
+
+### Fixed
+- **Hardware tab graphics.** Windows agents no longer list the virtual display adapters that remote-desktop and
+  screen-sharing tools install (Parsec, Remote Desktop, Citrix, Splashtop, spacedesk and similar) as graphics
+  hardware. "Microsoft Basic Display Adapter" still shows, since it means a real GPU without its driver.
+
 ## 2026.11.15 (2026-11-12): Hardware inventory v2, Teams notifications, Devices list and device page redesign
 
 ### Added

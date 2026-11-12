@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  Clock,
   Cpu,
   HardDrive,
   MemoryStick,
@@ -24,9 +25,9 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Inventory } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory } from "@/lib/api";
 import { useCan } from "@/lib/session";
-import { formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { cn, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +41,7 @@ import { Segmented, Tabs, TabsContent, TabsList, TabsTrigger } from "@/component
 import {
   CommandStatusBadge,
   ComplianceBadge,
+  CopyValue,
   EmptyState,
   ErrorState,
   ExportLink,
@@ -68,6 +70,26 @@ export default function DevicePage() {
 
   const { data: d, isLoading, error, refetch } = useQuery({ queryKey: qk.device(id), queryFn: () => api.devices.get(id) });
   const latestAgent = useAgentLatest().data?.version;
+
+  // Name the browser tab after the device, so several open devices can be told apart.
+  useEffect(() => {
+    if (!d?.name) return;
+    const previous = document.title;
+    document.title = `${d.name} · BEACON`;
+    return () => {
+      document.title = previous;
+    };
+  }, [d?.name]);
+
+  // Once the device header scrolls under the top bar, show a compact name in the sticky tab row.
+  const [headerEl, setHeaderEl] = useState<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    if (!headerEl) return;
+    const io = new IntersectionObserver(([e]) => setCompact(!e!.isIntersecting), { rootMargin: "-64px 0px 0px 0px" });
+    io.observe(headerEl);
+    return () => io.disconnect();
+  }, [headerEl]);
 
   const retire = useMutation({
     mutationFn: () => api.devices.retire(id),
@@ -101,7 +123,7 @@ export default function DevicePage() {
         <ArrowLeft className="h-4 w-4" /> Devices
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div ref={setHeaderEl} className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <span className="mt-0.5 rounded-lg border border-border bg-card p-2.5">
             <OsIcon os={d.os_family} className="h-5 w-5" />
@@ -182,13 +204,27 @@ export default function DevicePage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          {["overview", "hardware", "software", "usage", "network", "security", "compliance", "telemetry", "commands"].map((t) => (
-            <TabsTrigger key={t} value={t}>
-              {titleCase(t)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {/* Sticky under the 4rem top bar, edge to edge on the same background so nothing shows through. */}
+        <div className="sticky top-16 z-10 -mx-4 -my-2 flex items-center gap-3 bg-[hsl(var(--canvas-from))] px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          {compact && (
+            <span className="flex min-w-0 max-w-[16rem] shrink items-center gap-2 text-sm font-semibold motion-safe:animate-fade-in">
+              <span
+                className={cn("h-2 w-2 shrink-0 rounded-full", d.status === "online" ? "bg-success" : "bg-muted-foreground/60")}
+                aria-label={d.status === "online" ? "Online" : "Offline"}
+              />
+              <span className="truncate" title={d.name}>
+                {d.name}
+              </span>
+            </span>
+          )}
+          <TabsList className="min-w-0">
+            {["overview", "hardware", "software", "usage", "network", "security", "compliance", "telemetry", "commands"].map((t) => (
+              <TabsTrigger key={t} value={t}>
+                {titleCase(t)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
         <TabsContent value="overview">
           <Overview d={d} onUpdate={can("commands.run") ? () => setAction("update_agent") : undefined} onOpenUsage={() => setTab("usage")} />
         </TabsContent>
@@ -254,12 +290,15 @@ function Metric({
   icon: Icon,
   label,
   value,
+  text,
   sub,
   charge,
 }: {
   icon: typeof Cpu;
   label: string;
-  value: number | null;
+  value?: number | null;
+  /** Shown instead of a percentage, with no bar (e.g. uptime). */
+  text?: string;
   sub?: string;
   /** A charge level (battery): low is the warning, not high. */
   charge?: boolean;
@@ -270,17 +309,45 @@ function Metric({
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Icon className="h-4 w-4" /> {label}
       </div>
-      <p className="mt-2 text-2xl font-semibold tabular">{formatPct(value)}</p>
-      <UsageBar value={value} className="mt-2" charge={charge} />
+      <p className="mt-2 text-2xl font-semibold tabular">{text ?? formatPct(value)}</p>
+      {text === undefined && <UsageBar value={value} className="mt-2" charge={charge} />}
       {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
+}
+
+/** The volume the agent reports "System disk" % for: C: on Windows, / elsewhere. */
+function systemDisk(inv: Inventory | null, os: string): Disk | undefined {
+  const disks = inv?.hardware.disks ?? [];
+  const norm = (m: string) => m.replace(/[\\/]+$/, "").toUpperCase();
+  const want = os === "windows" ? "C:" : "";
+  return (
+    disks.find((d) => norm(d.mount) === want) ??
+    (os !== "windows" ? disks.find((d) => d.mount === "/") : undefined) ??
+    [...disks].sort((a, b) => b.total_bytes - a.total_bytes)[0]
+  );
+}
+
+const BATTERY_STATE: Record<string, string> = { charging: "Charging", discharging: "On battery", full: "Plugged in" };
+
+function batterySub(inv: Inventory | null): string | undefined {
+  const b = inv?.hardware.battery;
+  if (!b?.present) return undefined;
+  const parts: string[] = [];
+  if (b.health_pct != null) parts.push(`Health ${formatPct(b.health_pct)}`);
+  // The state comes with the inventory (every few hours); only show it while recent.
+  const fresh = inv && Date.now() - new Date(inv.collected_at).getTime() < 3600_000;
+  if (fresh && BATTERY_STATE[b.state]) parts.push(BATTERY_STATE[b.state]!);
+  return parts.join(" · ") || undefined;
 }
 
 function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: () => void; onOpenUsage: () => void }) {
   const latest = useAgentLatest().data?.version;
   const behind = agentOutdated(d.agent_version, latest);
   const inv = d.inventory;
+  const sysDisk = systemDisk(inv, d.os_family);
+  // Uptime at the last inventory plus the time since; a reboot sends a fresh inventory.
+  const uptime = inv ? inv.os.uptime_seconds + Math.max(0, (Date.now() - new Date(inv.collected_at).getTime()) / 1000) : null;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -291,8 +358,23 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
           value={d.mem_pct}
           sub={inv ? `${formatBytes(inv.hardware.memory_total_bytes)} installed` : undefined}
         />
-        <Metric icon={HardDrive} label="System disk" value={d.disk_pct} />
-        <Metric icon={BatteryMedium} label="Battery" charge value={d.battery_pct} sub={d.battery_pct == null ? "No battery" : undefined} />
+        <Metric
+          icon={HardDrive}
+          label="System disk"
+          value={d.disk_pct}
+          sub={sysDisk ? `${formatBytes(sysDisk.used_bytes)} of ${formatBytes(sysDisk.total_bytes)} used` : undefined}
+        />
+        {d.battery_pct != null || inv?.hardware.battery.present ? (
+          <Metric icon={BatteryMedium} label="Battery" charge value={d.battery_pct} sub={batterySub(inv)} />
+        ) : (
+          // Desktops and servers have no battery: show how long they've been up instead.
+          <Metric
+            icon={Clock}
+            label="Uptime"
+            text={d.status === "online" && uptime != null ? formatDuration(uptime) : d.status === "online" ? "—" : "Offline"}
+            sub={d.status === "online" && uptime != null ? `Since ${formatDateTime(new Date(Date.now() - uptime * 1000).toISOString())}` : undefined}
+          />
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
@@ -302,10 +384,10 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
           <CardContent>
             <KeyValues
               items={[
-                ["Hostname", d.hostname],
+                ["Hostname", d.hostname && <CopyValue key="h" value={d.hostname} label="hostname" />],
                 ["Manufacturer", d.manufacturer],
                 ["Model", d.model],
-                ["Serial number", <span key="s" className="font-mono">{d.serial}</span>],
+                ["Serial number", d.serial && <CopyValue key="s" value={d.serial} label="serial number" mono />],
                 ["Group", d.group_name],
                 ["Employee", d.employee_name || "—"],
                 ["Logged-in user", d.logged_in_user],
@@ -324,9 +406,9 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
                 ["Operating system", `${d.os_name} ${d.os_version}`.trim()],
                 ["Build", <span key="b" className="font-mono">{d.os_build}</span>],
                 ["Architecture", d.arch],
-                ["Uptime", inv ? formatDuration(inv.os.uptime_seconds) : ""],
-                ["IP address", <span key="ip" className="font-mono">{d.ip_address}</span>],
-                ["MAC address", <span key="mac" className="font-mono">{d.mac_address}</span>],
+                ["Uptime", d.status !== "online" ? "Offline" : uptime != null ? formatDuration(uptime) : ""],
+                ["IP address", d.ip_address && <CopyValue key="ip" value={d.ip_address} label="IP address" mono />],
+                ["MAC address", d.mac_address && <CopyValue key="mac" value={d.mac_address} label="MAC address" mono />],
                 [
                   "Agent version",
                   <span key="av" className="inline-flex flex-wrap items-center gap-2">

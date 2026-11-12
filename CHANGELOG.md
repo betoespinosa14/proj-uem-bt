@@ -10,6 +10,11 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Device page Overview.** The System disk card shows capacity ("272 GB of 475 GB used"); the Battery card shows
+  battery health, and whether it's charging when the last report is under an hour old; devices without a battery
+  (desktops, Mac minis, servers) get an **Uptime** card instead. Hostname, serial number, IP and MAC address have a
+  copy button on hover. The tab row stays under the top bar while you scroll, with the device's name and status
+  dot once the header is out of view, and the browser tab is named after the device.
 - **Devices list fits the page.** The Group and Employee columns are gone (device names already read
   "Department | Employee"; the Group filter, search and CSV export still cover them). CPU/Mem/Disk and Agent appear
   according to the table's own width, so there is no sideways scrolling at 1366–1920 px screens; Last seen is compact

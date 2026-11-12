@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   Apple,
+  Check,
   ChevronRight,
+  Copy,
   Download,
   Monitor,
   Search,
@@ -20,7 +22,7 @@ import type {
   Severity,
 } from "@/lib/api";
 import { errorMessage } from "@/lib/api";
-import { cn, osLabel, titleCase } from "@/lib/utils";
+import { cn, copyToClipboard, osLabel, titleCase } from "@/lib/utils";
 import { Badge, type BadgeVariant } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -383,6 +385,43 @@ export function UsageBar({
         style={{ width: `${v}%` }}
       />
     </div>
+  );
+}
+
+/**
+ * A value people often paste elsewhere (hostname, serial, IP, MAC), with a copy
+ * button that shows on hover or keyboard focus.
+ */
+export function CopyValue({ value, label, mono }: { value: string; label: string; mono?: boolean }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <span className="group inline-flex max-w-full items-center gap-1.5">
+      <span className={cn("min-w-0 break-all", mono && "font-mono")}>{value}</span>
+      <button
+        type="button"
+        onClick={async () => {
+          if (await copyToClipboard(value)) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }
+        }}
+        aria-label={copied ? "Copied" : `Copy ${label}`}
+        title={copied ? "Copied" : `Copy ${label}`}
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded p-0.5 text-xs text-muted-foreground transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          // Touch screens have no hover: keep it visible there.
+          copied ? "opacity-100" : "opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+        )}
+      >
+        {copied ? (
+          <>
+            <Check className="h-3.5 w-3.5 text-success" aria-hidden /> Copied
+          </>
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden />
+        )}
+      </button>
+    </span>
   );
 }
 

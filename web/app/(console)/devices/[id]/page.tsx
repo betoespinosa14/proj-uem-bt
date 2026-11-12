@@ -439,7 +439,9 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
   );
 }
 
-function SecureBootBadge({ on }: { on?: boolean }) {
+function SecureBootBadge({ on, appleSilicon }: { on?: boolean; appleSilicon?: boolean }) {
+  if (on === undefined && appleSilicon)
+    return <span title="Apple silicon always verifies the boot chain; the security level (Full or Reduced) isn't reported.">Apple silicon secure boot</span>;
   if (on === undefined) return <span className="text-muted-foreground">Not reported</span>;
   return on ? <Badge variant="success">On</Badge> : <Badge variant="warning">Off</Badge>;
 }
@@ -449,6 +451,27 @@ const DRIVE_HEALTH: Record<string, { label: string; variant: "success" | "warnin
   warning: { label: "SMART warning", variant: "warning" },
   failing: { label: "Failing", variant: "danger" },
 };
+
+type Volume = { disk: Disk; label?: string; system: boolean };
+
+/**
+ * On macOS the system (/), Data and Recovery volumes share one APFS container,
+ * so they'd all show the same numbers. Show them as one "System & data" entry and
+ * leave out the internal system volumes nobody manages; other volumes stay.
+ */
+function macVolumes(disks: Disk[]): Volume[] {
+  const root = disks.find((x) => x.mount === "/");
+  const data = disks.find((x) => x.mount === "/System/Volumes/Data");
+  const out: Volume[] = [];
+  if (root || data) out.push({ disk: { ...(data ?? root)!, mount: "/" }, label: "System & data (APFS)", system: true });
+  for (const x of disks) {
+    if (x === root || x === data || x.mount === "/Volumes/Recovery" || x.mount.startsWith("/System/Volumes/")) continue;
+    out.push({ disk: x, system: false });
+  }
+  return out;
+}
+
+const ENCRYPTION_OFF: Record<string, string> = { windows: "BitLocker off", macos: "FileVault off" };
 
 function Hardware({ d }: { d: DeviceDetail }) {
   const inv = d.inventory;
@@ -463,6 +486,8 @@ function Hardware({ d }: { d: DeviceDetail }) {
   const memPct = hw.memory_total_bytes ? (hw.memory_used_bytes / hw.memory_total_bytes) * 100 : null;
   const fw = hw.firmware;
   const sysDisk = systemDisk(inv, d.os_family);
+  const volumes: Volume[] =
+    d.os_family === "macos" ? macVolumes(hw.disks) : hw.disks.map((disk) => ({ disk, system: disk === sysDisk }));
   const enc = inv.security;
   const b = hw.battery;
   const batteryFresh = Date.now() - new Date(inv.collected_at).getTime() < 3600_000;
@@ -544,7 +569,10 @@ function Hardware({ d }: { d: DeviceDetail }) {
                 ? ([
                     ["Firmware", [fw.vendor && fw.vendor !== hw.manufacturer ? fw.vendor : "", fw.version].filter(Boolean).join(" ")],
                     ["Firmware date", fw.release_date ? formatDate(fw.release_date) : ""],
-                    ["Secure Boot", <SecureBootBadge key="sb" on={fw.secure_boot} />],
+                    [
+                      "Secure Boot",
+                      <SecureBootBadge key="sb" on={fw.secure_boot} appleSilicon={fw.security_chip === "Apple Secure Enclave"} />,
+                    ],
                     [
                       "Security chip",
                       fw.security_chip ? (
@@ -557,7 +585,7 @@ function Hardware({ d }: { d: DeviceDetail }) {
                         "None found"
                       ),
                     ],
-                  ] as [React.ReactNode, React.ReactNode][])
+                  ] as [React.ReactNode, React.ReactNode][]).filter(([k, v]) => !((k === "Firmware" || k === "Firmware date") && !v)) // Macs have no firmware date
                 : []),
             ]}
           />
@@ -624,18 +652,19 @@ function Hardware({ d }: { d: DeviceDetail }) {
           )}
           <div className="space-y-4">
             {hw.drives && hw.drives.length > 0 && <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Volumes</p>}
-            {hw.disks.length === 0 && <p className="text-sm text-muted-foreground">No volumes reported.</p>}
-            {hw.disks.map((disk) => {
+            {volumes.length === 0 && <p className="text-sm text-muted-foreground">No volumes reported.</p>}
+            {volumes.map(({ disk, label, system: isSystem }) => {
               const pct = disk.total_bytes ? (disk.used_bytes / disk.total_bytes) * 100 : 0;
-              const isSystem = disk === sysDisk;
               return (
                 <div key={disk.mount}>
                   <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-mono">{disk.mount}</span>
-                      <span className="text-xs text-muted-foreground">{disk.fstype}</span>
+                      <span className="text-xs text-muted-foreground">{label ?? disk.fstype}</span>
                       {isSystem && enc.disk_encrypted === true && <Badge variant="success">{enc.encryption_method || "Encrypted"}</Badge>}
-                      {isSystem && enc.disk_encrypted === false && <Badge variant="warning">Not encrypted</Badge>}
+                      {isSystem && enc.disk_encrypted === false && (
+                        <Badge variant="warning">{ENCRYPTION_OFF[d.os_family] ?? "Not encrypted"}</Badge>
+                      )}
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground tabular">
                       {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)} · {formatBytes(disk.free_bytes)} free

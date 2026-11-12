@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plug, Plus, Send, Trash2 } from "lucide-react";
-import { api, qk, WEBHOOK_EVENTS, type Webhook } from "@/lib/api";
+import { api, qk, WEBHOOK_EVENTS, type Webhook, type WebhookFormat } from "@/lib/api";
 import { relativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Checkbox, Field, Input, Label } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { Segmented } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, PageHeader } from "@/components/common";
 import { toast } from "@/components/toast";
 
@@ -24,6 +25,14 @@ const EVENT_HELP: Record<string, string> = {
   "command.completed": "A command or script finished",
   "audit.*": "Every audit log entry (SIEM streaming)",
 };
+
+// Events that fire often enough to flood a chat channel.
+const CHAT_NOISE: Record<string, string> = {
+  "device.offline": "Every PC that shuts down at night fires this, so it can be noisy in a chat channel.",
+  "audit.*": "Very noisy for chat.",
+};
+
+const TEAMS_EVENTS = ["alert.created", "device.enrolled"];
 
 export default function IntegrationsPage() {
   const qc = useQueryClient();
@@ -53,7 +62,7 @@ export default function IntegrationsPage() {
     <>
       <PageHeader
         title="Integrations"
-        description="Stream events to your SIEM (Splunk, Sentinel, Datadog) or ITSM (Jira, Freshservice) with signed webhooks."
+        description="Post events to a Microsoft Teams channel, or stream them to your SIEM (Splunk, Sentinel, Datadog) or ITSM (Jira, Freshservice) with signed webhooks."
         actions={
           <Button onClick={() => setEditing("new")}>
             <Plus /> New webhook
@@ -87,7 +96,9 @@ export default function IntegrationsPage() {
                   <TR key={w.id}>
                     <TD className="max-w-xs">
                       <p className="flex items-center gap-2 font-medium">
-                        {w.name} {!w.enabled && <Badge variant="neutral">Disabled</Badge>}
+                        {w.name}
+                        {w.format === "teams" && <Badge variant="outline">Teams</Badge>}
+                        {!w.enabled && <Badge variant="neutral">Disabled</Badge>}
                       </p>
                       <p className="truncate font-mono text-xs text-muted-foreground">{w.url}</p>
                     </TD>
@@ -147,11 +158,18 @@ function WebhookDialog({ hook, onClose }: { hook: Webhook | null; onClose: () =>
   const qc = useQueryClient();
   const [name, setName] = useState(hook?.name ?? "");
   const [url, setUrl] = useState(hook?.url ?? "");
+  const [format, setFormat] = useState<WebhookFormat>(hook?.format ?? "generic");
   const [events, setEvents] = useState<string[]>(hook?.events ?? ["alert.created"]);
+  const teams = format === "teams";
+  const chooseFormat = (f: WebhookFormat) => {
+    setFormat(f);
+    // A new Teams hook starts with the events that suit a chat channel.
+    if (!hook && f === "teams") setEvents(TEAMS_EVENTS);
+  };
   const [enabled, setEnabled] = useState(hook?.enabled ?? true);
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, url, events, enabled };
+      const body = { name, url, format, events, enabled };
       return hook ? api.webhooks.update(hook.id, body) : api.webhooks.create(body);
     },
     onSuccess: () => {
@@ -179,11 +197,43 @@ function WebhookDialog({ hook, onClose }: { hook: Webhook | null; onClose: () =>
       }
     >
       <div className="space-y-4">
+        <div>
+          <Label>Send to</Label>
+          <div className="mt-2">
+            <Segmented
+              value={format}
+              onChange={chooseFormat}
+              options={[
+                { value: "generic", label: "Generic JSON" },
+                { value: "teams", label: "Microsoft Teams" },
+              ]}
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {teams
+              ? "Posts a readable card to a Teams channel, with a button that opens the device in BEACON."
+              : "Signed JSON for SIEM and ITSM tools (Splunk, Sentinel, Datadog, Jira)."}
+          </p>
+        </div>
         <Field label="Name" htmlFor="wname">
-          <Input id="wname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Splunk HEC" />
+          <Input id="wname" value={name} onChange={(e) => setName(e.target.value)} placeholder={teams ? "e.g. IT channel" : "e.g. Splunk HEC"} />
         </Field>
-        <Field label="Endpoint URL" htmlFor="wurl" hint="Must be reachable from the UEM server over HTTPS (private addresses are blocked by default).">
-          <Input id="wurl" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.example.com/uem" />
+        <Field
+          label={teams ? "Teams workflow URL" : "Endpoint URL"}
+          htmlFor="wurl"
+          hint={
+            teams
+              ? "In Teams: open the channel, ⋯ → Workflows → \"Send webhook alerts to a channel\", then paste the URL it gives you. Keep it private: anyone with it can post to the channel."
+              : "Must be reachable from the BEACON server over HTTPS (private addresses are blocked by default)."
+          }
+        >
+          <Input
+            id="wurl"
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder={teams ? "https://….powerplatform.com/…/invoke?…" : "https://hooks.example.com/beacon"}
+          />
         </Field>
         <div>
           <Label>Events</Label>
@@ -198,12 +248,13 @@ function WebhookDialog({ hook, onClose }: { hook: Webhook | null; onClose: () =>
                 <span>
                   <span className="font-mono text-xs">{e}</span>
                   <span className="block text-xs text-muted-foreground">{EVENT_HELP[e]}</span>
+                  {teams && CHAT_NOISE[e] && <span className="block text-xs text-warning">{CHAT_NOISE[e]}</span>}
                 </span>
               </label>
             ))}
           </div>
         </div>
-        {hook && (
+        {hook && !teams && (
           <Field label="Signing secret" htmlFor="wsecret" hint="Verify deliveries by computing HMAC-SHA256 of the raw body with this secret.">
             <Input id="wsecret" readOnly className="font-mono text-xs" value={hook.secret} onFocus={(e) => e.target.select()} />
           </Field>

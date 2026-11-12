@@ -206,11 +206,11 @@ func (s *Store) AutoResolveAlert(ctx context.Context, deviceID, ruleID string) e
 
 // ---- Webhooks ----
 
-const webhookCols = `id, org_id, name, url, secret, events, enabled, created_at, last_status, last_delivery_at`
+const webhookCols = `id, org_id, name, url, format, secret, events, enabled, created_at, last_status, last_delivery_at`
 
 func scanWebhook(r pgx.Row) (Webhook, error) {
 	var w Webhook
-	err := r.Scan(&w.ID, &w.OrgID, &w.Name, &w.URL, &w.Secret, &w.Events, &w.Enabled, &w.CreatedAt, &w.LastStatus, &w.LastDeliveryAt)
+	err := r.Scan(&w.ID, &w.OrgID, &w.Name, &w.URL, &w.Format, &w.Secret, &w.Events, &w.Enabled, &w.CreatedAt, &w.LastStatus, &w.LastDeliveryAt)
 	w.Events = nonNil(w.Events)
 	return w, err
 }
@@ -227,15 +227,15 @@ func (s *Store) GetWebhook(ctx context.Context, orgID, id string) (Webhook, erro
 
 func (s *Store) CreateWebhook(ctx context.Context, orgID string, w Webhook) (Webhook, error) {
 	out, err := scanWebhook(s.Pool.QueryRow(ctx, `
-		INSERT INTO webhooks (org_id, name, url, secret, events, enabled) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING `+webhookCols, orgID, w.Name, w.URL, w.Secret, nonNil(w.Events), w.Enabled))
+		INSERT INTO webhooks (org_id, name, url, secret, events, enabled, format) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING `+webhookCols, orgID, w.Name, w.URL, w.Secret, nonNil(w.Events), w.Enabled, w.Format))
 	return out, mapErr(err)
 }
 
 func (s *Store) UpdateWebhook(ctx context.Context, orgID string, w Webhook) (Webhook, error) {
 	out, err := scanWebhook(s.Pool.QueryRow(ctx, `
-		UPDATE webhooks SET name = $3, url = $4, secret = $5, events = $6, enabled = $7
-		WHERE org_id = $1 AND id = $2 RETURNING `+webhookCols, orgID, w.ID, w.Name, w.URL, w.Secret, nonNil(w.Events), w.Enabled))
+		UPDATE webhooks SET name = $3, url = $4, secret = $5, events = $6, enabled = $7, format = $8
+		WHERE org_id = $1 AND id = $2 RETURNING `+webhookCols, orgID, w.ID, w.Name, w.URL, w.Secret, nonNil(w.Events), w.Enabled, w.Format))
 	return out, mapErr(err)
 }
 

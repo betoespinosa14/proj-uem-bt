@@ -28,6 +28,10 @@ type Webhooks struct {
 	store  *store.Store
 	client *http.Client
 	queue  chan delivery
+
+	// ConsoleURL is the console's public address, used for the "Open in BEACON"
+	// button on Teams cards. Empty leaves the button out.
+	ConsoleURL string
 }
 
 type delivery struct {
@@ -113,18 +117,20 @@ func (w *Webhooks) Emit(ctx context.Context, orgID, event string, data any) {
 		slog.Error("webhooks: list", "err", err)
 		return
 	}
-	var payload []byte
+	now := time.Now()
+	payloads := map[string][]byte{} // built once per format
 	for _, h := range hooks {
 		if !h.Enabled || !Matches(h.Events, event) {
 			continue
 		}
-		if payload == nil {
-			payload, err = json.Marshal(map[string]any{
-				"event": event, "org_id": orgID, "ts": time.Now().UTC(), "data": data,
-			})
+		payload, ok := payloads[h.Format]
+		if !ok {
+			payload, err = w.body(h.Format, orgID, event, data, now)
 			if err != nil {
+				slog.Error("webhooks: encode", "event", event, "err", err)
 				return
 			}
+			payloads[h.Format] = payload
 		}
 		select {
 		case w.queue <- delivery{h, event, payload}:
@@ -136,13 +142,21 @@ func (w *Webhooks) Emit(ctx context.Context, orgID, event string, data any) {
 
 // SendTest delivers a test event synchronously and returns the HTTP status.
 func (w *Webhooks) SendTest(ctx context.Context, h store.Webhook) (int, error) {
-	payload, _ := json.Marshal(map[string]any{
-		"event": "webhook.test", "org_id": h.OrgID, "ts": time.Now().UTC(),
-		"data": map[string]string{"message": "Test delivery from UEM"},
-	})
+	payload, err := w.body(h.Format, h.OrgID, "webhook.test", map[string]string{"message": "Test delivery from BEACON"}, time.Now())
+	if err != nil {
+		return 0, err
+	}
 	status, err := w.post(ctx, h, "webhook.test", payload)
 	_ = w.store.RecordWebhookDelivery(ctx, h.ID, status)
 	return status, err
+}
+
+// body writes an event in a webhook's format.
+func (w *Webhooks) body(format, orgID, event string, data any, now time.Time) ([]byte, error) {
+	if format == FormatTeams {
+		return teamsCard(event, data, w.ConsoleURL, now)
+	}
+	return json.Marshal(map[string]any{"event": event, "org_id": orgID, "ts": now.UTC(), "data": data})
 }
 
 func (w *Webhooks) deliver(ctx context.Context, d delivery) {

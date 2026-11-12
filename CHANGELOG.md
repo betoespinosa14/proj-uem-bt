@@ -10,6 +10,10 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Microsoft Teams notifications.** A webhook can now be sent as **Microsoft Teams** instead of generic JSON:
+  BEACON posts a readable card (title, device, department, severity, time) with an **Open in BEACON** button to a
+  channel's Teams Workflows webhook ("Send webhook alerts to a channel"). Works for every event, including the
+  **Send test** button. Existing webhooks keep the generic format.
 - **Dashboard trends.** The server records the Dashboard's figures every hour (one snapshot per day, for all
   departments and for each one, kept for 400 days). Each headline tile and Security posture meter shows a 30-day
   sparkline and the change against a week ago, green when it's good news and red when it isn't. History starts on

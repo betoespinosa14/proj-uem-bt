@@ -895,6 +895,7 @@ func (s *Server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 type webhookRequest struct {
 	Name    *string  `json:"name"`
 	URL     *string  `json:"url"`
+	Format  *string  `json:"format"`
 	Secret  *string  `json:"secret"`
 	Events  []string `json:"events"`
 	Enabled *bool    `json:"enabled"`
@@ -906,6 +907,15 @@ func (req webhookRequest) apply(h *store.Webhook) error {
 	}
 	if req.URL != nil {
 		h.URL = strings.TrimSpace(*req.URL)
+	}
+	if req.Format != nil {
+		h.Format = strings.TrimSpace(*req.Format)
+	}
+	if h.Format == "" {
+		h.Format = notify.FormatGeneric
+	}
+	if !slices.Contains(notify.Formats, h.Format) {
+		return badRequest(fmt.Sprintf("unknown format %q (valid: %s)", h.Format, strings.Join(notify.Formats, ", ")))
 	}
 	if req.Secret != nil && *req.Secret != "" {
 		h.Secret = *req.Secret
@@ -950,7 +960,7 @@ func (s *Server) createWebhook(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	s.record(r, "webhook.create", "webhook", out.ID, map[string]any{"name": out.Name, "url": out.URL, "events": out.Events})
+	s.record(r, "webhook.create", "webhook", out.ID, map[string]any{"name": out.Name, "url": out.URL, "format": out.Format, "events": out.Events})
 	writeJSON(w, http.StatusCreated, out)
 }
 
@@ -974,7 +984,7 @@ func (s *Server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	s.record(r, "webhook.update", "webhook", out.ID, map[string]any{"name": out.Name, "url": out.URL, "events": out.Events, "enabled": out.Enabled})
+	s.record(r, "webhook.update", "webhook", out.ID, map[string]any{"name": out.Name, "url": out.URL, "format": out.Format, "events": out.Events, "enabled": out.Enabled})
 	writeJSON(w, http.StatusOK, out)
 }
 

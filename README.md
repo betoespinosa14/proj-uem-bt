@@ -187,7 +187,7 @@ update themselves yet: re-run the install command on a device to upgrade it.
 | **App blocklist** | Per-group list of process names that the agent terminates. Each termination is audit-logged. |
 | **RBAC** | Owner, Admin, Helpdesk and Auditor roles (see `docs/API.md`). Only owners can grant or modify the owner role, and the last owner is protected. |
 | **Audit log** | Every admin action, device command and result, compliance change and agent event. The log is append-only (enforced by a database trigger) and hash-chained per organization. It can be verified from the console and exported to CSV (with spreadsheet-formula escaping). |
-| **Integrations** | Signed (HMAC-SHA256) webhooks for `alert.created`, `compliance.violation`, `device.enrolled`, `device.offline`, `command.completed` and `audit.*`. These cover Splunk, Sentinel, Datadog, Jira and similar tools via their HTTP intake. |
+| **Integrations** | Signed (HMAC-SHA256) webhooks for `alert.created`, `compliance.violation`, `device.enrolled`, `device.offline`, `command.completed` and `audit.*`. These cover Splunk, Sentinel, Datadog, Jira and similar tools via their HTTP intake. A webhook set to the **Microsoft Teams** format posts a readable card with an "Open in BEACON" link to a Teams Workflows webhook instead. |
 | **Live console** | A WebSocket pushes device status, telemetry, command progress and alerts. |
 
 ### Security notes

@@ -503,10 +503,12 @@ export const WEBHOOK_EVENTS = [
   "audit.*",
 ] as const;
 
+export type WebhookFormat = "generic" | "teams";
 export type Webhook = {
   id: string;
   name: string;
   url: string;
+  format: WebhookFormat;
   secret: string;
   events: string[];
   enabled: boolean;
@@ -514,7 +516,7 @@ export type Webhook = {
   last_status: number | null;
   last_delivery_at: string | null;
 };
-export type WebhookInput = { name: string; url: string; secret?: string; events: string[]; enabled: boolean };
+export type WebhookInput = { name: string; url: string; format: WebhookFormat; secret?: string; events: string[]; enabled: boolean };
 
 export type DeviceFilters = {
   q?: string;

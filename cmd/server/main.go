@@ -82,6 +82,7 @@ func run() error {
 	}
 	auditLog := audit.New(st)
 	hooks := notify.New(st, envBool("UEM_WEBHOOK_ALLOW_PRIVATE", false))
+	hooks.ConsoleURL = env("UEM_PUBLIC_URL", "") // for "Open in BEACON" links on Teams cards
 	hooks.Run(ctx, 4)
 	auditLog.SetSink(func(ctx context.Context, e store.AuditEntry) {
 		hooks.Emit(ctx, e.OrgID, "audit."+e.Action, e)

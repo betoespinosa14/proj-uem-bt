@@ -231,6 +231,7 @@ type Webhook struct {
 	OrgID          string     `json:"-"`
 	Name           string     `json:"name"`
 	URL            string     `json:"url"`
+	Format         string     `json:"format"` // "generic" or "teams"
 	Secret         string     `json:"secret"`
 	Events         []string   `json:"events"`
 	Enabled        bool       `json:"enabled"`

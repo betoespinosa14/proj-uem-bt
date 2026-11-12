@@ -17,9 +17,9 @@ func platformHardware(ctx context.Context) protocol.Hardware {
 	}
 	var data struct {
 		Items []struct {
-			Serial     string `json:"serial_number"`
-			ModelName  string `json:"machine_name"`
-			ModelID    string `json:"machine_model"`
+			Serial    string `json:"serial_number"`
+			ModelName string `json:"machine_name"`
+			ModelID   string `json:"machine_model"`
 		} `json:"SPHardwareDataType"`
 	}
 	if json.Unmarshal([]byte(out), &data) == nil && len(data.Items) > 0 {
@@ -28,6 +28,18 @@ func platformHardware(ctx context.Context) protocol.Hardware {
 		hw.Model = strings.TrimSpace(it.ModelName + " (" + it.ModelID + ")")
 	}
 	return hw
+}
+
+// hardwareV2 reads firmware, graphics, memory and drives from system_profiler.
+func hardwareV2(ctx context.Context) hwExtras {
+	out, err := run(ctx, 60*time.Second, "system_profiler", "-json",
+		"SPHardwareDataType", "SPDisplaysDataType", "SPMemoryDataType", "SPStorageDataType")
+	if err != nil && out == "" {
+		return hwExtras{}
+	}
+	x := parseMacProfiler([]byte(out))
+	sortDrives(x.Drives)
+	return x
 }
 
 func osBuild(ctx context.Context, info protocol.OSInfo) string {
@@ -43,12 +55,12 @@ func software(ctx context.Context) []protocol.Software {
 	}
 	var data struct {
 		Apps []struct {
-			Name         string `json:"_name"`
-			Version      string `json:"version"`
-			ObtainedFrom string `json:"obtained_from"`
+			Name         string   `json:"_name"`
+			Version      string   `json:"version"`
+			ObtainedFrom string   `json:"obtained_from"`
 			SignedBy     []string `json:"signed_by"`
-			LastModified string `json:"lastModified"`
-			Path         string `json:"path"`
+			LastModified string   `json:"lastModified"`
+			Path         string   `json:"path"`
 		} `json:"SPApplicationsDataType"`
 	}
 	if json.Unmarshal([]byte(raw), &data) != nil {

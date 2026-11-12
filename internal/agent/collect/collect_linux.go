@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,60 @@ func platformHardware(ctx context.Context) protocol.Hardware {
 }
 
 func osBuild(ctx context.Context, info protocol.OSInfo) string { return info.Kernel }
+
+// hardwareV2 reads firmware and TPM from sysfs, graphics from lspci, memory from
+// dmidecode and drives from lsblk (+ smartctl when installed). Missing tools
+// just leave their part empty.
+func hardwareV2(ctx context.Context) hwExtras {
+	var x hwExtras
+	fw := &protocol.Firmware{Vendor: readSys("bios_vendor"), Version: readSys("bios_version"), ReleaseDate: biosDate(readSys("bios_date"))}
+	if _, err := os.Stat("/sys/firmware/efi"); err == nil {
+		if m, _ := filepath.Glob("/sys/firmware/efi/efivars/SecureBoot-*"); len(m) > 0 {
+			if b, err := os.ReadFile(m[0]); err == nil && len(b) > 0 {
+				fw.SecureBoot = ptr(b[len(b)-1] == 1)
+			}
+		}
+	} else {
+		fw.SecureBoot = ptr(false) // legacy BIOS boot has no Secure Boot
+	}
+	if _, err := os.Stat("/sys/class/tpm/tpm0"); err == nil {
+		switch v, _ := os.ReadFile("/sys/class/tpm/tpm0/tpm_version_major"); strings.TrimSpace(string(v)) {
+		case "2":
+			fw.SecurityChip = "TPM 2.0"
+		case "1":
+			fw.SecurityChip = "TPM 1.2"
+		default:
+			fw.SecurityChip = "TPM"
+		}
+		fw.TPMEnabled = ptr(true)
+	}
+	x.Firmware = fw
+	if out, err := run(ctx, 10*time.Second, "lspci", "-mm"); err == nil {
+		x.GPUs = parseLspci(out)
+	}
+	if out, err := run(ctx, 15*time.Second, "dmidecode", "-t", "memory"); err == nil {
+		x.Memory = parseDmidecodeMemory(out)
+	}
+	if out, err := run(ctx, 10*time.Second, "lsblk", "-d", "-b", "-J", "-o", "NAME,MODEL,SIZE,ROTA,TRAN,TYPE"); err == nil {
+		drives, names := parseLsblk([]byte(out))
+		if _, err := exec.LookPath("smartctl"); err == nil {
+			for i := range drives {
+				h, _ := run(ctx, 15*time.Second, "smartctl", "-H", "/dev/"+names[i])
+				drives[i].Health = parseSmartctl(h)
+			}
+		}
+		sortDrives(drives)
+		x.Drives = drives
+	}
+	if m, _ := filepath.Glob("/sys/class/power_supply/BAT*/cycle_count"); len(m) > 0 {
+		if b, err := os.ReadFile(m[0]); err == nil {
+			if n, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && n > 0 {
+				x.CycleCount = &n
+			}
+		}
+	}
+	return x
+}
 
 func software(ctx context.Context) []protocol.Software {
 	out := []protocol.Software{}

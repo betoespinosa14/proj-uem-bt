@@ -38,6 +38,19 @@ func platformHardware(ctx context.Context) protocol.Hardware {
 	return hw
 }
 
+// hardwareV2 reads firmware, TPM, graphics, memory layout, drives and battery
+// cycles in one PowerShell call (see windowsHWScript).
+func hardwareV2(ctx context.Context) hwExtras {
+	out, err := run(ctx, 60*time.Second, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		"-EncodedCommand", encodePS(windowsHWScript))
+	if err != nil && out == "" {
+		return hwExtras{}
+	}
+	x := parseWindowsHW(out)
+	sortDrives(x.Drives)
+	return x
+}
+
 func osBuild(ctx context.Context, info protocol.OSInfo) string {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
 	if err != nil {

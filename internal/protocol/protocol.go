@@ -161,6 +161,56 @@ type Hardware struct {
 	MemoryUsedBytes  uint64  `json:"memory_used_bytes"`
 	Disks            []Disk  `json:"disks"`
 	Battery          Battery `json:"battery"`
+
+	// Hardware inventory v2 (agents from 2026.11.15). All optional: nil or
+	// empty means the agent couldn't determine it, or is older.
+	Firmware *Firmware       `json:"firmware,omitempty"`
+	GPUs     []GPU           `json:"gpus,omitempty"`
+	Memory   *MemoryLayout   `json:"memory,omitempty"`
+	Drives   []PhysicalDrive `json:"drives,omitempty"`
+}
+
+// Firmware is the BIOS/UEFI and the hardware security chip.
+type Firmware struct {
+	Vendor      string `json:"vendor,omitempty"`
+	Version     string `json:"version,omitempty"`
+	ReleaseDate string `json:"release_date,omitempty"` // YYYY-MM-DD when known
+	SecureBoot  *bool  `json:"secure_boot,omitempty"`
+	// SecurityChip is e.g. "TPM 2.0" or "Apple Secure Enclave"; "" if none was found.
+	SecurityChip string `json:"security_chip,omitempty"`
+	TPMEnabled   *bool  `json:"tpm_enabled,omitempty"`
+}
+
+type GPU struct {
+	Name          string `json:"name"`
+	DriverVersion string `json:"driver_version,omitempty"`
+	Cores         int    `json:"cores,omitempty"`
+}
+
+// MemoryLayout describes the installed RAM modules and free slots.
+type MemoryLayout struct {
+	Type       string         `json:"type,omitempty"` // DDR4, DDR5, LPDDR5, …
+	SpeedMTs   int            `json:"speed_mts,omitempty"`
+	SlotsTotal int            `json:"slots_total,omitempty"`
+	SlotsUsed  int            `json:"slots_used,omitempty"`
+	Soldered   bool           `json:"soldered,omitempty"` // on the board, not upgradable
+	Modules    []MemoryModule `json:"modules,omitempty"`
+}
+
+type MemoryModule struct {
+	Slot          string `json:"slot,omitempty"`
+	CapacityBytes uint64 `json:"capacity_bytes"`
+	Type          string `json:"type,omitempty"`
+	SpeedMTs      int    `json:"speed_mts,omitempty"`
+}
+
+// PhysicalDrive is a disk device (as opposed to a volume in Disks).
+type PhysicalDrive struct {
+	Model     string `json:"model"`
+	Media     string `json:"media,omitempty"` // SSD, HDD
+	Bus       string `json:"bus,omitempty"`   // NVMe, SATA, USB, RAID, …
+	SizeBytes uint64 `json:"size_bytes,omitempty"`
+	Health    string `json:"health,omitempty"` // healthy, warning, failing; "" unknown
 }
 
 type Disk struct {
@@ -176,6 +226,10 @@ type Battery struct {
 	Percent   float64  `json:"percent"`
 	State     string   `json:"state"`
 	HealthPct *float64 `json:"health_pct"`
+	// From 2026.11.15: charge cycles, and capacity now vs. when new (mWh).
+	CycleCount *int    `json:"cycle_count,omitempty"`
+	DesignMWh  float64 `json:"design_mwh,omitempty"`
+	FullMWh    float64 `json:"full_mwh,omitempty"`
 }
 
 type Network struct {

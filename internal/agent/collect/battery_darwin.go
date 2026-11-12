@@ -73,6 +73,9 @@ func parseSmartBattery(out []byte) (protocol.Battery, bool) {
 		h := round1(full / design * 100)
 		b.HealthPct = &h
 	}
+	if c := int(first(num(m["CycleCount"]), num(data["CycleCount"]))); c > 0 {
+		b.CycleCount = &c
+	}
 	return b, true
 }
 

@@ -84,6 +84,7 @@ func Inventory(ctx context.Context) protocol.Inventory {
 	}
 	inv.Hardware.Disks = disks(ctx)
 	inv.Hardware.Battery = batteryInfo()
+	hardwareV2(ctx).apply(&inv.Hardware)
 
 	inv.Network = network(ctx, inv.Network.Hostname)
 	inv.Security = security(ctx)

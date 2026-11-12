@@ -25,5 +25,6 @@ func batteryInfo() protocol.Battery {
 		h := round1(b.Full / b.Design * 100)
 		out.HealthPct = &h
 	}
+	out.DesignMWh, out.FullMWh = round1(b.Design), round1(b.Full) // the library reports mWh
 	return out
 }

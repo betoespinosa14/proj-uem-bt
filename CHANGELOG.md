@@ -10,6 +10,17 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Hardware inventory v2 (agent).** The agent now also reports firmware (BIOS/UEFI vendor, version and date),
+  Secure Boot, the security chip (TPM version and whether it's enabled, or Apple Secure Enclave), graphics, the memory
+  layout (type, speed, slots used of total, soldered or not, each module), physical drives (model, NVMe/SATA/USB,
+  SSD/HDD, size, SMART health) and battery charge cycles and capacity. Windows reads them in one PowerShell call,
+  macOS from system_profiler, Linux from sysfs, lspci, dmidecode, lsblk and smartctl (when installed). Older agents
+  keep working; their devices show a hint to update.
+- **Device page Hardware tab, rebuilt.** Processor & graphics, Memory (with upgrade room), System & firmware (with
+  Secure Boot and TPM, serial copy button), Battery only when there is one, and Storage with physical drives and
+  their SMART health plus volumes; the system volume shows BitLocker/FileVault/LUKS or "Not encrypted". Cards close
+  up so desktops without a battery have no gap. Device-page usage bars use the same soft blue as the Devices list,
+  amber and red at the Dashboard's limits.
 - **Device page Overview.** The System disk card shows capacity ("272 GB of 475 GB used"); the Battery card shows
   battery health, and whether it's charging when the last report is under an hour old; devices without a battery
   (desktops, Mac minis, servers) get an **Uptime** card instead. Hostname, serial number, IP and MAC address have a

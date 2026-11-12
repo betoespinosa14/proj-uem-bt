@@ -35,6 +35,13 @@ export function relativeTimeShort(ts: string | null | undefined, now: number = D
   return `${Math.round(s / (86400 * 365))} y ago`;
 }
 
+/** Usage limits shared by every resource bar: amber a little before, red at the Dashboard's health limit. */
+export const RESOURCE_LIMITS = {
+  cpu: { warnAt: 80, alertAt: 90 },
+  mem: { warnAt: 80, alertAt: 90 },
+  disk: { warnAt: 75, alertAt: 85 },
+} as const;
+
 export function formatDateTime(ts: string | null | undefined): string {
   if (!ts) return "—";
   const d = new Date(ts);

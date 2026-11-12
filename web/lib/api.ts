@@ -96,6 +96,25 @@ export type Disk = {
   free_bytes: number;
 };
 
+export type Firmware = {
+  vendor?: string;
+  version?: string;
+  release_date?: string;
+  secure_boot?: boolean;
+  security_chip?: string;
+  tpm_enabled?: boolean;
+};
+export type GPU = { name: string; driver_version?: string; cores?: number };
+export type MemoryLayout = {
+  type?: string;
+  speed_mts?: number;
+  slots_total?: number;
+  slots_used?: number;
+  soldered?: boolean;
+  modules?: { slot?: string; capacity_bytes: number; type?: string; speed_mts?: number }[];
+};
+export type PhysicalDrive = { model: string; media?: string; bus?: string; size_bytes?: number; health?: string };
+
 export type NetInterface = { name: string; mac: string; addrs: string[]; up: boolean };
 
 export type Inventory = {
@@ -120,7 +139,20 @@ export type Inventory = {
     memory_total_bytes: number;
     memory_used_bytes: number;
     disks: Disk[];
-    battery: { present: boolean; percent: number; state: string; health_pct: number | null };
+    battery: {
+      present: boolean;
+      percent: number;
+      state: string;
+      health_pct: number | null;
+      cycle_count?: number;
+      design_mwh?: number;
+      full_mwh?: number;
+    };
+    // Hardware inventory v2: only from agents 2026.11.15 on.
+    firmware?: Firmware;
+    gpus?: GPU[];
+    memory?: MemoryLayout;
+    drives?: PhysicalDrive[];
   };
   network: {
     hostname: string;

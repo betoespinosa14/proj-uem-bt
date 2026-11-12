@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory } from "@/lib/api";
 import { useCan } from "@/lib/session";
-import { cn, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { cn, RESOURCE_LIMITS, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -229,7 +229,7 @@ export default function DevicePage() {
           <Overview d={d} onUpdate={can("commands.run") ? () => setAction("update_agent") : undefined} onOpenUsage={() => setTab("usage")} />
         </TabsContent>
         <TabsContent value="hardware">
-          <Hardware inv={d.inventory} />
+          <Hardware d={d} />
         </TabsContent>
         <TabsContent value="software">
           <Software id={id} />
@@ -293,6 +293,7 @@ function Metric({
   text,
   sub,
   charge,
+  limits,
 }: {
   icon: typeof Cpu;
   label: string;
@@ -302,6 +303,8 @@ function Metric({
   sub?: string;
   /** A charge level (battery): low is the warning, not high. */
   charge?: boolean;
+  /** Usage limits: the bar is soft blue below them, amber/red at them. */
+  limits?: { warnAt: number; alertAt: number };
 }) {
   if (charge && value != null) value = Math.min(100, value);
   return (
@@ -310,7 +313,7 @@ function Metric({
         <Icon className="h-4 w-4" /> {label}
       </div>
       <p className="mt-2 text-2xl font-semibold tabular">{text ?? formatPct(value)}</p>
-      {text === undefined && <UsageBar value={value} className="mt-2" charge={charge} />}
+      {text === undefined && <UsageBar value={value} className="mt-2" charge={charge} quiet={!!limits} {...limits} />}
       {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
     </Card>
   );
@@ -351,17 +354,19 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric icon={Cpu} label="CPU" value={d.cpu_pct} sub={inv?.hardware.cpu_model} />
+        <Metric icon={Cpu} label="CPU" value={d.cpu_pct} sub={inv?.hardware.cpu_model} limits={RESOURCE_LIMITS.cpu} />
         <Metric
           icon={MemoryStick}
           label="Memory"
           value={d.mem_pct}
+          limits={RESOURCE_LIMITS.mem}
           sub={inv ? `${formatBytes(inv.hardware.memory_total_bytes)} installed` : undefined}
         />
         <Metric
           icon={HardDrive}
           label="System disk"
           value={d.disk_pct}
+          limits={RESOURCE_LIMITS.disk}
           sub={sysDisk ? `${formatBytes(sysDisk.used_bytes)} of ${formatBytes(sysDisk.total_bytes)} used` : undefined}
         />
         {d.battery_pct != null || inv?.hardware.battery.present ? (
@@ -434,68 +439,213 @@ function Overview({ d, onUpdate, onOpenUsage }: { d: DeviceDetail; onUpdate?: ()
   );
 }
 
-function Hardware({ inv }: { inv: Inventory | null }) {
+function SecureBootBadge({ on }: { on?: boolean }) {
+  if (on === undefined) return <span className="text-muted-foreground">Not reported</span>;
+  return on ? <Badge variant="success">On</Badge> : <Badge variant="warning">Off</Badge>;
+}
+
+const DRIVE_HEALTH: Record<string, { label: string; variant: "success" | "warning" | "danger" }> = {
+  healthy: { label: "SMART healthy", variant: "success" },
+  warning: { label: "SMART warning", variant: "warning" },
+  failing: { label: "Failing", variant: "danger" },
+};
+
+function Hardware({ d }: { d: DeviceDetail }) {
+  const inv = d.inventory;
   if (!inv) return <NoInventory />;
   const hw = inv.hardware;
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Processor & memory</CardTitle>
-        </CardHeader>
-        <CardContent>
+  // Agents before 2026.11.15 don't report firmware, graphics, memory layout or drives.
+  const v2 = hw.firmware !== undefined || hw.drives !== undefined || hw.gpus !== undefined || hw.memory !== undefined;
+  const updateHint = (
+    <p className="mt-3 text-xs text-muted-foreground">Update this device&apos;s agent to see firmware, graphics, memory and drive details.</p>
+  );
+  const mem = hw.memory;
+  const memPct = hw.memory_total_bytes ? (hw.memory_used_bytes / hw.memory_total_bytes) * 100 : null;
+  const fw = hw.firmware;
+  const sysDisk = systemDisk(inv, d.os_family);
+  const enc = inv.security;
+  const b = hw.battery;
+  const batteryFresh = Date.now() - new Date(inv.collected_at).getTime() < 3600_000;
+
+  const cards: { key: string; title: string; body: React.ReactNode }[] = [
+    {
+      key: "cpu",
+      title: "Processor & graphics",
+      body: (
+        <>
           <KeyValues
             items={[
               ["CPU", hw.cpu_model],
               ["Cores / threads", `${hw.cpu_cores} / ${hw.cpu_threads}`],
-              ["Memory", `${formatBytes(hw.memory_used_bytes)} used of ${formatBytes(hw.memory_total_bytes)}`],
-              ["Manufacturer", hw.manufacturer],
-              ["Model", hw.model],
-              ["Serial", hw.serial],
+              ...(hw.gpus ?? []).map(
+                (g): [React.ReactNode, React.ReactNode] => [
+                  "Graphics",
+                  [g.name, g.cores ? `${g.cores}-core` : "", g.driver_version ? `driver ${g.driver_version}` : ""].filter(Boolean).join(" · "),
+                ],
+              ),
+              ...(v2 && !hw.gpus?.length ? [["Graphics", ""] as [React.ReactNode, React.ReactNode]] : []),
             ]}
           />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Battery</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {hw.battery.present ? (
+          {!v2 && updateHint}
+        </>
+      ),
+    },
+    {
+      key: "memory",
+      title: "Memory",
+      body: (
+        <>
+          <div className="mb-4">
+            <div className="mb-1.5 flex items-baseline justify-between gap-4 text-sm">
+              <span className="font-medium">{formatBytes(hw.memory_total_bytes)} installed</span>
+              <span className="text-xs text-muted-foreground tabular">{formatBytes(hw.memory_used_bytes)} in use</span>
+            </div>
+            <UsageBar value={memPct} className="h-2" quiet {...RESOURCE_LIMITS.mem} />
+          </div>
+          {mem ? (
             <KeyValues
               items={[
-                ["Charge", formatPct(hw.battery.percent)],
-                ["State", titleCase(hw.battery.state)],
-                ["Health", hw.battery.health_pct == null ? "Unknown" : formatPct(hw.battery.health_pct)],
+                ["Type", [mem.type, mem.speed_mts ? `${mem.speed_mts} MT/s` : ""].filter(Boolean).join(" · ")],
+                [
+                  "Upgrade",
+                  mem.soldered
+                    ? "Soldered to the board, not upgradable"
+                    : mem.slots_total
+                      ? `${mem.slots_used ?? 0} of ${mem.slots_total} slots used${(mem.slots_used ?? 0) < mem.slots_total ? " · room to add more" : ""}`
+                      : "",
+                ],
+                ...(mem.modules ?? []).map(
+                  (m): [React.ReactNode, React.ReactNode] => [
+                    m.slot || "Module",
+                    [formatBytes(m.capacity_bytes), m.type, m.speed_mts ? `${m.speed_mts} MT/s` : ""].filter(Boolean).join(" · "),
+                  ],
+                ),
               ]}
             />
+          ) : v2 ? (
+            <p className="text-sm text-muted-foreground">Module details weren&apos;t available on this device.</p>
           ) : (
-            <p className="text-sm text-muted-foreground">No battery detected.</p>
+            updateHint
           )}
-        </CardContent>
-      </Card>
+        </>
+      ),
+    },
+    {
+      key: "system",
+      title: "System & firmware",
+      body: (
+        <>
+          <KeyValues
+            items={[
+              ["Manufacturer", hw.manufacturer],
+              ["Model", hw.model],
+              ["Serial number", hw.serial && <CopyValue key="s" value={hw.serial} label="serial number" mono />],
+              ...(fw
+                ? ([
+                    ["Firmware", [fw.vendor && fw.vendor !== hw.manufacturer ? fw.vendor : "", fw.version].filter(Boolean).join(" ")],
+                    ["Firmware date", fw.release_date ? formatDate(fw.release_date) : ""],
+                    ["Secure Boot", <SecureBootBadge key="sb" on={fw.secure_boot} />],
+                    [
+                      "Security chip",
+                      fw.security_chip ? (
+                        <span key="tpm" className="inline-flex flex-wrap items-center gap-2">
+                          {fw.security_chip}
+                          {fw.tpm_enabled === false && <Badge variant="warning">Disabled</Badge>}
+                        </span>
+                      ) : (
+                        "None found"
+                      ),
+                    ],
+                  ] as [React.ReactNode, React.ReactNode][])
+                : []),
+            ]}
+          />
+          {!v2 && updateHint}
+        </>
+      ),
+    },
+  ];
+  if (b.present) {
+    cards.push({
+      key: "battery",
+      title: "Battery",
+      body: (
+        <KeyValues
+          items={[
+            ["Charge", formatPct(b.percent)],
+            ["State", batteryFresh && BATTERY_STATE[b.state] ? BATTERY_STATE[b.state] : ""],
+            ["Health", b.health_pct == null ? "Unknown" : formatPct(b.health_pct)],
+            ["Charge cycles", b.cycle_count != null ? String(b.cycle_count) : ""],
+            [
+              "Capacity",
+              b.full_mwh && b.design_mwh ? `${(b.full_mwh / 1000).toFixed(1)} Wh of ${(b.design_mwh / 1000).toFixed(1)} Wh when new` : "",
+            ],
+          ]}
+        />
+      ),
+    });
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {cards.map((c, i) => (
+        // An odd card out spans both columns, so desktops without a battery have no gap.
+        <Card key={c.key} className={cn(i === cards.length - 1 && cards.length % 2 === 1 && "lg:col-span-2")}>
+          <CardHeader>
+            <CardTitle>{c.title}</CardTitle>
+          </CardHeader>
+          <CardContent>{c.body}</CardContent>
+        </Card>
+      ))}
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Storage</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {hw.disks.length === 0 && <p className="text-sm text-muted-foreground">No volumes reported.</p>}
-          {hw.disks.map((disk) => {
-            const pct = disk.total_bytes ? (disk.used_bytes / disk.total_bytes) * 100 : 0;
-            return (
-              <div key={disk.mount}>
-                <div className="mb-1.5 flex items-baseline justify-between gap-4 text-sm">
-                  <span className="truncate font-mono">
-                    {disk.mount} <span className="text-xs text-muted-foreground">{disk.fstype}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground tabular">
-                    {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)} · {formatBytes(disk.free_bytes)} free
-                  </span>
+        <CardContent className="space-y-5">
+          {hw.drives && hw.drives.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Drives</p>
+              {hw.drives.map((dr, i) => {
+                const health = dr.health ? DRIVE_HEALTH[dr.health] : undefined;
+                return (
+                  <div key={`${dr.model}-${i}`} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium">{dr.model}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {[dr.bus, dr.media, dr.size_bytes ? formatBytes(dr.size_bytes) : ""].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    {health ? <Badge variant={health.variant}>{health.label}</Badge> : <span className="text-xs text-muted-foreground">Health not reported</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="space-y-4">
+            {hw.drives && hw.drives.length > 0 && <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Volumes</p>}
+            {hw.disks.length === 0 && <p className="text-sm text-muted-foreground">No volumes reported.</p>}
+            {hw.disks.map((disk) => {
+              const pct = disk.total_bytes ? (disk.used_bytes / disk.total_bytes) * 100 : 0;
+              const isSystem = disk === sysDisk;
+              return (
+                <div key={disk.mount}>
+                  <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-mono">{disk.mount}</span>
+                      <span className="text-xs text-muted-foreground">{disk.fstype}</span>
+                      {isSystem && enc.disk_encrypted === true && <Badge variant="success">{enc.encryption_method || "Encrypted"}</Badge>}
+                      {isSystem && enc.disk_encrypted === false && <Badge variant="warning">Not encrypted</Badge>}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular">
+                      {formatBytes(disk.used_bytes)} / {formatBytes(disk.total_bytes)} · {formatBytes(disk.free_bytes)} free
+                    </span>
+                  </div>
+                  <UsageBar value={pct} className="h-2" quiet {...RESOURCE_LIMITS.disk} />
                 </div>
-                <UsageBar value={pct} className="h-2" />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+          {!v2 && updateHint}
         </CardContent>
       </Card>
     </div>

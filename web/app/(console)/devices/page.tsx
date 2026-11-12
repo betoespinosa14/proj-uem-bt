@@ -8,7 +8,7 @@ import { ArrowUpCircle, ChevronDown, ChevronsUpDown, ChevronUp, Monitor, Search,
 import { agentOutdated, api, qk, type CommandType, type Device, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
-import { cn, formatDateTime, formatPct, osLabel, relativeTime, relativeTimeShort } from "@/lib/utils";
+import { cn, RESOURCE_LIMITS, formatDateTime, formatPct, osLabel, relativeTime, relativeTimeShort } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox, Input } from "@/components/ui/input";
@@ -19,12 +19,7 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/comp
 import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
 import { CommandDialog, useAgentLatest } from "@/components/commands";
 
-// Same limits as the Dashboard's Device health card: amber a little before, red at the limit.
-const RESOURCE_LIMITS = [
-  { warnAt: 80, alertAt: 90 }, // CPU
-  { warnAt: 80, alertAt: 90 }, // memory
-  { warnAt: 75, alertAt: 85 }, // disk
-];
+const LIMITS = [RESOURCE_LIMITS.cpu, RESOURCE_LIMITS.mem, RESOURCE_LIMITS.disk];
 
 // Column sorting. The first click on a column puts the problems on top (offline,
 // non-compliant, highest usage, longest unseen); a second click reverses it.
@@ -401,7 +396,7 @@ function DevicesView() {
                     </TD>
                     <TD className="col-res">
                       <div className="grid w-44 grid-cols-3 gap-2 text-xs tabular text-muted-foreground">
-                        {RESOURCE_LIMITS.map((limit, i) => {
+                        {LIMITS.map((limit, i) => {
                           const v = [d.cpu_pct, d.mem_pct, d.disk_pct][i];
                           return (
                             <div key={i}>

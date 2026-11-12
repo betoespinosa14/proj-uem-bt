@@ -8,7 +8,7 @@ import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide
 import { agentOutdated, api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
-import { formatPct, osLabel, relativeTime } from "@/lib/utils";
+import { cn, formatDateTime, formatPct, osLabel, relativeTime, relativeTimeShort } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox, Input } from "@/components/ui/input";
@@ -18,6 +18,13 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
 import { CommandDialog, useAgentLatest } from "@/components/commands";
+
+// Same limits as the Dashboard's Device health card: amber a little before, red at the limit.
+const RESOURCE_LIMITS = [
+  { warnAt: 80, alertAt: 90 }, // CPU
+  { warnAt: 80, alertAt: 90 }, // memory
+  { warnAt: 75, alertAt: 85 }, // disk
+];
 
 const BULK_ACTIONS: { type: CommandType; label: string }[] = [
   { type: "run_script", label: "Run script…" },
@@ -236,7 +243,7 @@ function DevicesView() {
                   <TH>Device</TH>
                   <TH className="hidden sm:table-cell">Status</TH>
                   <TH className="hidden sm:table-cell">Compliance</TH>
-                  <TH className="hidden md:table-cell">Group</TH>
+                  <TH className="hidden 2xl:table-cell">Group</TH>
                   <TH className="hidden lg:table-cell">
                     {/* Same grid as the cells below, so each label sits over its own number. */}
                     <div className="grid w-44 grid-cols-3 gap-2">
@@ -245,7 +252,7 @@ function DevicesView() {
                       <span>Disk</span>
                     </div>
                   </TH>
-                  <TH className="hidden xl:table-cell">Agent</TH>
+                  <TH className="hidden 2xl:table-cell">Agent</TH>
                   <TH className="hidden md:table-cell">Employee</TH>
                   <TH className="hidden sm:table-cell">Last seen</TH>
                 </TR>
@@ -287,20 +294,23 @@ function DevicesView() {
                     <TD className="hidden sm:table-cell">
                       <ComplianceBadge state={d.compliance_state} />
                     </TD>
-                    <TD className="hidden md:table-cell">
+                    <TD className="hidden 2xl:table-cell">
                       {d.group_name ?? <span className="text-muted-foreground">—</span>}
                     </TD>
                     <TD className="hidden lg:table-cell">
                       <div className="grid w-44 grid-cols-3 gap-2 text-xs tabular text-muted-foreground">
-                        {[d.cpu_pct, d.mem_pct, d.disk_pct].map((v, i) => (
-                          <div key={i}>
-                            <span>{formatPct(v)}</span>
-                            <UsageBar value={v} className="mt-1" />
-                          </div>
-                        ))}
+                        {RESOURCE_LIMITS.map((limit, i) => {
+                          const v = [d.cpu_pct, d.mem_pct, d.disk_pct][i];
+                          return (
+                            <div key={i}>
+                              <span className={cn(v != null && v >= limit.alertAt && "font-medium text-foreground")}>{formatPct(v)}</span>
+                              <UsageBar value={v} className="mt-1" quiet {...limit} />
+                            </div>
+                          );
+                        })}
                       </div>
                     </TD>
-                    <TD className="hidden whitespace-nowrap xl:table-cell">
+                    <TD className="hidden whitespace-nowrap 2xl:table-cell">
                       <span className="font-mono text-xs text-muted-foreground">{d.agent_version || "—"}</span>
                       {agentOutdated(d.agent_version, latestAgent) && (
                         <span className="ml-1.5 inline-flex items-center gap-1 text-xs font-medium text-foreground" title={`Agent ${latestAgent} is available`}>
@@ -315,7 +325,12 @@ function DevicesView() {
                     >
                       {d.employee_name || <span className="text-muted-foreground">—</span>}
                     </TD>
-                    <TD className="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{relativeTime(d.last_seen_at)}</TD>
+                    <TD
+                      className="hidden whitespace-nowrap text-muted-foreground sm:table-cell"
+                      title={d.last_seen_at ? formatDateTime(d.last_seen_at) : undefined}
+                    >
+                      {relativeTimeShort(d.last_seen_at)}
+                    </TD>
                   </TR>
                 ))}
               </TBody>

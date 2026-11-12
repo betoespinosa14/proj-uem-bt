@@ -344,11 +344,18 @@ export function UsageBar({
   value,
   className,
   charge,
+  quiet,
+  warnAt = 75,
+  alertAt = 90,
 }: {
   value: number | null | undefined;
   className?: string;
   /** A charge level (battery): low is red/amber and high is healthy, unlike usage. */
   charge?: boolean;
+  /** Grey below warnAt, so only values that need attention carry colour (for long lists). */
+  quiet?: boolean;
+  warnAt?: number;
+  alertAt?: number;
 }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
   const color = charge
@@ -357,11 +364,13 @@ export function UsageBar({
       : v <= 40
         ? "bg-warning"
         : "bg-success dark:bg-neon"
-    : v >= 90
+    : v >= alertAt
       ? "bg-destructive"
-      : v >= 75
+      : v >= warnAt
         ? "bg-warning"
-        : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
+        : quiet
+          ? "bg-muted-foreground/40"
+          : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
   return (
     <div
       className={cn(

@@ -21,6 +21,20 @@ export function relativeTime(ts: string | null | undefined, now: number = Date.n
   return rtf.format(Math.round(diff / (86400 * 365)), "year");
 }
 
+/** A compact past time for tight columns: "just now", "17 min ago", "3 h ago", "2 d ago". */
+export function relativeTimeShort(ts: string | null | undefined, now: number = Date.now()): string {
+  if (!ts) return "Never";
+  const t = new Date(ts).getTime();
+  if (Number.isNaN(t)) return "—";
+  const s = Math.max(0, (now - t) / 1000); // a clock slightly ahead reads as "just now"
+  if (s < 45) return "just now";
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 86400 * 30) return `${Math.round(s / 86400)} d ago`;
+  if (s < 86400 * 365) return `${Math.round(s / (86400 * 30))} mo ago`;
+  return `${Math.round(s / (86400 * 365))} y ago`;
+}
+
 export function formatDateTime(ts: string | null | undefined): string {
   if (!ts) return "—";
   const d = new Date(ts);

@@ -112,6 +112,9 @@ export function CommandDialog({
   });
 
   const submit = () => {
+    // The button is disabled until the count is typed; this keeps any other way of
+    // submitting (a future shortcut, say) from slipping past the large-batch guard.
+    if (deviceIds.length > BIG_BATCH && DISRUPTIVE.includes(type) && typedCount.trim() !== String(deviceIds.length)) return;
     const req = buildRequest();
     if (typeof req === "string") {
       toast.error(req);

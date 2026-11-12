@@ -303,7 +303,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
       <div className={cn("transition-[padding] duration-300 lg:py-3 lg:pr-3", expanded ? "lg:pl-60" : "lg:pl-[84px]")}>
         <div className="lg:h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:rounded-[28px] lg:bg-canvas lg:shadow-lift lg:ring-1 lg:ring-edge dark:lg:shadow-frame dark:lg:ring-0">
-          <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-[hsl(var(--canvas-from)/0.9)] px-4 backdrop-blur-md sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-[hsl(var(--canvas-from))] px-4 sm:px-6 lg:px-8">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
               <Menu />
             </Button>

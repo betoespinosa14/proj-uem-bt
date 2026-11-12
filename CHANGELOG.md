@@ -9,6 +9,8 @@ commits after 2026.11.0, at commit `60f25a5`.
 
 ## Unreleased
 
+## 2026.11.15 (2026-11-12): Hardware inventory v2, Teams notifications, Devices list and device page redesign
+
 ### Added
 - **Hardware inventory v2 (agent).** The agent now also reports firmware (BIOS/UEFI vendor, version and date),
   Secure Boot, the security chip (TPM version and whether it's enabled, or Apple Secure Enclave), graphics, the memory

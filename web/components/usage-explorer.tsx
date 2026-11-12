@@ -8,7 +8,7 @@ import { api, qk, type FleetAppRow, type FleetUsageFilters, type FleetUsageRow, 
 import { useDebounced } from "@/lib/hooks";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/components/toast";
-import { formatDateTime, formatHours, relativeTimeShort } from "@/lib/utils";
+import { cn, formatDateTime, formatHours, relativeTimeShort } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -328,12 +328,26 @@ function LastUsed({ ts }: { ts: string | null }) {
   );
 }
 
-function InfraBadge({ app, infra }: { app: string; infra: Set<string> }) {
-  if (!infra.has(app.toLowerCase())) return null;
+/** The app name and its badges on one line; a long name is cut with "…" (full name on hover) so the badges never wrap. */
+function AppCell({ app, infra, notInstalled }: { app: string; infra: Set<string>; notInstalled?: boolean }) {
   return (
-    <Badge variant="neutral" className="ml-2" title="Marked as infrastructure: open by design, so its open time isn't ranked as idle">
-      Infrastructure
-    </Badge>
+    <TD className="font-medium">
+      <span className="flex max-w-[22rem] items-center gap-2">
+        <span className="min-w-0 truncate" title={app}>
+          {app}
+        </span>
+        {infra.has(app.toLowerCase()) && (
+          <Badge variant="neutral" className="shrink-0" title="Marked as infrastructure: open by design, so its open time isn't ranked as idle">
+            Infrastructure
+          </Badge>
+        )}
+        {notInstalled && (
+          <Badge variant="neutral" className="shrink-0" title="Used, but no longer in the device's installed software list">
+            Not installed
+          </Badge>
+        )}
+      </span>
+    </TD>
   );
 }
 
@@ -397,10 +411,7 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
       <TBody>
         {rows.map((u) => (
           <TR key={u.app}>
-            <TD className="font-medium">
-              {u.app}
-              <InfraBadge app={u.app} infra={infra} />
-            </TD>
+            <AppCell app={u.app} infra={infra} />
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
             <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
             <TD className="text-right tabular">{u.users}</TD>
@@ -479,23 +490,15 @@ function ByUserTable({
       <TBody>
         {rows.map((u) => (
           <TR key={`${u.device_id}-${u.app}-${u.user}`}>
-            <TD className="font-medium">
-              {u.app}
-              <InfraBadge app={u.app} infra={infra} />
-              {!u.installed && (
-                <Badge variant="neutral" className="ml-2" title="Used, but no longer in the device's installed software list">
-                  Not installed
-                </Badge>
-              )}
-            </TD>
+            <AppCell app={u.app} infra={infra} notInstalled={!u.installed} />
             {!scoped && (
-              <TD>
+              <TD className="whitespace-nowrap">
                 <Link href={`/devices/${u.device_id}`} className="hover:underline">
                   {u.device_name}
                 </Link>
               </TD>
             )}
-            <TD className={u.user ? "" : "text-muted-foreground"}>{u.user || "—"}</TD>
+            <TD className={cn("whitespace-nowrap", !u.user && "text-muted-foreground")}>{u.user || "—"}</TD>
             <ActiveCell seconds={u.active_seconds} used={!!u.user} noActive={noActive} />
             <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
             <TD className="whitespace-nowrap text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>

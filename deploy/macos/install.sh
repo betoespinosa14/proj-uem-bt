@@ -88,7 +88,7 @@ EOF
   done
 
   echo
-  echo "Staged version $(make -s -C "$REPO" version)"
+  echo "Staged version $(make -s -C "$REPO" version) (agents $(make -s -C "$REPO" agent-version))"
   echo "Next: sudo \"$REPO/deploy/macos/install.sh\" --system"
 }
 

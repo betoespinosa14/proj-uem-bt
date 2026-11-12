@@ -9,6 +9,14 @@ commits after 2026.11.0, at commit `60f25a5`.
 
 ## Unreleased
 
+## 2026.11.17 (2026-11-12): One agent version across the fleet
+
+### Changed
+- **Agent versions only change when the agent does.** Builds now stamp the agents with the last release's version
+  while nothing the agent is built from has changed since that release, so console-only updates no longer hand out
+  agents labelled like `2026.11.16-2-gc5b074e`. This release brings every device back to one version; the agent
+  itself is unchanged from 2026.11.16.
+
 ## 2026.11.16 (2026-11-12): Graphics list without virtual display adapters
 
 ### Fixed

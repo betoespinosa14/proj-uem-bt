@@ -369,7 +369,7 @@ export function UsageBar({
       : v >= warnAt
         ? "bg-warning"
         : quiet
-          ? "bg-brand/45 dark:bg-brand/60"
+          ? "bg-brand/60 dark:bg-brand/60"
           : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
   return (
     <div

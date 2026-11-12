@@ -352,7 +352,7 @@ export function UsageBar({
   className?: string;
   /** A charge level (battery): low is red/amber and high is healthy, unlike usage. */
   charge?: boolean;
-  /** Grey below warnAt, so only values that need attention carry colour (for long lists). */
+  /** A soft blue below warnAt, so values that need attention stand out (for long lists). */
   quiet?: boolean;
   warnAt?: number;
   alertAt?: number;
@@ -369,7 +369,7 @@ export function UsageBar({
       : v >= warnAt
         ? "bg-warning"
         : quiet
-          ? "bg-muted-foreground/40"
+          ? "bg-brand/45 dark:bg-brand/60"
           : "bg-brand dark:bg-gradient-to-r dark:from-brand dark:to-neon";
   return (
     <div

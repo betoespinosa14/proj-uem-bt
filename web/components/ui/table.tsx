@@ -85,8 +85,9 @@ export function TD({ className, ...props }: React.TdHTMLAttributes<HTMLTableCell
 }
 
 /**
- * A column header that sorts. The arrow shows on the active column (up for
- * ascending, down for descending) and faintly on hover for the others.
+ * A column header that sorts. The active column shows its direction (up for
+ * ascending, down for descending); the others show a faint up/down arrow at
+ * rest, stronger on hover, so it's clear they can be sorted too.
  */
 export function SortButton<K extends string>({
   label,
@@ -112,7 +113,7 @@ export function SortButton<K extends string>({
       title={`Sort by ${label.toLowerCase()}`}
     >
       {label}
-      <Icon className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")} aria-hidden />
+      <Icon className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-30 group-hover:opacity-70 group-focus-visible:opacity-70")} aria-hidden />
     </button>
   );
 }

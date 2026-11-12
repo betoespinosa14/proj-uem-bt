@@ -18,6 +18,8 @@ commits after 2026.11.0, at commit `60f25a5`.
   show the first 500 with **Show all** (a 1,931-package server renders all in about 0.2 s).
   The **Name**, **Installed** and **Last used** headers sort (dates newest first; apps with no date go last), and
   the games/gambling warning names at most 3 apps, with "+N more" opening the **Flagged** filter.
+- **Sortable column headers** (Devices list and Software tab) show a faint up/down arrow on every sortable column, not
+  only on hover.
 
 ## 2026.11.17 (2026-11-12): One agent version across the fleet
 

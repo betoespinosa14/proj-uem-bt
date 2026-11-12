@@ -18,6 +18,7 @@ import {
   Play,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Terminal,
   Trash2,
@@ -113,11 +114,24 @@ export default function DevicePage() {
               <span className="min-w-0 basis-full sm:basis-auto">
                 {d.os_name || osLabel(d.os_family)} {d.os_version} · Last seen {relativeTime(d.last_seen_at)}
               </span>
-              {d.tags.map((t) => (
-                <Badge key={t} variant="outline" className="font-mono">
-                  {t}
-                </Badge>
-              ))}
+              {d.tags.map((t) => {
+                const rules = d.rule_tags?.[t];
+                return rules?.length ? (
+                  <Badge
+                    key={t}
+                    variant="outline"
+                    className="gap-1 font-mono"
+                    title={`Added by the compliance rule ${rules.map((r) => `"${r}"`).join(" and ")}. Removed automatically when the device passes it.`}
+                  >
+                    <ShieldAlert className="h-3 w-3" aria-label="Added by a compliance rule" />
+                    {t}
+                  </Badge>
+                ) : (
+                  <Badge key={t} variant="outline" className="font-mono">
+                    {t}
+                  </Badge>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -821,7 +835,7 @@ function EditDevice({ d, onClose }: { d: DeviceDetail; onClose: () => void }) {
             options={(groups.data?.items ?? []).map((g) => ({ value: g.id, label: g.name }))}
           />
         </Field>
-        <Field label="Tags" htmlFor="dtags" hint="Press Enter to add. Tags are searchable and usable in compliance rules.">
+        <Field label="Tags" htmlFor="dtags" hint="Press Enter to add. Tags are searchable and usable in compliance rules. A tag a compliance rule added comes back while the device still fails that rule.">
           <TagInput id="dtags" value={tags} onChange={setTags} placeholder="e.g. finance, loaner" />
         </Field>
         <Field label="Display name" htmlFor="dname" hint="Generated from the group and employee name.">

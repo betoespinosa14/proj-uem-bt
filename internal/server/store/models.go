@@ -93,6 +93,8 @@ type Device struct {
 type DeviceDetail struct {
 	Device
 	Inventory json.RawMessage `json:"inventory"`
+	// RuleTags maps each tag a compliance rule added to the rules responsible.
+	RuleTags map[string][]string `json:"rule_tags"`
 }
 
 type Software struct {

@@ -309,6 +309,8 @@ func (c *Core) EvaluateDevice(ctx context.Context, orgID, deviceID string) error
 	facts := compliance.Facts{Device: dev, Inventory: inv, Software: software, Now: time.Now()}
 
 	applied := []string{}
+	ruleNames := map[string]string{}
+	wantTags := map[string]string{} // failing rule → the tag it puts on the device
 	state := "compliant"
 	for _, r := range rules {
 		if !compliance.Applies(r, dev) {
@@ -325,11 +327,19 @@ func (c *Core) EvaluateDevice(ctx context.Context, orgID, deviceID string) error
 			continue
 		}
 		state = "non_compliant"
+		ruleNames[r.ID] = r.Name
+		if r.Actions.Tag != nil && strings.TrimSpace(*r.Actions.Tag) != "" {
+			wantTags[r.ID] = strings.TrimSpace(*r.Actions.Tag)
+		}
 		if newlyFailing {
 			c.onViolation(ctx, dev, r, details)
 		}
 	}
 	if err := c.Store.DeleteResultsExcept(ctx, deviceID, applied); err != nil {
+		return err
+	}
+	tagsChanged, err := c.syncRuleTags(ctx, dev, wantTags, ruleNames)
+	if err != nil {
 		return err
 	}
 	// Without inventory nothing meaningful has been verified yet.
@@ -344,9 +354,38 @@ func (c *Core) EvaluateDevice(ctx context.Context, orgID, deviceID string) error
 		c.Audit.Record(ctx, audit.Event{OrgID: orgID, Actor: audit.System(), Action: "device.compliance.change",
 			TargetType: "device", TargetID: deviceID,
 			Details: map[string]any{"device_name": dev.Name, "from": dev.ComplianceState, "to": state}})
+	}
+	if changed || tagsChanged {
 		c.PublishDevice(ctx, orgID, deviceID)
 	}
 	return nil
+}
+
+// syncRuleTags puts the tags of failing rules on a device and takes off the ones
+// rules added earlier but no longer want (the device passes, the rule no longer
+// applies or was deleted, or its tag was renamed). Each change is audit-logged.
+func (c *Core) syncRuleTags(ctx context.Context, dev store.Device, want, ruleNames map[string]string) (bool, error) {
+	added, removed, err := c.Store.SyncRuleTags(ctx, dev.OrgID, dev.ID, want)
+	if err != nil {
+		return false, err
+	}
+	record := func(action string, t store.RuleTag) {
+		details := map[string]any{"device_name": dev.Name, "tag": t.Tag, "rule_id": t.RuleID}
+		if name, ok := ruleNames[t.RuleID]; ok {
+			details["rule_name"] = name
+		} else if r, err := c.Store.GetRule(ctx, dev.OrgID, t.RuleID); err == nil {
+			details["rule_name"] = r.Name
+		}
+		c.Audit.Record(ctx, audit.Event{OrgID: dev.OrgID, Actor: audit.System(), Action: action,
+			TargetType: "device", TargetID: dev.ID, Details: details})
+	}
+	for _, t := range added {
+		record("device.tag.add", t)
+	}
+	for _, t := range removed {
+		record("device.tag.remove", t)
+	}
+	return len(added)+len(removed) > 0, nil
 }
 
 func (c *Core) onViolation(ctx context.Context, dev store.Device, r store.Rule, details string) {
@@ -368,11 +407,7 @@ func (c *Core) onViolation(ctx context.Context, dev store.Device, r store.Rule, 
 			"device": dev, "rule": map[string]any{"id": r.ID, "name": r.Name, "severity": r.Severity}, "details": details,
 		})
 	}
-	if r.Actions.Tag != nil && strings.TrimSpace(*r.Actions.Tag) != "" {
-		if err := c.Store.AddDeviceTag(ctx, dev.OrgID, dev.ID, strings.TrimSpace(*r.Actions.Tag)); err == nil {
-			c.PublishDevice(ctx, dev.OrgID, dev.ID)
-		}
-	}
+	// The rule's tag is applied by syncRuleTags, which also takes it off again.
 	if r.Actions.Command != nil && r.Actions.Command.Type != "" {
 		if _, err := c.IssueCommand(ctx, dev.OrgID, dev.ID, r.Actions.Command.Type, r.Actions.Command.Payload,
 			audit.System(), "compliance"); err != nil {

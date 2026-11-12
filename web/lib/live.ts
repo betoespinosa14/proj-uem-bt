@@ -63,7 +63,10 @@ function matchesFilters(d: Device, f: DeviceFilters | undefined): boolean {
 
 function applyDevice(qc: QueryClient, d: Device, scheduleInvalidate: (key: readonly unknown[]) => void) {
   // Detail: merge, keep inventory (device.updated carries a Device, not a DeviceDetail).
+  const before = qc.getQueryData<DeviceDetail>(qk.device(d.id));
   qc.setQueryData<DeviceDetail>(qk.device(d.id), (old) => (old ? { ...old, ...d } : old));
+  // rule_tags only comes with the full detail: refetch it when the tags change.
+  if (before && before.tags.join("\n") !== d.tags.join("\n")) scheduleInvalidate(qk.device(d.id));
 
   // Lists: patch in place. If the device is new to a list, or no longer matches the
   // list's server-side filter, refetch that list (throttled).

@@ -253,7 +253,8 @@ func (s *Store) GetDeviceDetail(ctx context.Context, orgID, id string) (DeviceDe
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return dd, err
 	}
-	return dd, nil
+	dd.RuleTags, err = s.RuleTagSources(ctx, orgID, id)
+	return dd, err
 }
 
 // DeviceAuth is what the agent endpoint needs to authenticate a device.
@@ -299,14 +300,6 @@ func (s *Store) refreshDeviceNames(ctx context.Context, orgID, deviceID string) 
 		UPDATE devices d SET name = COALESCE((SELECT g.name || ' | ' FROM device_groups g WHERE g.id = d.group_id), '') || d.employee_name
 		WHERE d.org_id = $1 AND d.retired_at IS NULL AND d.employee_name <> '' AND ($2 = '' OR d.id::text = $2)`, orgID, deviceID)
 	return mapErr(err)
-}
-
-// AddDeviceTag adds a tag if not already present.
-func (s *Store) AddDeviceTag(ctx context.Context, orgID, id, tag string) error {
-	_, err := s.Pool.Exec(ctx, `
-		UPDATE devices SET tags = array_append(tags, $3)
-		WHERE org_id = $1 AND id = $2 AND NOT ($3 = ANY(tags))`, orgID, id, tag)
-	return err
 }
 
 // RetireDevice soft-deletes a device; its credential stops working immediately.

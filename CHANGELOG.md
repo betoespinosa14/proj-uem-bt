@@ -10,6 +10,12 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Compliance tags come off automatically.** A tag a compliance rule puts on a device is now removed when the
+  device passes that rule again (or the rule stops applying, is deleted, or its tag is renamed), just as the rule's
+  alert closes. BEACON remembers which tags a rule added, so tags people add by hand are never removed, and a tag
+  shared by two rules stays until both pass. Each automatic add or remove is in the audit log, and on the device page
+  a rule-added tag shows a shield icon naming the rule. Tags already on devices that currently fail the rule are
+  treated as rule-added.
 - **Microsoft Teams notifications.** A webhook can now be sent as **Microsoft Teams** instead of generic JSON:
   BEACON posts a readable card (title, device, department, severity, time) with an **Open in BEACON** button to a
   channel's Teams Workflows webhook ("Send webhook alerts to a channel"). Works for every event, including the

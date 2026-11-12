@@ -140,7 +140,8 @@ export type Inventory = {
   users: { logged_in: string[] };
 };
 
-export type DeviceDetail = Device & { inventory: Inventory | null };
+// rule_tags: each tag a compliance rule added → the rules responsible.
+export type DeviceDetail = Device & { inventory: Inventory | null; rule_tags?: Record<string, string[]> | null };
 
 export type SoftwareItem = {
   name: string;

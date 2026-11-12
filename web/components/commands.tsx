@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, qk, SHELLS, type Command, type CommandRequest, type CommandType, type Shell } from "@/lib/api";
 import { formatDateTime, titleCase } from "@/lib/utils";
@@ -47,6 +48,10 @@ const ACTION_COPY: Record<Exclude<CommandType, "run_script">, { title: string; c
  * Dialog that issues one command to one device or to many (bulk).
  * Script commands can use a library script or an ad-hoc body.
  */
+// Disruptive commands need the device count typed in before they go to a large batch.
+const DISRUPTIVE: CommandType[] = ["reboot", "shutdown", "lock", "run_script", "uninstall_agent"];
+const BIG_BATCH = 10;
+
 export function CommandDialog({
   open,
   onOpenChange,
@@ -65,6 +70,7 @@ export function CommandDialog({
   const qc = useQueryClient();
   const scripts = useQuery({ queryKey: qk.scripts, queryFn: api.scripts.list, enabled: open && type === "run_script" });
   const [mode, setMode] = useState<"library" | "adhoc">("library");
+  const [typedCount, setTypedCount] = useState("");
   const [scriptId, setScriptId] = useState("");
   const [shell, setShell] = useState<Shell>("bash");
   const [body, setBody] = useState("");
@@ -115,6 +121,9 @@ export function CommandDialog({
   };
 
   const copy = type === "run_script" ? { title: "Run script", confirm: "Run", danger: false } : ACTION_COPY[type];
+  const count = deviceIds.length;
+  const guarded = count > BIG_BATCH && DISRUPTIVE.includes(type);
+  const confirmLabel = count > 1 ? `${copy.confirm} ${count} devices` : copy.confirm;
 
   return (
     <Dialog
@@ -128,8 +137,13 @@ export function CommandDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant={copy.danger ? "destructive" : "default"} loading={mutation.isPending} onClick={submit}>
-            {copy.confirm}
+          <Button
+            variant={copy.danger ? "destructive" : "default"}
+            loading={mutation.isPending}
+            disabled={guarded && typedCount.trim() !== String(count)}
+            onClick={submit}
+          >
+            {confirmLabel}
           </Button>
         </>
       }
@@ -202,6 +216,23 @@ export function CommandDialog({
         <p className="text-sm text-muted-foreground">
           {type === "lock" ? "Locks the active user session." : "Asks the agent to collect and upload a full inventory now."}
         </p>
+      )}
+      {guarded && (
+        <div className="mt-4 space-y-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+          <p className="flex items-start gap-2 font-medium">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            This affects {count} devices at once.
+          </p>
+          <Field label={`Type ${count} to confirm`} htmlFor="confirm-count">
+            <Input
+              id="confirm-count"
+              inputMode="numeric"
+              autoComplete="off"
+              value={typedCount}
+              onChange={(e) => setTypedCount(e.target.value)}
+            />
+          </Field>
+        </div>
       )}
     </Dialog>
   );

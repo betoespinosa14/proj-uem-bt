@@ -10,8 +10,13 @@ import { cn } from "@/lib/utils";
 export function Table({
   className,
   containerClassName,
+  stickyHeader,
   ...props
-}: React.TableHTMLAttributes<HTMLTableElement> & { containerClassName?: string }) {
+}: React.TableHTMLAttributes<HTMLTableElement> & {
+  containerClassName?: string;
+  /** Keep the column headers in view under the top bar while the page scrolls (only while the table fits). */
+  stickyHeader?: boolean;
+}) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [edges, setEdges] = React.useState({ left: false, right: false });
   React.useEffect(() => {
@@ -32,10 +37,16 @@ export function Table({
       ro.disconnect();
     };
   }, []);
+  // A sideways-scroll box would trap a sticky header, so it only becomes one when the
+  // table is too wide; while the table fits, overflow is clipped instead.
+  const overflowing = edges.left || edges.right;
   const fade = "pointer-events-none absolute inset-y-0 w-6 from-card to-transparent transition-opacity duration-200";
   return (
     <div className="relative w-full">
-      <div ref={ref} className={cn("w-full overflow-x-auto", containerClassName)}>
+      <div
+        ref={ref}
+        className={cn("w-full", stickyHeader && !overflowing ? "sticky-head overflow-x-clip" : "overflow-x-auto", containerClassName)}
+      >
         <table className={cn("w-full caption-bottom text-sm", className)} {...props} />
       </div>
       <div aria-hidden className={cn(fade, "left-0 bg-gradient-to-r", edges.left ? "opacity-100" : "opacity-0")} />

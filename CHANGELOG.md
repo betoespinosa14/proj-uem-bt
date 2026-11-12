@@ -15,6 +15,11 @@ commits after 2026.11.0, at commit `60f25a5`.
   according to the table's own width, so there is no sideways scrolling at 1366–1920 px screens; Last seen is compact
   ("17 min ago", exact time on hover) with room at the right edge. Resource bars are a soft blue when normal, amber
   near and red at the Dashboard's health limits. Any table that does scroll sideways shows a fade on the hidden side.
+- **Devices list sorting and sticky headers.** Click Device, Status, Compliance, CPU, Mem, Disk or Last seen to
+  sort; the first click puts problems on top (offline, non-compliant, highest usage, longest unseen) and the order
+  is kept in the address. Column headers stay in view while you scroll. Reboot, shut down, lock, run script or
+  uninstall on more than 10 devices now asks you to type the device count, and the button names it
+  ("Reboot 40 devices").
 - **Compliance tags come off automatically.** A tag a compliance rule puts on a device is now removed when the
   device passes that rule again (or the rule stops applying, is deleted, or its tag is renamed), just as the rule's
   alert closes. BEACON remembers which tags a rule added, so tags people add by hand are never removed, and a tag

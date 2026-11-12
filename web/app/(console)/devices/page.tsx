@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide-react";
-import { agentOutdated, api, qk, type CommandType, type DeviceFilters } from "@/lib/api";
+import { ArrowUpCircle, ChevronDown, ChevronsUpDown, ChevronUp, Monitor, Search, UserPlus, X } from "lucide-react";
+import { agentOutdated, api, qk, type CommandType, type Device, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
 import { cn, formatDateTime, formatPct, osLabel, relativeTime, relativeTimeShort } from "@/lib/utils";
@@ -25,6 +25,77 @@ const RESOURCE_LIMITS = [
   { warnAt: 80, alertAt: 90 }, // memory
   { warnAt: 75, alertAt: 85 }, // disk
 ];
+
+// Column sorting. The first click on a column puts the problems on top (offline,
+// non-compliant, highest usage, longest unseen); a second click reverses it.
+type SortKey = "name" | "status" | "compliance" | "cpu" | "mem" | "disk" | "seen";
+type SortDir = "asc" | "desc";
+const SORT_KEYS: SortKey[] = ["name", "status", "compliance", "cpu", "mem", "disk", "seen"];
+const COMPLIANCE_RANK: Record<string, number> = { non_compliant: 2, unknown: 1, compliant: 0 };
+
+function sortValue(d: Device, key: SortKey): number | string | null {
+  switch (key) {
+    case "name":
+      return d.name.toLowerCase();
+    case "status":
+      return d.status === "offline" ? 1 : 0;
+    case "compliance":
+      return COMPLIANCE_RANK[d.compliance_state] ?? 1;
+    case "cpu":
+      return d.cpu_pct ?? null;
+    case "mem":
+      return d.mem_pct ?? null;
+    case "disk":
+      return d.disk_pct ?? null;
+    case "seen":
+      // Older is "bigger"; never seen is the stalest of all.
+      return d.last_seen_at ? -new Date(d.last_seen_at).getTime() : Number.POSITIVE_INFINITY;
+  }
+}
+
+function sortDevices(items: Device[], key: SortKey, dir: SortDir): Device[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const va = sortValue(a, key);
+    const vb = sortValue(b, key);
+    if (va !== vb) {
+      if (va === null) return 1; // no reading: always last
+      if (vb === null) return -1;
+      if (va < vb) return -sign;
+      if (va > vb) return sign;
+    }
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function SortButton({
+  label,
+  k,
+  sort,
+  onSort,
+}: {
+  label: string;
+  k: SortKey;
+  sort: { key: SortKey; dir: SortDir };
+  onSort: (k: SortKey) => void;
+}) {
+  const active = sort.key === k;
+  const Icon = !active ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(k)}
+      className={cn(
+        "group -mx-1 inline-flex items-center gap-1 rounded px-1 uppercase tracking-wider hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active && "text-foreground",
+      )}
+      title={`Sort by ${label.toLowerCase()}`}
+    >
+      {label}
+      <Icon className={cn("h-3 w-3 shrink-0", active ? "opacity-100" : "opacity-0 group-hover:opacity-60 group-focus-visible:opacity-60")} aria-hidden />
+    </button>
+  );
+}
 
 const BULK_ACTIONS: { type: CommandType; label: string }[] = [
   { type: "run_script", label: "Run script…" },
@@ -66,6 +137,30 @@ function DevicesView() {
   const [os, setOs] = useState(params.get("os") ?? "");
   const [compliance, setCompliance] = useState(params.get("compliance") ?? "");
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>(() => {
+    const key = params.get("sort") as SortKey | null;
+    return key && SORT_KEYS.includes(key)
+      ? { key, dir: params.get("dir") === "asc" ? "asc" : "desc" }
+      : { key: "name", dir: "asc" };
+  });
+  const onSort = (key: SortKey) => {
+    const next: { key: SortKey; dir: SortDir } =
+      sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" };
+    setSort(next);
+    // Keep the sort in the address so a shared link or Back shows the same order.
+    const p = new URLSearchParams(window.location.search);
+    if (next.key === "name" && next.dir === "asc") {
+      p.delete("sort");
+      p.delete("dir");
+    } else {
+      p.set("sort", next.key);
+      p.set("dir", next.dir);
+    }
+    const qs = p.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+  };
+  const ariaSort = (...keys: SortKey[]) =>
+    keys.includes(sort.key) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<CommandType | null>(null);
   // Devices for "Update agents (N)"; null means the action applies to the selection.
@@ -75,6 +170,7 @@ function DevicesView() {
   const devices = useQuery({ queryKey: qk.devices(filters), queryFn: () => api.devices.list(filters), placeholderData: (p) => p });
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
   const items = useMemo(() => devices.data?.items ?? [], [devices.data]);
+  const rows = useMemo(() => sortDevices(items, sort.key, sort.dir), [items, sort]);
   const latestAgent = useAgentLatest().data?.version;
   const outdated = useMemo(() => items.filter((d) => agentOutdated(d.agent_version, latestAgent)).map((d) => d.id), [items, latestAgent]);
 
@@ -191,7 +287,7 @@ function DevicesView() {
 
       {selected.size > 0 && can("commands.run") && (
         <div className="mb-3 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm animate-fade-in">
-          <span className="font-medium">{selected.size} selected</span>
+          <span className="font-medium">{allSelected ? `All ${items.length} shown selected` : `${selected.size} selected`}</span>
           <Dropdown>
             <DropdownTrigger>
               <Button size="sm">
@@ -215,7 +311,7 @@ function DevicesView() {
       {devices.error ? (
         <ErrorState error={devices.error} onRetry={devices.refetch} />
       ) : (
-        <Card className="overflow-hidden">
+        <Card className="overflow-clip">
           {devices.isLoading ? (
             <TableSkeleton rows={6} cols={7} />
           ) : items.length === 0 ? (
@@ -234,7 +330,7 @@ function DevicesView() {
           ) : (
             // The optional columns follow the table's own width (see .col-res / .col-agent
             // in globals.css), not the screen's: the page content is capped at max-w-7xl.
-            <Table containerClassName="table-cq">
+            <Table containerClassName="table-cq" stickyHeader>
               <THead>
                 <TR>
                   {can("commands.run") && (
@@ -242,23 +338,31 @@ function DevicesView() {
                       <Checkbox checked={allSelected} onChange={toggleAll} aria-label="Select all devices" />
                     </TH>
                   )}
-                  <TH>Device</TH>
-                  <TH className="hidden sm:table-cell">Status</TH>
-                  <TH className="hidden sm:table-cell">Compliance</TH>
-                  <TH className="col-res">
+                  <TH aria-sort={ariaSort("name")}>
+                    <SortButton label="Device" k="name" sort={sort} onSort={onSort} />
+                  </TH>
+                  <TH className="hidden sm:table-cell" aria-sort={ariaSort("status")}>
+                    <SortButton label="Status" k="status" sort={sort} onSort={onSort} />
+                  </TH>
+                  <TH className="hidden sm:table-cell" aria-sort={ariaSort("compliance")}>
+                    <SortButton label="Compliance" k="compliance" sort={sort} onSort={onSort} />
+                  </TH>
+                  <TH className="col-res" aria-sort={ariaSort("cpu", "mem", "disk")}>
                     {/* Same grid as the cells below, so each label sits over its own number. */}
                     <div className="grid w-44 grid-cols-3 gap-2">
-                      <span>CPU</span>
-                      <span>Mem</span>
-                      <span>Disk</span>
+                      <SortButton label="CPU" k="cpu" sort={sort} onSort={onSort} />
+                      <SortButton label="Mem" k="mem" sort={sort} onSort={onSort} />
+                      <SortButton label="Disk" k="disk" sort={sort} onSort={onSort} />
                     </div>
                   </TH>
                   <TH className="col-agent">Agent</TH>
-                  <TH className="hidden pr-5 sm:table-cell">Last seen</TH>
+                  <TH className="hidden pr-5 sm:table-cell" aria-sort={ariaSort("seen")}>
+                    <SortButton label="Last seen" k="seen" sort={sort} onSort={onSort} />
+                  </TH>
                 </TR>
               </THead>
               <TBody>
-                {items.map((d) => (
+                {rows.map((d) => (
                   <TR key={d.id} className="cursor-pointer" onClick={() => router.push(`/devices/${d.id}`)}>
                     {can("commands.run") && (
                       <TD onClick={(e) => e.stopPropagation()}>

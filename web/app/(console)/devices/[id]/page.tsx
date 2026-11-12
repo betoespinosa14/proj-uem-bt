@@ -550,6 +550,7 @@ function Hardware({ d }: { d: DeviceDetail }) {
                       fw.security_chip ? (
                         <span key="tpm" className="inline-flex flex-wrap items-center gap-2">
                           {fw.security_chip}
+                          {fw.tpm_enabled === true && <Badge variant="success">Enabled</Badge>}
                           {fw.tpm_enabled === false && <Badge variant="warning">Disabled</Badge>}
                         </span>
                       ) : (

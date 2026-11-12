@@ -232,7 +232,9 @@ function DevicesView() {
               }
             />
           ) : (
-            <Table>
+            // The optional columns follow the table's own width (see .col-res / .col-agent
+            // in globals.css), not the screen's: the page content is capped at max-w-7xl.
+            <Table containerClassName="table-cq">
               <THead>
                 <TR>
                   {can("commands.run") && (
@@ -243,8 +245,7 @@ function DevicesView() {
                   <TH>Device</TH>
                   <TH className="hidden sm:table-cell">Status</TH>
                   <TH className="hidden sm:table-cell">Compliance</TH>
-                  <TH className="hidden 2xl:table-cell">Group</TH>
-                  <TH className="hidden lg:table-cell">
+                  <TH className="col-res">
                     {/* Same grid as the cells below, so each label sits over its own number. */}
                     <div className="grid w-44 grid-cols-3 gap-2">
                       <span>CPU</span>
@@ -252,9 +253,8 @@ function DevicesView() {
                       <span>Disk</span>
                     </div>
                   </TH>
-                  <TH className="hidden 2xl:table-cell">Agent</TH>
-                  <TH className="hidden md:table-cell">Employee</TH>
-                  <TH className="hidden sm:table-cell">Last seen</TH>
+                  <TH className="col-agent">Agent</TH>
+                  <TH className="hidden pr-5 sm:table-cell">Last seen</TH>
                 </TR>
               </THead>
               <TBody>
@@ -266,17 +266,18 @@ function DevicesView() {
                       </TD>
                     )}
                     <TD>
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex max-w-[22rem] items-center gap-2.5">
                         <OsIcon os={d.os_family} />
                         <div className="min-w-0">
                           <Link
                             href={`/devices/${d.id}`}
                             onClick={(e) => e.stopPropagation()}
                             className="block truncate font-medium hover:underline"
+                            title={[d.name, d.logged_in_user && `Signed in: ${d.logged_in_user}`].filter(Boolean).join("\n")}
                           >
                             {d.name}
                           </Link>
-                          <p className="truncate text-xs text-muted-foreground">
+                          <p className="truncate text-xs text-muted-foreground" title={`${d.os_name} ${d.os_version} · ${d.ip_address || "no IP"}`}>
                             {d.os_name} {d.os_version} · {d.ip_address || "no IP"}
                           </p>
                           {/* On phones the status columns are hidden; show them here instead. */}
@@ -294,10 +295,7 @@ function DevicesView() {
                     <TD className="hidden sm:table-cell">
                       <ComplianceBadge state={d.compliance_state} />
                     </TD>
-                    <TD className="hidden 2xl:table-cell">
-                      {d.group_name ?? <span className="text-muted-foreground">—</span>}
-                    </TD>
-                    <TD className="hidden lg:table-cell">
+                    <TD className="col-res">
                       <div className="grid w-44 grid-cols-3 gap-2 text-xs tabular text-muted-foreground">
                         {RESOURCE_LIMITS.map((limit, i) => {
                           const v = [d.cpu_pct, d.mem_pct, d.disk_pct][i];
@@ -310,8 +308,10 @@ function DevicesView() {
                         })}
                       </div>
                     </TD>
-                    <TD className="hidden whitespace-nowrap 2xl:table-cell">
-                      <span className="font-mono text-xs text-muted-foreground">{d.agent_version || "—"}</span>
+                    <TD className="col-agent whitespace-nowrap">
+                      <span className="inline-block max-w-[8.5rem] truncate align-middle font-mono text-xs text-muted-foreground" title={d.agent_version}>
+                        {d.agent_version || "—"}
+                      </span>
                       {agentOutdated(d.agent_version, latestAgent) && (
                         <span className="ml-1.5 inline-flex items-center gap-1 text-xs font-medium text-foreground" title={`Agent ${latestAgent} is available`}>
                           <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
@@ -320,13 +320,7 @@ function DevicesView() {
                       )}
                     </TD>
                     <TD
-                      className="hidden max-w-[10rem] truncate md:table-cell"
-                      title={d.logged_in_user ? `Signed in: ${d.logged_in_user}` : undefined}
-                    >
-                      {d.employee_name || <span className="text-muted-foreground">—</span>}
-                    </TD>
-                    <TD
-                      className="hidden whitespace-nowrap text-muted-foreground sm:table-cell"
+                      className="hidden whitespace-nowrap pr-5 text-muted-foreground sm:table-cell"
                       title={d.last_seen_at ? formatDateTime(d.last_seen_at) : undefined}
                     >
                       {relativeTimeShort(d.last_seen_at)}

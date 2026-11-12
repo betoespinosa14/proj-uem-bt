@@ -143,3 +143,24 @@
       radial-gradient(50% 45% at 90% 90%, hsl(var(--neon) / 0.22) 0%, transparent 60%);
   }
 }
+
+/* Tables whose optional columns follow the table's own width rather than the
+   screen's (the console content is capped at max-w-7xl, so screen breakpoints
+   don't say how much room a table has). */
+.table-cq {
+  container-type: inline-size;
+}
+.col-res,
+.col-agent {
+  display: none;
+}
+@container (min-width: 940px) {
+  .col-res {
+    display: table-cell;
+  }
+}
+@container (min-width: 1180px) {
+  .col-agent {
+    display: table-cell;
+  }
+}

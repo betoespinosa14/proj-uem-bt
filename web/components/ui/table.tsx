@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils";
  * A table that scrolls sideways when it doesn't fit. A soft fade on the left or
  * right edge shows that more columns are hidden that way.
  */
-export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {
+export function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.TableHTMLAttributes<HTMLTableElement> & { containerClassName?: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [edges, setEdges] = React.useState({ left: false, right: false });
   React.useEffect(() => {
@@ -28,10 +32,10 @@ export function Table({ className, ...props }: React.TableHTMLAttributes<HTMLTab
       ro.disconnect();
     };
   }, []);
-  const fade = "pointer-events-none absolute inset-y-0 w-10 from-card to-transparent transition-opacity duration-200";
+  const fade = "pointer-events-none absolute inset-y-0 w-6 from-card to-transparent transition-opacity duration-200";
   return (
     <div className="relative w-full">
-      <div ref={ref} className="w-full overflow-x-auto">
+      <div ref={ref} className={cn("w-full overflow-x-auto", containerClassName)}>
         <table className={cn("w-full caption-bottom text-sm", className)} {...props} />
       </div>
       <div aria-hidden className={cn(fade, "left-0 bg-gradient-to-r", edges.left ? "opacity-100" : "opacity-0")} />

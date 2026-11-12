@@ -10,6 +10,11 @@ commits after 2026.11.0, at commit `60f25a5`.
 ## Unreleased
 
 ### Added
+- **Devices list fits the page.** The Group and Employee columns are gone (device names already read
+  "Department | Employee"; the Group filter, search and CSV export still cover them). CPU/Mem/Disk and Agent appear
+  according to the table's own width, so there is no sideways scrolling at 1366–1920 px screens; Last seen is compact
+  ("17 min ago", exact time on hover) with room at the right edge. Resource bars are a soft blue when normal, amber
+  near and red at the Dashboard's health limits. Any table that does scroll sideways shows a fade on the hidden side.
 - **Compliance tags come off automatically.** A tag a compliance rule puts on a device is now removed when the
   device passes that rule again (or the rule stops applying, is deleted, or its tag is renamed), just as the rule's
   alert closes. BEACON remembers which tags a rule added, so tags people add by hand are never removed, and a tag

@@ -7,6 +7,16 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.32 (2026-11-14): Usage chart strip, continuous
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Reported / No data strip** is one continuous bar: each stretch starts under its first day's bar and the one before
+  it runs up to a thin seam, so there's no blank hole between gray and green on short ranges.
+- **The strip is always shown** once any day has reported, including ranges where every day reported (all green),
+  so the chart looks the same on every range.
+
 ## 2026.11.31 (2026-11-14): Usage chart strip aligned to the bars
 
 Console only; agents stay on 2026.11.29.

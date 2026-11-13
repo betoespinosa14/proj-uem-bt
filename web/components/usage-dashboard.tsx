@@ -300,6 +300,7 @@ export function Trend({
   });
   const byT = new Map(points.map((p) => [p.t, p]));
   const hasGaps = points.some((p) => p.active === null);
+  const hasReported = points.some((p) => p.active !== null);
   const hasIdleDays = points.some((p) => p.stub);
   // The strip's segments start and end at bar edges, not band edges; that needs the plot width in px.
   const gapPct = days > 31 ? 0.12 : 0.28;
@@ -312,7 +313,7 @@ export function Trend({
     const ro = new ResizeObserver(([e]) => setStripWidth(e!.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [hasGaps]); // the strip mounts only when there are gaps
+  }, [hasReported]); // the strip mounts once any day has reported
   const band = stripWidth / days;
   const barW = Math.min(band * (1 - 2 * gapPct), MAX_BAR);
   const barLeft = (i: number) => i * band + (band - barW) / 2;
@@ -328,6 +329,16 @@ export function Trend({
     if (last && last.on === on) last.to = i;
     else runs.push({ from: i, to: i, on });
   });
+  // Each run starts at its first bar's left edge; the one before it runs up to a 4px seam
+  // short of that, so the strip is continuous. The outer ends sit at the first and last bars.
+  const SEAM = 4;
+  const runBox = (k: number) => {
+    const r = runs[k]!;
+    const left = barLeft(r.from);
+    const next = runs[k + 1];
+    const right = next ? barLeft(next.from) - SEAM : barLeft(r.to) + barW;
+    return { left, width: Math.max(0, right - left) };
+  };
   return (
     <div>
       <div className={compact ? "h-40" : "h-56"}>
@@ -385,20 +396,19 @@ export function Trend({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {(hasGaps || hasIdleDays) && (
+      {hasReported && (
         <>
           {/* Same idea as Telemetry's strip: when the device (or fleet) reported. Each run starts at its
               first bar's left edge and ends at its last bar's right edge, so it sits right under the bars. */}
-          {hasGaps && (
           <div ref={stripRef} className="relative mt-1 h-2" style={{ marginLeft: TREND_LEFT, marginRight: TREND_RIGHT }} role="img" aria-label="Days with usage data">
             <div className="absolute inset-0">
-              {runs.map((r) => (
+              {runs.map((r, k) => (
                 <div
                   key={r.from}
                   className={cn("absolute inset-y-0 rounded-full", r.on ? "bg-success/60" : "bg-muted-foreground/20")}
                   style={
                     stripWidth
-                      ? { left: barLeft(r.from), width: barLeft(r.to) + barW - barLeft(r.from) }
+                      ? runBox(k)
                       : { left: `${(r.from / days) * 100}%`, width: `${((r.to - r.from + 1) / days) * 100}%` }
                   }
                   title={`${r.on ? "Reported" : "No data"}: ${fmt(points[r.from]!.t)}${r.to > r.from ? ` – ${fmt(points[r.to]!.t)}` : ""}`}
@@ -406,13 +416,12 @@ export function Trend({
               ))}
             </div>
           </div>
-          )}
           <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" style={{ marginLeft: TREND_LEFT }}>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-3 rounded-full bg-success/60" /> Reported
+            </span>
             {hasGaps && (
               <>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-3 rounded-full bg-success/60" /> Reported
-                </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-3 rounded-full bg-muted-foreground/20" />
                   No data ({device ? "agent not installed yet, device off, or tracking off" : "agent not installed yet, devices off, or tracking off"})

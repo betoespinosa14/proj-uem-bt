@@ -13,6 +13,8 @@ commits after 2026.11.0, at commit `60f25a5`.
 - **Network tab addresses.** Each adapter lists at most two addresses (IPv4 first, then global IPv6, then
   unique-local), with "+N more" to show the rest, so dual-stack adapters with several IPv6 privacy addresses keep a
   short row.
+- **Bonded network links.** Linux bond/team adapters (e.g. a server's bond0 combining two cables) and Windows NIC
+  teams show as **Bonded** instead of Virtual.
 
 ## 2026.11.19 (2026-11-13): Mac Wi-Fi details
 

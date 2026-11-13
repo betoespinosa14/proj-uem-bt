@@ -935,7 +935,12 @@ function Usage({ id, os }: { id: string; os: string }) {
   );
 }
 
-const NET_KIND_LABEL: Record<NetKind, string> = {
+// "bonded" is the console's own: agents report Linux bond/team adapters as
+// virtual, which is true but misleading for a server's main link.
+type AdapterKind = NetKind | "bonded";
+
+const NET_KIND_LABEL: Record<AdapterKind, string> = {
+  bonded: "Bonded",
   ethernet: "Ethernet",
   wifi: "Wi-Fi",
   vpn: "VPN",
@@ -945,6 +950,14 @@ const NET_KIND_LABEL: Record<NetKind, string> = {
 
 // The agent's own guess (internal/agent/collect/netparse.go kindFromName), for
 // agents before 2026.11.18 that don't report an adapter's type.
+/** Linux link aggregation (bond0, team0) and Windows NIC teaming: several physical links combined. */
+const isBonded = (name: string, desc = "") => /^(bond|team)\d/i.test(name) || /multiplexor|nic team/i.test(desc);
+
+function adapterKind(i: NetInterface): AdapterKind | undefined {
+  if (isBonded(i.name, i.description)) return "bonded";
+  return i.kind ?? guessNetKind(i.name, i.description);
+}
+
 function guessNetKind(name: string, desc = ""): NetKind | undefined {
   const s = `${name} ${desc}`;
   const any = (re: RegExp) => re.test(name) || re.test(desc);
@@ -1057,7 +1070,7 @@ function Network({ d }: { d: DeviceDetail }) {
   const wifi = n.wifi ?? (n.wifi_ssid ? { ssid: n.wifi_ssid } : undefined);
   // Recent macOS hides the network name from the agent; the link still shows
   // through the Wi-Fi details or a primary adapter that is Wi-Fi.
-  const onWifi = !!primary && (primary.kind ?? guessNetKind(primary.name, primary.description)) === "wifi";
+  const onWifi = !!primary && adapterKind(primary) === "wifi";
   const hiddenName = d.os_family === "macos" ? "Connected, name hidden by macOS" : "Connected, name not reported";
   const wifiDetail = [wifi?.signal_pct != null ? `${wifi.signal_pct}% signal` : null, wifi?.band, wifi?.radio].filter(Boolean).join(" · ");
   const wifiText =
@@ -1164,7 +1177,7 @@ function Network({ d }: { d: DeviceDetail }) {
           <TBody>
             {rows.map(({ i }) => {
               const active = inUse(i);
-              const kind = i.kind ?? guessNetKind(i.name, i.description);
+              const kind = adapterKind(i);
               const real = usable(i);
               const local = i.addrs.filter(linkLocal);
               const speed = formatSpeed(kind === "wifi" && i === primary && wifi?.rx_mbps ? wifi.rx_mbps : i.speed_mbps);
@@ -1187,7 +1200,7 @@ function Network({ d }: { d: DeviceDetail }) {
                       </span>
                     )}
                   </TD>
-                  <TD>{kind ? <Badge variant="neutral">{NET_KIND_LABEL[kind]}</Badge> : <span className="text-muted-foreground">—</span>}</TD>
+                  <TD>{kind ? <Badge variant="neutral" title={kind === "bonded" ? "Several network links combined into one (link aggregation)" : undefined}>{NET_KIND_LABEL[kind]}</Badge> : <span className="text-muted-foreground">—</span>}</TD>
                   <TD className="whitespace-nowrap">
                     {active ? (
                       <Badge variant="success" dot>

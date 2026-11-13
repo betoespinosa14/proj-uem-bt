@@ -1727,6 +1727,48 @@ const HOUR = 3_600_000;
 const PLOT_LEFT = 44;
 const PLOT_RIGHT = 8;
 
+type TipItem = { dataKey?: unknown; value?: unknown; color?: string; stroke?: string; hide?: boolean };
+
+// The chart's hover box. Inside a gap there are no values (the line is broken there),
+// so it says so, matching the gray segment of the strip below, instead of showing nothing.
+function TelemetryTip({
+  active,
+  payload,
+  t,
+  gaps,
+  fmt,
+}: {
+  active?: boolean;
+  payload?: readonly TipItem[];
+  t: number;
+  gaps: { x1: number; x2: number }[];
+  fmt: (t: number) => string;
+}) {
+  if (!active || !Number.isFinite(t)) return null;
+  // filterNull is off on the Tooltip (so the box shows in gaps), so drop empty and hidden series here.
+  const values = (payload ?? []).filter((p) => typeof p.value === "number" && !p.hide);
+  const gap = values.length ? undefined : gaps.find((g) => t >= g.x1 && t <= g.x2);
+  if (!values.length && !gap) return null;
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
+      <p className="mb-1 font-medium">{new Date(t).toLocaleString()}</p>
+      {gap ? (
+        <p className="text-muted-foreground">
+          No samples · off {formatDuration((gap.x2 - gap.x1) / 1000)} ({fmt(gap.x1)} – {fmt(gap.x2)})
+        </p>
+      ) : (
+        values.map((p) => (
+          <p key={String(p.dataKey)} className="flex items-center gap-2 tabular">
+            <span className="h-0.5 w-3 rounded-full" style={{ background: p.stroke ?? p.color }} />
+            <span className="text-muted-foreground">{String(p.dataKey)}</span>
+            <span className="ml-auto pl-3 font-medium">{(p.value as number).toFixed(1)}%</span>
+          </p>
+        ))
+      )}
+    </div>
+  );
+}
+
 // A slim timeline under the chart: when the device reported (online) and when it didn't.
 function AvailabilityStrip({ from, to, gaps, fmt }: { from: number; to: number; gaps: { x1: number; x2: number }[]; fmt: (t: number) => string }) {
   const span = to - from;
@@ -1833,6 +1875,8 @@ function Telemetry({ id }: { id: string }) {
   const label = RANGES[hours];
   const ticks = telemetryTicks(from, to, hours);
   const fmt = (t: number) => new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric" } : { hour: "2-digit", minute: "2-digit" });
+  const stripFmt = (t: number) =>
+    new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
   const toggle = (k: Series) =>
     setHidden((cur) => {
       const next = new Set(cur);
@@ -1916,9 +1960,11 @@ function Telemetry({ id }: { id: string }) {
                     />
                     <YAxis width={PLOT_LEFT} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
                     <Tooltip
-                      labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
-                      formatter={(v) => (typeof v === "number" ? `${v.toFixed(1)}%` : String(v))}
-                      contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                      // Recharts hides the box when every value is null; keep nulls so a gap can say "No samples".
+                      filterNull={false}
+                      content={({ active, payload, label }) => (
+                        <TelemetryTip active={active} payload={payload as unknown as readonly TipItem[] | undefined} t={Number(label)} gaps={gaps} fmt={stripFmt} />
+                      )}
                     />
                     {series.map((s) => (
                       <Line
@@ -1937,7 +1983,7 @@ function Telemetry({ id }: { id: string }) {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              <AvailabilityStrip from={from} to={to} gaps={gaps} fmt={(t) => new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit" })} />
+              <AvailabilityStrip from={from} to={to} gaps={gaps} fmt={stripFmt} />
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" style={{ marginLeft: PLOT_LEFT }}>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-3 rounded-full bg-success/60" /> Online

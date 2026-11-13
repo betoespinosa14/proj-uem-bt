@@ -260,6 +260,7 @@ type UsageDay struct {
 	ActiveSeconds int    `json:"active_seconds"`
 	Minutes       int    `json:"minutes"` // foreground open time
 	Devices       int    `json:"devices"` // devices that reported anything that day; 0 means no data
+	Apps          int    `json:"apps"`    // distinct apps used in the foreground that day
 }
 
 type UsageAppStat struct {
@@ -328,11 +329,12 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	}
 
 	rows, err := s.Pool.Query(ctx, usageRows+`
-		SELECT to_char(day, 'YYYY-MM-DD'), sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE fg AND NOT infra), 0), count(DISTINCT device_id)
+		SELECT to_char(day, 'YYYY-MM-DD'), sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE fg AND NOT infra), 0), count(DISTINCT device_id),
+			count(DISTINCT lower(app)) FILTER (WHERE fg)
 		FROM u GROUP BY day ORDER BY day`, orgID, since, app, group, dev)
 	if out.Daily, err = collect(rows, err, func(r pgx.Rows) (UsageDay, error) {
 		var d UsageDay
-		return d, r.Scan(&d.Day, &d.ActiveSeconds, &d.Minutes, &d.Devices)
+		return d, r.Scan(&d.Day, &d.ActiveSeconds, &d.Minutes, &d.Devices, &d.Apps)
 	}); err != nil {
 		return out, err
 	}

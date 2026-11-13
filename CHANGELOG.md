@@ -7,6 +7,20 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.30 (2026-11-14): Usage chart as daily bars
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Active hours per day** (device Usage tab, fleet App usage, and the App usage card on a device's Overview) is now
+  one bar per day instead of a smoothed curve. Today's bar is hatched and its tooltip says "Today, so far", so a
+  partial day doesn't look like a drop. Days without data have no bar, and a strip under the chart shows which days
+  reported (green) and which didn't (gray), like the Telemetry tab, instead of gray blocks that stopped half a day
+  short of the first report.
+- **Tooltip** shows active time and the number of apps used that day (devices reported, on the fleet page). The
+  "Open" total is gone: it added every app's open time together, so one day could show 105 hours.
+- **"of open time active"** explains on hover that each app's open time counts separately.
+
 ## 2026.11.29 (2026-11-14): Device actions menu and Windows messages
 
 Agent and console. Agents update to 2026.11.29 (Windows message box); Macs and Linux get the same agent with no

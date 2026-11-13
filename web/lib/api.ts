@@ -285,7 +285,7 @@ export type UsageSummary = {
     unused_apps: number;
   };
   /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
-  daily: { day: string; active_seconds: number; minutes: number; devices: number }[];
+  daily: { day: string; active_seconds: number; minutes: number; devices: number; apps: number }[];
   top_apps: UsageAppStat[];
   idle_apps: UsageAppStat[];
   /** employee: the employee name of the device the account was most active on ("" if none), shown in place of the account. */

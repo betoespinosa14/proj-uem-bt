@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { UsageAppStat, UsageSummary } from "@/lib/api";
 import { cn, formatHours } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -239,7 +239,9 @@ function localDay(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const DAY = 86_400_000;
+// Plot-area insets of the daily chart (Y-axis width, right margin), shared with the strip under it.
+const TREND_LEFT = 44;
+const TREND_RIGHT = 8;
 
 // Axis steps in minutes: round durations, then whole days for large fleet totals.
 const AXIS_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 240, 360, 480, 720, 1440, 2880, 7200, 14400, 28800, 72000];
@@ -282,72 +284,55 @@ export function Trend({
 }) {
   const byDay = new Map(daily.map((d) => [d.day, d]));
   const today = new Date();
+  // One bar per day (daily totals, not a continuous signal); the last one is today, still in progress.
   const points = Array.from({ length: days }, (_, i) => {
     const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1 - i));
     const row = byDay.get(localDay(d));
-    return { t: d.getTime(), active: row ? row.active_seconds / 3600 : null, open: row ? row.minutes / 60 : null, devices: row?.devices ?? 0 };
+    return {
+      t: d.getTime(),
+      active: row ? row.active_seconds / 3600 : null,
+      apps: row?.apps ?? 0,
+      devices: row?.devices ?? 0,
+      today: i === days - 1,
+    };
   });
   const byT = new Map(points.map((p) => [p.t, p]));
-  // Runs of consecutive no-data days, as shaded bands.
-  const gaps: { from: number; to: number; len: number }[] = [];
-  for (const p of points) {
-    const last = gaps[gaps.length - 1];
-    if (p.active !== null) continue;
-    if (last && Math.round((p.t - last.to) / DAY) === 1) {
-      last.to = p.t;
-      last.len++;
-    } else gaps.push({ from: p.t, to: p.t, len: 1 });
-  }
-  const first = points[0]?.t ?? 0;
-  // Mark where reporting began when the period starts with no data.
-  const firstReport = points[0]?.active === null ? points.find((p) => p.active !== null)?.t : undefined;
-  const lastT = points[points.length - 1]?.t ?? 0;
-  // Near the right edge the label goes on the left of the line, so it isn't cut off.
-  const reportLabelLeft = firstReport !== undefined && lastT > first && (firstReport - first) / (lastT - first) > 0.75;
+  const hasGaps = points.some((p) => p.active === null);
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const axis = durationAxis(Math.max(0, ...points.map((p) => p.active ?? 0)));
+  // Runs of reported / not reported days for the strip under the chart.
+  const runs: { from: number; to: number; on: boolean }[] = [];
+  points.forEach((p, i) => {
+    const on = p.active !== null;
+    const last = runs[runs.length - 1];
+    if (last && last.on === on) last.to = i;
+    else runs.push({ from: i, to: i, on });
+  });
   return (
     <div>
       <div className={compact ? "h-40" : "h-56"}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={points} margin={{ left: -12, right: 8, top: 8 }}>
+          <BarChart data={points} margin={{ left: 0, right: TREND_RIGHT, top: 8 }} barCategoryGap={days > 31 ? "12%" : "28%"}>
             <defs>
-              <linearGradient id="usage-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.22} />
-                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
-              </linearGradient>
+              <pattern id="usage-today" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect width="6" height="6" fill="hsl(var(--primary))" fillOpacity={0.25} />
+                <line x1="0" y1="0" x2="0" y2="6" stroke="hsl(var(--primary))" strokeOpacity={0.5} strokeWidth="2" />
+              </pattern>
             </defs>
             <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
-            {gaps.map((g) => (
-              <ReferenceArea
-                key={g.from}
-                x1={Math.max(first, g.from - DAY / 2)}
-                x2={Math.min(lastT, g.to + DAY / 2)}
-                fill="hsl(var(--muted-foreground))"
-                fillOpacity={0.08}
-                strokeOpacity={0}
-                ifOverflow="hidden"
-                label={g.len >= 4 ? { value: "No data", position: "insideTop", fontSize: 11, fill: "hsl(var(--muted-foreground))" } : undefined}
-              />
-            ))}
-            {firstReport !== undefined && (
-              <ReferenceLine
-                x={firstReport}
-                stroke="hsl(var(--muted-foreground))"
-                strokeDasharray="3 3"
-                label={{ value: "First report", position: reportLabelLeft ? "insideTopRight" : "insideTopLeft", fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              />
-            )}
-            <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} minTickGap={40} />
-            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={44} />
+            <XAxis dataKey="t" tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} />
+            <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={TREND_LEFT} />
             <Tooltip
-              cursor={{ stroke: "hsl(var(--muted-foreground))", strokeDasharray: "3 3" }}
+              cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.5 }}
               content={({ active, label }) => {
                 const p = active ? byT.get(Number(label)) : undefined;
                 if (!p) return null;
                 return (
                   <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lift">
-                    <p className="mb-1 font-medium">{new Date(p.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</p>
+                    <p className="mb-1 font-medium">
+                      {new Date(p.t).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      {p.today && <span className="font-normal text-muted-foreground"> · Today, so far</span>}
+                    </p>
                     {p.active === null ? (
                       <p className="text-muted-foreground">No data reported</p>
                     ) : (
@@ -355,31 +340,48 @@ export function Trend({
                         <p>
                           <span className="text-muted-foreground">Active</span> <span className="font-semibold tabular">{formatHours(p.active * 3600)}</span>
                         </p>
-                        <p>
-                          <span className="text-muted-foreground">Open</span> <span className="tabular">{formatHours((p.open ?? 0) * 3600)}</span>
+                        <p className="text-muted-foreground">
+                          {device ? `${p.apps} ${p.apps === 1 ? "app" : "apps"} used` : `${p.devices} ${p.devices === 1 ? "device" : "devices"} reported`}
                         </p>
-                        {!device && (
-                          <p className="text-muted-foreground">
-                            {p.devices} {p.devices === 1 ? "device" : "devices"} reported
-                          </p>
-                        )}
                       </>
                     )}
                   </div>
                 );
               }}
             />
-            <Area type="monotone" dataKey="active" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#usage-fill)" isAnimationActive={false} connectNulls={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} />
-          </AreaChart>
+            <Bar dataKey="active" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={44}>
+              {points.map((p) => (
+                <Cell key={p.t} fill={p.today ? "url(#usage-today)" : "hsl(var(--primary))"} fillOpacity={p.today ? 1 : 0.85} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </div>
-      {gaps.length > 0 && (
-        <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="h-2.5 w-4 rounded-sm bg-muted-foreground/15" />
-          {device
-            ? "Shaded: the device reported no usage (agent not installed yet, device off, or tracking off)."
-            : "Shaded: no device reported usage (agent not installed yet, devices off, or tracking off)."}
-        </p>
+      {hasGaps && (
+        <>
+          {/* Same idea as Telemetry's strip: when the device (or fleet) reported, under the matching bars. */}
+          <div className="relative mt-1 h-2" style={{ marginLeft: TREND_LEFT, marginRight: TREND_RIGHT }} role="img" aria-label="Days with usage data">
+            <div className="absolute inset-0 overflow-hidden rounded-full">
+              {runs.map((r) => (
+                <div
+                  key={r.from}
+                  className={cn("absolute inset-y-0", r.on ? "bg-success/60" : "bg-muted-foreground/20")}
+                  style={{ left: `${(r.from / days) * 100}%`, width: `${((r.to - r.from + 1) / days) * 100}%` }}
+                  title={`${r.on ? "Reported" : "No data"}: ${fmt(points[r.from]!.t)}${r.to > r.from ? ` – ${fmt(points[r.to]!.t)}` : ""}`}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" style={{ marginLeft: TREND_LEFT }}>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-3 rounded-full bg-success/60" /> Reported
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-3 rounded-full bg-muted-foreground/20" />
+              No data ({device ? "agent not installed yet, device off, or tracking off" : "agent not installed yet, devices off, or tracking off"})
+            </span>
+          </p>
+        </>
       )}
     </div>
   );

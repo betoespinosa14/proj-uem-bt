@@ -129,7 +129,7 @@ export function UsageExplorer({
             label: "of open time active",
             value: totals.open_minutes > 0 ? formatShare(totals.active_seconds / (totals.open_minutes * 60)) : "—",
             icon: Clock,
-            hint: `${formatHours(totals.active_seconds)} active of ${formatHours(totals.open_minutes * 60)} open, in apps people used. Background-only processes are not counted.`,
+            hint: `Share of the time apps were open that they were also in use: ${formatHours(totals.active_seconds)} active of ${formatHours(totals.open_minutes * 60)} open. Each app counts separately, so open time can add up to more than a day. Background-only processes are not counted.`,
           },
           { label: "Apps used", value: totals.apps_used, icon: AppWindow },
           { label: scoped ? "Users" : "Active users", value: totals.active_users, icon: Users },

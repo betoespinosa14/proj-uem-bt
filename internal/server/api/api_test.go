@@ -578,6 +578,7 @@ func TestUsageTracking(t *testing.T) {
 			ActiveSeconds int `json:"active_seconds"`
 			Minutes       int
 			Devices       int
+			Apps          int
 		}
 		TopApps    []stat `json:"top_apps"`
 		TopUsers   []stat `json:"top_users"`
@@ -599,7 +600,7 @@ func TestUsageTracking(t *testing.T) {
 		tt.UnusedApps != 1 || tt.BgMinutes != 90 || tt.BgApps != 2 || tt.BgThirdParty != 1 {
 		t.Fatalf("summary totals = %+v", tt)
 	}
-	if len(sum.Daily) != 1 || sum.Daily[0].ActiveSeconds != 4800 || sum.Daily[0].Minutes != 180 || sum.Daily[0].Devices != 1 ||
+	if len(sum.Daily) != 1 || sum.Daily[0].ActiveSeconds != 4800 || sum.Daily[0].Minutes != 180 || sum.Daily[0].Devices != 1 || sum.Daily[0].Apps != 1 ||
 		len(sum.TopApps) != 1 || sum.TopApps[0].App != "Slack" || sum.TopApps[0].Users != 2 ||
 		len(sum.IdleApps) != 1 || sum.IdleApps[0].Minutes != 180 ||
 		len(sum.TopUsers) != 2 || sum.TopUsers[0].User != "ana" || sum.TopUsers[0].ActiveSeconds != 3600 || sum.TopUsers[0].Apps != 1 ||

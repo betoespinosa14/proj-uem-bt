@@ -7,6 +7,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ArrowLeft,
+  ArrowUpCircle,
+  Lock,
+  MessageSquare,
+  PackageX,
+  Power,
+  RotateCcw,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -178,13 +184,22 @@ export default function DevicePage() {
                   <MoreHorizontal />
                 </Button>
               </DropdownTrigger>
-              <DropdownContent>
+              {/* Wide enough that "Edit name, group & tags" stays on one line. */}
+              <DropdownContent className="min-w-60 [&_[role=menuitem]]:whitespace-nowrap">
                 {can("commands.run") && (
                   <>
-                    <DropdownItem onSelect={() => setAction("display_message")}>Send message…</DropdownItem>
-                    <DropdownItem onSelect={() => setAction("lock")}>Lock screen</DropdownItem>
-                    <DropdownItem onSelect={() => setAction("reboot")}>Reboot…</DropdownItem>
-                    <DropdownItem onSelect={() => setAction("shutdown")}>Shut down…</DropdownItem>
+                    <DropdownItem onSelect={() => setAction("display_message")}>
+                      <MessageSquare className="h-4 w-4" /> Send message…
+                    </DropdownItem>
+                    <DropdownItem onSelect={() => setAction("lock")}>
+                      <Lock className="h-4 w-4" /> Lock screen
+                    </DropdownItem>
+                    <DropdownItem onSelect={() => setAction("reboot")}>
+                      <RotateCcw className="h-4 w-4" /> Reboot…
+                    </DropdownItem>
+                    <DropdownItem onSelect={() => setAction("shutdown")}>
+                      <Power className="h-4 w-4" /> Shut down…
+                    </DropdownItem>
                   </>
                 )}
                 {can("devices.write") && (
@@ -196,9 +211,15 @@ export default function DevicePage() {
                   </>
                 )}
                 {can("commands.run") && agentOutdated(d.agent_version, latestAgent) && (
-                  <DropdownItem onSelect={() => setAction("update_agent")}>Update agent to {latestAgent}…</DropdownItem>
+                  <DropdownItem onSelect={() => setAction("update_agent")}>
+                    <ArrowUpCircle className="h-4 w-4" /> Update agent to {latestAgent}…
+                  </DropdownItem>
                 )}
-                {can("commands.run") && <DropdownItem onSelect={() => setAction("uninstall_agent")} destructive>Uninstall agent…</DropdownItem>}
+                {can("commands.run") && (
+                  <DropdownItem onSelect={() => setAction("uninstall_agent")} destructive>
+                    <PackageX className="h-4 w-4" /> Uninstall agent…
+                  </DropdownItem>
+                )}
                 {can("devices.write") && (
                   <DropdownItem onSelect={() => setRetiring(true)} destructive>
                     <Trash2 className="h-4 w-4" /> Retire device…
@@ -276,6 +297,7 @@ export default function DevicePage() {
           deviceIds={[id]}
           targetLabel={d.name}
           os={d.os_family}
+          offlineCount={d.status === "online" ? 0 : 1}
           onIssued={() => setTab("commands")}
         />
       )}

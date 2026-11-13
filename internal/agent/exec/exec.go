@@ -179,11 +179,18 @@ func Lock(ctx context.Context) error {
 	}
 }
 
-// DisplayMessage shows a message to logged-in users.
+// DefaultMessageTitle is used when a message is sent without a title.
+const DefaultMessageTitle = "Message from IT"
+
+// DisplayMessage shows a message to logged-in users. On Windows the title is the
+// message box's title bar; on Macs the dialog title; on Linux the first line.
 func DisplayMessage(ctx context.Context, title, message string) error {
+	if strings.TrimSpace(title) == "" {
+		title = DefaultMessageTitle
+	}
 	switch runtime.GOOS {
 	case "windows":
-		return runCmd(ctx, "msg.exe", "*", "/TIME:600", title+": "+message)
+		return displayMessageWindows(ctx, title, message)
 	case "darwin":
 		uid, err := runOut(ctx, "stat", "-f", "%u", "/dev/console")
 		if err != nil || uid == "0" {

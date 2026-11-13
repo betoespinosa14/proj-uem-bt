@@ -7,6 +7,23 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.29 (2026-11-14): Device actions menu and Windows messages
+
+Agent and console. Agents update to 2026.11.29 (Windows message box); Macs and Linux get the same agent with no
+behaviour change.
+
+### Changed
+- **Send message on Windows (agent).** The message now appears in a standard Windows message box whose title bar is
+  your Title and whose text is only your message, shown in every signed-in session (WTSSendMessage). Before, Windows'
+  msg.exe titled it "Message from <user> <date time>" (cut off) and put the title in front of the text. If the new
+  call fails, the agent falls back to msg.exe. A blank title becomes "Message from IT" on every OS.
+- **Device ⋯ menu.** Every action has an icon, so all labels line up; the menu is wide enough for "Edit name, group &
+  tags" on one line.
+- **Send message dialog.** Send stays disabled until the message has text; the Title field says it's the window's
+  title.
+- **Offline targets.** Command dialogs say when the device is offline ("It will run when the device reconnects"), or
+  how many of the selected devices are, instead of leaving you to wonder why nothing happened.
+
 ## 2026.11.28 (2026-11-14): Clearer ad-hoc script hint
 
 Console only; agents stay on 2026.11.21.

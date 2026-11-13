@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, RotateCw, TriangleAlert } from "lucide-react";
+import { Clock, Copy, RotateCw, TriangleAlert } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, qk, SHELLS, TERMINAL_COMMAND_STATUSES, type Command, type CommandRequest, type CommandType, type Shell } from "@/lib/api";
 import { copyToClipboard, formatDateTime, titleCase } from "@/lib/utils";
@@ -75,6 +75,7 @@ export function CommandDialog({
   deviceIds,
   targetLabel,
   os,
+  offlineCount = 0,
   onIssued,
 }: {
   open: boolean;
@@ -84,6 +85,8 @@ export function CommandDialog({
   targetLabel: string;
   /** The targets' OS family when they all share one: library scripts and the ad-hoc shell follow it. */
   os?: string;
+  /** How many of the targets are offline: their command waits until they reconnect. */
+  offlineCount?: number;
   onIssued?: (cmds: Command[]) => void;
 }) {
   const qc = useQueryClient();
@@ -149,7 +152,8 @@ export function CommandDialog({
   const libraryScripts = showAllScripts ? allScripts : allScripts.filter((s) => fits(s.shell));
   const hiddenScripts = allScripts.length - allScripts.filter((s) => fits(s.shell)).length;
   // Nothing to run yet: no library script chosen, or an empty ad-hoc script.
-  const incomplete = type === "run_script" && (mode === "library" ? !scriptId : !body.trim());
+  const incomplete =
+    (type === "run_script" && (mode === "library" ? !scriptId : !body.trim())) || (type === "display_message" && !message.trim());
 
   const copy = type === "run_script" ? { title: "Run script", confirm: "Run", danger: false } : ACTION_COPY[type];
   const count = deviceIds.length;
@@ -241,10 +245,10 @@ export function CommandDialog({
       )}
       {type === "display_message" && (
         <div className="space-y-3">
-          <Field label="Title" htmlFor="mtitle">
+          <Field label="Title" htmlFor="mtitle" hint="Shown as the window's title.">
             <Input id="mtitle" value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
-          <Field label="Message" htmlFor="mbody">
+          <Field label="Message" htmlFor="mbody" hint="Send is enabled once the message has text.">
             <CodeEditor id="mbody" rows={4} className="font-sans" value={message} onChange={(e) => setMessage(e.target.value)} />
           </Field>
         </div>
@@ -264,6 +268,14 @@ export function CommandDialog({
       {(type === "lock" || type === "refresh_inventory") && (
         <p className="text-sm text-muted-foreground">
           {type === "lock" ? "Locks the active user session." : "Asks the agent to collect and upload a full inventory now."}
+        </p>
+      )}
+      {offlineCount > 0 && type !== "update_agent" && type !== "uninstall_agent" && (
+        <p className="mt-4 flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {count === 1
+            ? "This device is offline. It will run when the device reconnects."
+            : `${offlineCount} of ${count} devices are offline; they get it when they reconnect.`}
         </p>
       )}
       {guarded && (

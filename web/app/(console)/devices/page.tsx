@@ -414,6 +414,10 @@ function DevicesView() {
           }}
           type={action}
           deviceIds={targets ?? [...selected]}
+          offlineCount={(() => {
+            const ids = new Set(targets ?? selected);
+            return items.filter((d) => ids.has(d.id) && d.status !== "online").length;
+          })()}
           // Scripts and the default shell follow the OS when every target shares one.
           os={(() => {
             const ids = new Set(targets ?? selected);

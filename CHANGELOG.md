@@ -7,6 +7,14 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.21 (2026-11-13): Security tab polish
+
+### Changed
+- **Security tab links.** "View rules" and "Add a rule" use the console's standard teal link colour, so unenforced
+  risks stand out.
+- **Secure Boot on Apple silicon.** The "Always on" pill now has the line "Apple silicon · Full or Reduced level
+  isn't reported", matching the Hardware tab.
+
 ## 2026.11.20 (2026-11-13): Security details and a two-card Security tab
 
 ### Added

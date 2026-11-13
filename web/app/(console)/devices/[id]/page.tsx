@@ -1258,7 +1258,7 @@ function SecRow({ label, detail, pill, unchecked }: { label: string; detail?: Re
         {bad && unchecked && (
           <p className="mt-0.5 text-xs text-muted-foreground">
             Not checked by a compliance rule ·{" "}
-            <Link href="/compliance" className="font-medium text-foreground underline-offset-2 hover:underline">
+            <Link href="/compliance" className="font-medium text-primary underline-offset-2 hover:underline">
               Add a rule
             </Link>
           </p>
@@ -1383,7 +1383,7 @@ function Security({ d }: { d: DeviceDetail }) {
           <>
             The {d.compliance_state === "compliant" ? "Compliant" : "compliance"} status above covers only the compliance rules that apply to this device
             {applyingRules.length ? `: ${applyingRules.map((r) => r.name).join(", ")}` : " (none)"}.{" "}
-            <Link href="/compliance" className="font-medium text-foreground underline-offset-2 hover:underline">
+            <Link href="/compliance" className="font-medium text-primary underline-offset-2 hover:underline">
               View rules
             </Link>
           </>
@@ -1408,7 +1408,7 @@ function Security({ d }: { d: DeviceDetail }) {
           </CardHeader>
           <CardContent className="divide-y divide-border pt-0">
             <SecRow label="Disk encryption" detail={encDetail} pill={onOff(s.disk_encrypted)} unchecked={unchecked("disk_encrypted")} />
-            <SecRow label="Secure Boot" pill={sbPill} />
+            <SecRow label="Secure Boot" detail={appleSilicon && fw?.secure_boot === undefined ? "Apple silicon · Full or Reduced level isn't reported" : undefined} pill={sbPill} />
             <SecRow label="Security chip" detail={fw?.security_chip} pill={chipPill} />
             {(s.os_integrity ?? []).map((o) => (
               <SecRow key={o.name} label={o.name} detail={o.detail} pill={onOff(o.enabled, "On", "Off")} />

@@ -242,7 +242,7 @@ export default function DevicePage() {
           <Network d={d} />
         </TabsContent>
         <TabsContent value="security">
-          <Security inv={d.inventory} />
+          <Security d={d} />
         </TabsContent>
         <TabsContent value="compliance">
           <Compliance id={id} />
@@ -1244,41 +1244,186 @@ function Network({ d }: { d: DeviceDetail }) {
   );
 }
 
-function Posture({ label, value, good, detail }: { label: string; value: boolean | null; good: boolean; detail?: string | null }) {
-  const variant = value == null ? "warning" : value === good ? "success" : "danger";
-  const text = value == null ? "Unknown" : value ? "Enabled" : "Disabled";
+type Pill = { text: string; variant: "success" | "warning" | "danger" | "neutral"; title?: string };
+
+/** One security control: label, optional detail line, status pill, and a note when no rule checks a failing value. */
+function SecRow({ label, detail, pill, unchecked }: { label: string; detail?: React.ReactNode; pill: Pill; unchecked?: boolean }) {
+  // Only a failing value: "Unknown" or "Not reported" isn't something a rule would catch.
+  const bad = pill.variant === "danger";
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div>
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0">
         <p className="text-sm font-medium">{label}</p>
         {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+        {bad && unchecked && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Not checked by a compliance rule ·{" "}
+            <Link href="/compliance" className="font-medium text-foreground underline-offset-2 hover:underline">
+              Add a rule
+            </Link>
+          </p>
+        )}
       </div>
-      <Badge variant={variant}>{text}</Badge>
+      <Badge variant={pill.variant} className="shrink-0" title={pill.title}>
+        {pill.text}
+      </Badge>
     </div>
   );
 }
 
-function Security({ inv }: { inv: Inventory | null }) {
+const onOff = (v: boolean | null | undefined, on = "Enabled", off = "Disabled"): Pill =>
+  v == null ? { text: "Unknown", variant: "warning" } : v ? { text: on, variant: "success" } : { text: off, variant: "danger" };
+
+function Security({ d }: { d: DeviceDetail }) {
+  // Which security fields the compliance rules that apply to this device check, so
+  // a red row can say it isn't enforced (the header's "Compliant" only covers rules).
+  const results = useQuery({ queryKey: qk.deviceCompliance(d.id), queryFn: () => api.devices.compliance(d.id) });
+  const rules = useQuery({ queryKey: qk.complianceRules, queryFn: api.compliance.rules });
+  const inv = d.inventory;
   if (!inv) return <NoInventory />;
   const s = inv.security;
+  const fw = inv.hardware.firmware;
+  const applying = new Set((results.data?.items ?? []).map((r) => r.rule_id));
+  const applyingRules = (rules.data?.items ?? []).filter((r) => r.enabled && applying.has(r.id));
+  const checked = new Set(applyingRules.flatMap((r) => r.conditions.map((c) => c.field)));
+  const known = !!results.data && !!rules.data;
+  const unchecked = (field: string) => known && !checked.has(`security.${field}`);
+  const osName = d.os_family === "macos" ? "macOS" : d.os_family === "linux" ? "Linux" : "Windows";
+
+  // Antivirus
+  const av = s.av;
+  let avPill: Pill;
+  if (av?.realtime === false) avPill = { text: "Real-time off", variant: "danger" };
+  else if (av?.up_to_date === false) avPill = { text: "Definitions outdated", variant: "warning" };
+  else if (av?.realtime) avPill = { text: "Active", variant: "success" };
+  else if (av && d.os_family === "macos") avPill = { text: "Built in", variant: "success", title: "XProtect is part of macOS and always on" };
+  else if (s.antivirus) avPill = { text: "Installed", variant: "neutral", title: "Update the agent to see whether it's active" };
+  else avPill = { text: "None found", variant: d.os_family === "linux" ? "neutral" : "warning" };
+  const avAge = av?.signature_age_days;
+  const avDetail = [
+    s.antivirus ?? (d.os_family === "linux" ? "No antivirus reported" : null),
+    avAge != null ? (d.os_family === "macos" ? `updated ${avAge === 0 ? "today" : `${avAge} day${avAge === 1 ? "" : "s"} ago`}` : `definitions ${avAge === 0 ? "from today" : `${avAge} day${avAge === 1 ? "" : "s"} old`}`) : null,
+    av?.tamper_protected != null ? `tamper protection ${av.tamper_protected ? "on" : "off"}` : null,
+    av?.version ? `version ${av.version}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // Firewall
+  const profiles = s.firewall_profiles ?? [];
+  const winProfiles = d.os_family === "windows" ? profiles : [];
+  const offCount = winProfiles.filter((p) => p.enabled === false).length;
+  const fwPill: Pill =
+    winProfiles.length > 0 && offCount > 0 && offCount < winProfiles.length
+      ? { text: `${offCount} of ${winProfiles.length} off`, variant: "danger" }
+      : onOff(s.firewall_enabled);
+  const fwDetail = profiles.length
+    ? profiles.map((p) => `${p.name}: ${p.enabled == null ? "?" : p.enabled ? "On" : "Off"}`).join(" · ")
+    : d.os_family === "linux" && s.details && s.firewall_enabled == null
+      ? "No ufw, firewalld or nftables rules found"
+      : undefined;
+
+  // Updates
+  const upd = s.pending_updates;
+  const updPill: Pill = upd == null ? { text: "Unknown", variant: "warning" } : upd === 0 ? { text: "Up to date", variant: "success" } : { text: `${upd} pending`, variant: "danger" };
+  const updDetail = [`Checked ${relativeTime(inv.collected_at)}`, d.os_build ? `build ${d.os_build}` : null].filter(Boolean).join(" · ");
+
+  // Encryption
+  const vol = s.encryption_volume;
+  const volLabel = vol ? (vol === "/" ? "System volume (/)" : `System drive (${vol})`) : d.os_family === "windows" ? "System drive" : "System volume";
+  const encDetail = [s.disk_encrypted ? s.encryption_method : null, volLabel].filter(Boolean).join(" · ");
+
+  // Platform integrity (from the Hardware inventory)
+  const appleSilicon = fw?.security_chip === "Apple Secure Enclave";
+  const sbPill: Pill =
+    fw?.secure_boot === undefined
+      ? appleSilicon
+        ? { text: "Always on", variant: "success", title: "Apple silicon always verifies the boot chain" }
+        : { text: "Not reported", variant: "neutral" }
+      : fw.secure_boot
+        ? { text: "On", variant: "success" }
+        : { text: "Off", variant: "warning" };
+  const chipPill: Pill = !fw?.security_chip
+    ? { text: fw ? "None found" : "Not reported", variant: "neutral" }
+    : fw.tpm_enabled === false
+      ? { text: "Disabled", variant: "warning" }
+      : { text: "Present", variant: "success" };
+
+  // Signed-in user
+  const signedIn = s.user || d.logged_in_user;
+  const userPill: Pill =
+    s.user_admin == null
+      ? !signedIn
+        ? { text: "No one signed in", variant: "neutral" }
+        : !s.details || !s.user
+          ? { text: "Not checked", variant: "neutral", title: s.details ? "Only a user signed in at the screen is checked, not remote sessions" : "Update the agent to check admin rights" }
+          : { text: "Unknown", variant: "neutral", title: "Admin rights may come through a domain group, which can't be checked from the device" }
+      : s.user_admin
+        ? { text: "Local administrator", variant: "warning", title: "Can install software and change security settings" }
+        : { text: "Standard user", variant: "success" };
+
+  // Screen lock
+  const lockPill: Pill =
+    s.screen_lock_enabled == null
+      ? { text: "Not reported", variant: "neutral", title: d.os_family === "windows" ? "No inactivity lock policy is set on this PC" : `${osName} doesn't report this to background services` }
+      : s.screen_lock_enabled
+        ? { text: "Enabled", variant: "success" }
+        : { text: "Off", variant: "danger" };
+  const lockDetail =
+    s.screen_lock_minutes != null
+      ? `Locks after ${s.screen_lock_minutes} min idle`
+      : s.screen_lock_enabled == null && d.os_family === "windows"
+        ? "No machine lock policy set"
+        : undefined;
+
   return (
-    <Card>
-      <CardContent className="divide-y divide-border pt-2">
-        <Posture label="Disk encryption" value={s.disk_encrypted} good detail={s.encryption_method} />
-        <Posture label="Firewall" value={s.firewall_enabled} good />
-        <Posture label="Screen lock policy" value={s.screen_lock_enabled} good />
-        <div className="flex items-center justify-between gap-4 py-3">
-          <p className="text-sm font-medium">Pending OS updates</p>
-          <Badge variant={s.pending_updates == null ? "warning" : s.pending_updates === 0 ? "success" : "danger"}>
-            {s.pending_updates == null ? "Unknown" : s.pending_updates === 0 ? "Up to date" : `${s.pending_updates} pending`}
-          </Badge>
-        </div>
-        <div className="flex items-center justify-between gap-4 py-3">
-          <p className="text-sm font-medium">Antivirus</p>
-          <span className="text-sm text-muted-foreground">{s.antivirus ?? "Not reported"}</span>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {known ? (
+          <>
+            The {d.compliance_state === "compliant" ? "Compliant" : "compliance"} status above covers only the compliance rules that apply to this device
+            {applyingRules.length ? `: ${applyingRules.map((r) => r.name).join(", ")}` : " (none)"}.{" "}
+            <Link href="/compliance" className="font-medium text-foreground underline-offset-2 hover:underline">
+              View rules
+            </Link>
+          </>
+        ) : (
+          "The compliance status above covers only the compliance rules that apply to this device."
+        )}
+      </p>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Threat &amp; network defense</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y divide-border pt-0">
+            <SecRow label="Antivirus" detail={avDetail || undefined} pill={avPill} />
+            <SecRow label="Firewall" detail={fwDetail} pill={fwPill} unchecked={unchecked("firewall_enabled")} />
+            <SecRow label="OS updates" detail={updDetail} pill={updPill} unchecked={unchecked("pending_updates")} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Device &amp; access hardening</CardTitle>
+          </CardHeader>
+          <CardContent className="divide-y divide-border pt-0">
+            <SecRow label="Disk encryption" detail={encDetail} pill={onOff(s.disk_encrypted)} unchecked={unchecked("disk_encrypted")} />
+            <SecRow label="Secure Boot" pill={sbPill} />
+            <SecRow label="Security chip" detail={fw?.security_chip} pill={chipPill} />
+            {(s.os_integrity ?? []).map((o) => (
+              <SecRow key={o.name} label={o.name} detail={o.detail} pill={onOff(o.enabled, "On", "Off")} />
+            ))}
+            <SecRow label="Signed-in user" detail={signedIn || undefined} pill={userPill} />
+            <SecRow label="Screen lock" detail={lockDetail} pill={lockPill} unchecked={unchecked("screen_lock_enabled")} />
+          </CardContent>
+        </Card>
+      </div>
+      {!s.details && (
+        <p className="text-xs text-muted-foreground">
+          Update this device&apos;s agent to see antivirus health, firewall profiles, {d.os_family === "windows" ? "User Account Control" : d.os_family === "macos" ? "SIP and Gatekeeper" : "SELinux/AppArmor"} and whether the signed-in user is an administrator.
+        </p>
+      )}
+    </div>
   );
 }
 

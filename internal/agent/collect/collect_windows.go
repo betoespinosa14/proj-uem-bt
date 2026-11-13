@@ -342,8 +342,10 @@ func security(ctx context.Context) protocol.Security {
 		`(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct | Select-Object -First 1).displayName`); err == nil && out != "" {
 		s.Antivirus = ptr(out)
 	}
-	if v := screenLockPolicy(); v != nil {
+	var lockMins *int
+	if v, secs := screenLockPolicy(); v != nil {
 		s.ScreenLockEnabled = v
+		lockMins = screenLockMinutes(secs)
 	}
 	if out, err := powershell(ctx, 180*time.Second,
 		`(New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher().Search("IsInstalled=0 and IsHidden=0 and Type='Software'").Updates.Count`); err == nil {
@@ -352,21 +354,30 @@ func security(ctx context.Context) protocol.Security {
 			s.PendingUpdates = &n
 		}
 	}
+	// Antivirus health, firewall profiles, UAC and whether the signed-in user
+	// is a local administrator, in one PowerShell call (see windowsSecScript).
+	if out, err := run(ctx, 60*time.Second, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		"-EncodedCommand", encodePS(windowsSecScript)); err == nil || out != "" {
+		x := parseWindowsSec(out)
+		x.ScreenLockMinutes, x.EncryptionVolume = lockMins, drive
+		x.apply(&s)
+	}
 	return s
 }
 
-// screenLockPolicy reads the machine inactivity-lock policy, if configured.
-func screenLockPolicy() *bool {
+// screenLockPolicy reads the machine inactivity-lock policy, if configured,
+// and its timeout in seconds.
+func screenLockPolicy() (*bool, uint64) {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`, registry.QUERY_VALUE)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	defer k.Close()
 	v, _, err := k.GetIntegerValue("InactivityTimeoutSecs")
 	if err != nil {
-		return nil
+		return nil, 0
 	}
-	return ptr(v > 0)
+	return ptr(v > 0), v
 }
 
 func wifiSSID(ctx context.Context) string {

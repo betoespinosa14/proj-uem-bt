@@ -117,6 +117,16 @@ export type MemoryLayout = {
 };
 export type PhysicalDrive = { model: string; media?: string; bus?: string; size_bytes?: number; health?: string };
 
+export type SecuritySetting = { name: string; enabled: boolean | null; detail?: string };
+export type AVStatus = {
+  name: string;
+  realtime?: boolean;
+  up_to_date?: boolean;
+  signature_age_days?: number;
+  tamper_protected?: boolean;
+  version?: string;
+};
+
 export type NetKind = "ethernet" | "wifi" | "vpn" | "virtual" | "bluetooth";
 
 export type NetInterface = {
@@ -192,6 +202,15 @@ export type Inventory = {
     screen_lock_enabled: boolean | null;
     pending_updates: number | null;
     antivirus: string | null;
+    // From agents 2026.11.20 on (details is set when they were collected).
+    details?: boolean;
+    encryption_volume?: string;
+    firewall_profiles?: SecuritySetting[];
+    av?: AVStatus;
+    os_integrity?: SecuritySetting[];
+    user?: string;
+    user_admin?: boolean;
+    screen_lock_minutes?: number;
   };
   users: { logged_in: string[] };
 };

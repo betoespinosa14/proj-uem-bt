@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -94,11 +95,44 @@ func security(ctx context.Context) protocol.Security {
 			s.EncryptionMethod = ptr("FileVault")
 		}
 	}
-	if out, err := run(ctx, 5*time.Second, "/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"); err == nil {
-		s.FirewallEnabled = ptr(strings.Contains(strings.ToLower(out), "enabled"))
+	x := secExtras{OK: true, EncryptionVolume: "/"}
+	const fw = "/usr/libexec/ApplicationFirewall/socketfilterfw"
+	if out, err := run(ctx, 5*time.Second, fw, "--getglobalstate"); err == nil {
+		on := parseSocketfilterOn(out)
+		s.FirewallEnabled = on
+		x.FirewallProfiles = append(x.FirewallProfiles, protocol.SecuritySetting{Name: "Application Firewall", Enabled: on})
+	}
+	if out, err := run(ctx, 5*time.Second, fw, "--getstealthmode"); err == nil {
+		x.FirewallProfiles = append(x.FirewallProfiles, protocol.SecuritySetting{Name: "Stealth mode", Enabled: parseSocketfilterOn(out)})
 	}
 	// Gatekeeper/XProtect are always present; report XProtect as the built-in AV.
 	s.Antivirus = ptr("XProtect")
+	av := &protocol.AVStatus{Name: "XProtect"}
+	const xp = "/Library/Apple/System/Library/CoreServices/XProtect.bundle"
+	if out, err := run(ctx, 5*time.Second, "defaults", "read", xp+"/Contents/Info.plist", "CFBundleShortVersionString"); err == nil {
+		av.Version = out
+	}
+	if fi, err := os.Stat(xp); err == nil {
+		days := int(time.Since(fi.ModTime()).Hours() / 24)
+		av.SignatureAgeDays = &days
+	}
+	x.AV = av
+	if out, err := run(ctx, 5*time.Second, "csrutil", "status"); err == nil {
+		x.OSIntegrity = append(x.OSIntegrity, protocol.SecuritySetting{Name: "System Integrity Protection", Enabled: parseCsrutil(out)})
+	}
+	if out, err := run(ctx, 5*time.Second, "spctl", "--status"); err == nil || out != "" {
+		x.OSIntegrity = append(x.OSIntegrity, protocol.SecuritySetting{Name: "Gatekeeper", Enabled: parseSpctl(out)})
+	}
+	if u := consoleUser(ctx); u != "" {
+		x.User = u
+		if out, err := run(ctx, 5*time.Second, "dseditgroup", "-o", "checkmember", "-m", u, "admin"); err == nil || out != "" {
+			x.UserAdmin = parseDseditgroup(out)
+		}
+	}
+	if out, err := run(ctx, 120*time.Second, "softwareupdate", "-l"); err == nil || out != "" {
+		x.PendingUpdates = parseSoftwareUpdate(out)
+	}
+	x.apply(&s)
 	return s
 }
 

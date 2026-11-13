@@ -7,9 +7,24 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.20 (2026-11-13): Security details and a two-card Security tab
+
+### Added
+- **Security details (agent).** The agent now also reports antivirus health (real-time protection, definitions up to
+  date, and for Microsoft Defender the definitions' age, tamper protection and version; on Macs the XProtect version
+  and age), each firewall profile (Windows Domain/Private/Public; macOS Application Firewall and stealth mode; the
+  Linux firewall tool), OS integrity (User Account Control; System Integrity Protection and Gatekeeper; SELinux or
+  AppArmor), whether the signed-in user is a local administrator, the Windows screen-lock timeout, the volume checked
+  for encryption, and pending updates on Macs (`softwareupdate -l`). Windows reads them in one PowerShell call. Older
+  agents keep working; their Security tab shows a hint to update.
 
 ### Changed
+- **Device page Security tab.** Two cards: **Threat & network defense** (antivirus with a status pill, firewall with
+  its profiles, OS updates with when they were last checked) and **Device & access hardening** (disk encryption and
+  the volume, Secure Boot and the security chip from the Hardware inventory, OS integrity, the signed-in user's admin
+  rights, screen lock and its timeout). A line at the top explains that the Compliant badge covers only the compliance
+  rules that apply to the device, naming them, and a failing control that no rule checks says so with a link to add
+  one.
 - **Network tab addresses.** Each adapter lists at most two addresses (IPv4 first, then global IPv6, then
   unique-local), with "+N more" to show the rest, so dual-stack adapters with several IPv6 privacy addresses keep a
   short row.

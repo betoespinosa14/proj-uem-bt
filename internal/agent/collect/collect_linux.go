@@ -130,8 +130,30 @@ func software(ctx context.Context) []protocol.Software {
 func security(ctx context.Context) protocol.Security {
 	var s protocol.Security
 	s.DiskEncrypted, s.EncryptionMethod = rootEncryption(ctx)
-	s.FirewallEnabled = firewall(ctx)
+	var tool string
+	s.FirewallEnabled, tool = firewall(ctx)
 	s.PendingUpdates = pendingUpdates(ctx)
+	x := secExtras{OK: true, EncryptionVolume: "/"}
+	if tool != "" {
+		x.FirewallProfiles = []protocol.SecuritySetting{{Name: tool, Enabled: s.FirewallEnabled}}
+	}
+	if _, err := exec.LookPath("getenforce"); err == nil {
+		if out, err := run(ctx, 5*time.Second, "getenforce"); err == nil {
+			if st := parseGetenforce(out); st != nil {
+				x.OSIntegrity = append(x.OSIntegrity, *st)
+			}
+		}
+	}
+	if b, err := os.ReadFile("/sys/module/apparmor/parameters/enabled"); err == nil {
+		x.OSIntegrity = append(x.OSIntegrity, protocol.SecuritySetting{Name: "AppArmor", Enabled: ptr(strings.TrimSpace(string(b)) == "Y")})
+	}
+	if u := consoleUser(ctx); u != "" {
+		x.User = u
+		if out, err := run(ctx, 5*time.Second, "id", "-nG", u); err == nil {
+			x.UserAdmin = parseIDGroups(out)
+		}
+	}
+	x.apply(&s)
 	return s
 }
 
@@ -154,22 +176,23 @@ func rootEncryption(ctx context.Context) (*bool, *string) {
 	return ptr(false), nil
 }
 
-func firewall(ctx context.Context) *bool {
+// firewall reports whether the host firewall is on, and which tool manages it.
+func firewall(ctx context.Context) (*bool, string) {
 	if _, err := exec.LookPath("ufw"); err == nil {
 		if out, err := run(ctx, 5*time.Second, "ufw", "status"); err == nil {
-			return ptr(strings.Contains(out, "Status: active"))
+			return ptr(strings.Contains(out, "Status: active")), "ufw"
 		}
 	}
 	if _, err := exec.LookPath("firewall-cmd"); err == nil {
 		out, _ := run(ctx, 5*time.Second, "firewall-cmd", "--state")
-		return ptr(out == "running")
+		return ptr(out == "running"), "firewalld"
 	}
 	if _, err := exec.LookPath("nft"); err == nil {
 		if out, err := run(ctx, 5*time.Second, "nft", "list", "ruleset"); err == nil {
-			return ptr(strings.Contains(out, "hook input") && strings.Contains(out, "policy drop"))
+			return ptr(strings.Contains(out, "hook input") && strings.Contains(out, "policy drop")), "nftables"
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 func pendingUpdates(ctx context.Context) *int {

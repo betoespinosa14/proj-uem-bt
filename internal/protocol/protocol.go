@@ -278,6 +278,32 @@ type Security struct {
 	ScreenLockEnabled *bool   `json:"screen_lock_enabled"`
 	PendingUpdates    *int    `json:"pending_updates"`
 	Antivirus         *string `json:"antivirus"`
+	// From 2026.11.20. Details is set by agents that collect the fields below.
+	Details           bool              `json:"details,omitempty"`
+	EncryptionVolume  string            `json:"encryption_volume,omitempty"` // the volume checked, e.g. "C:" or "/"
+	FirewallProfiles  []SecuritySetting `json:"firewall_profiles,omitempty"`
+	AV                *AVStatus         `json:"av,omitempty"`
+	OSIntegrity       []SecuritySetting `json:"os_integrity,omitempty"` // UAC; SIP, Gatekeeper; SELinux/AppArmor
+	User              string            `json:"user,omitempty"`         // the signed-in console user checked below
+	UserAdmin         *bool             `json:"user_admin,omitempty"`
+	ScreenLockMinutes *int              `json:"screen_lock_minutes,omitempty"`
+}
+
+// SecuritySetting is one named on/off control, such as a firewall profile.
+type SecuritySetting struct {
+	Name    string `json:"name"`
+	Enabled *bool  `json:"enabled"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+// AVStatus is the health of the active antivirus product. Nil fields weren't readable.
+type AVStatus struct {
+	Name             string `json:"name"`
+	Realtime         *bool  `json:"realtime,omitempty"`
+	UpToDate         *bool  `json:"up_to_date,omitempty"`
+	SignatureAgeDays *int   `json:"signature_age_days,omitempty"`
+	TamperProtected  *bool  `json:"tamper_protected,omitempty"`
+	Version          string `json:"version,omitempty"`
 }
 
 type Users struct {

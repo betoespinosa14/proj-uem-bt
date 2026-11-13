@@ -25,7 +25,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory, type NetInterface, type NetKind } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type CommandType, type ComplianceResult, type DeviceDetail, type Rule, type RuleActions, type Severity, type Disk, type Inventory, type NetInterface, type NetKind } from "@/lib/api";
 import { useCan } from "@/lib/session";
 import { cn, RESOURCE_LIMITS, copyToClipboard, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, relativeTimeShort, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +65,7 @@ export default function DevicePage() {
   const qc = useQueryClient();
   const can = useCan();
   const [tab, setTab] = useState("overview");
+  const [softwareView, setSoftwareView] = useState(0);
   const [action, setAction] = useState<CommandType | null>(null);
   const [editing, setEditing] = useState(false);
   const [retiring, setRetiring] = useState(false);
@@ -233,7 +234,8 @@ export default function DevicePage() {
           <Hardware d={d} />
         </TabsContent>
         <TabsContent value="software">
-          <Software id={id} onOpenUsage={() => setTab("usage")} />
+          {/* Re-mounted on Flagged when a failing compliance rule links here. */}
+          <Software key={softwareView} id={id} initialCategory={softwareView ? "flagged" : "all"} onOpenUsage={() => setTab("usage")} />
         </TabsContent>
         <TabsContent value="usage">
           <Usage id={id} os={d.os_family} />
@@ -245,7 +247,13 @@ export default function DevicePage() {
           <Security d={d} />
         </TabsContent>
         <TabsContent value="compliance">
-          <Compliance id={id} />
+          <Compliance
+            d={d}
+            onOpenTab={(t) => {
+              if (t === "software") setSoftwareView((n) => n + 1);
+              setTab(t);
+            }}
+          />
         </TabsContent>
         <TabsContent value="telemetry">
           <Telemetry id={id} />
@@ -730,18 +738,20 @@ function sortSoftware<T extends { name: string; install_date?: string | null; la
 const BANNER_NAMES = 3;
 
 function FlaggedLine({ label, apps, onMore }: { label: string; apps: { name: string }[]; onMore: () => void }) {
-  const shown = apps.slice(0, BANNER_NAMES);
-  const more = apps.length - shown.length;
+  // Two installed versions of one app are one finding (the table below still lists both).
+  const names = [...new Set(apps.map((a) => a.name))];
+  const shown = names.slice(0, BANNER_NAMES);
+  const more = names.length - shown.length;
   return (
     <p className="min-w-0">
       <span className="font-medium">
-        {label} ({apps.length}):
+        {label} ({names.length}):
       </span>{" "}
-      {shown.map((s, i) => (
-        <span key={`${s.name}-${i}`}>
+      {shown.map((name, i) => (
+        <span key={name}>
           {i > 0 && ", "}
-          <span className="inline-block max-w-[18rem] truncate align-bottom" title={s.name}>
-            {s.name}
+          <span className="inline-block max-w-[18rem] truncate align-bottom" title={name}>
+            {name}
           </span>
         </span>
       ))}
@@ -757,9 +767,11 @@ function FlaggedLine({ label, apps, onMore }: { label: string; apps: { name: str
   );
 }
 
-function Software({ id, onOpenUsage }: { id: string; onOpenUsage: () => void }) {
+type SoftwareCategory = "all" | "system" | "third_party" | "flagged";
+
+function Software({ id, initialCategory = "all", onOpenUsage }: { id: string; initialCategory?: SoftwareCategory; onOpenUsage: () => void }) {
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState<"all" | "system" | "third_party" | "flagged">("all");
+  const [category, setCategory] = useState<SoftwareCategory>(initialCategory);
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<SoftwareSort>({ key: "name", dir: "asc" });
   const onSort = (key: SoftwareSortKey) =>
@@ -1427,48 +1439,268 @@ function Security({ d }: { d: DeviceDetail }) {
   );
 }
 
-function Compliance({ id }: { id: string }) {
-  const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceCompliance(id), queryFn: () => api.devices.compliance(id) });
-  if (error) return <ErrorState error={error} onRetry={refetch} />;
-  if (isLoading) return <Skeleton className="h-48" />;
-  if (!data?.items.length)
+type ComplianceSortKey = "rule" | "severity" | "result" | "evaluated";
+const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+const PLATFORM: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
+const platforms = (os: string[]) => os.map((o) => PLATFORM[o] ?? o).join(" & ");
+
+// Where a failing rule's findings can be seen: the tab its conditions read from.
+function drillTarget(rule?: Rule): "software" | "security" | undefined {
+  const fields = rule?.conditions.map((c) => c.field) ?? [];
+  if (fields.some((f) => f.startsWith("software."))) return "software";
+  if (fields.some((f) => f.startsWith("security."))) return "security";
+  return undefined;
+}
+
+function ruleScope(r: Rule, groupName: (id: string) => string): string {
+  const parts = [r.group_id ? `Group: ${groupName(r.group_id)}` : "All devices"];
+  if (r.os_families.length && r.os_families.length < 3) parts.push(`${platforms(r.os_families)} only`);
+  return parts.join(" · ");
+}
+
+function onFailure(a: RuleActions): string {
+  const parts: string[] = [];
+  if (a.alert) parts.push("Alert");
+  if (a.tag) parts.push(`Tag “${a.tag}”`);
+  if (a.webhook) parts.push("Webhook");
+  if (a.command) parts.push(commandLabel(a.command.type, a.command.payload));
+  return parts.length ? `On failure: ${parts.join(" · ")}` : "On failure: marked non-compliant only";
+}
+
+// Why an enabled rule skips this device (mirrors compliance.Applies on the server).
+function notApplyingReason(r: Rule, d: DeviceDetail, groupName: (id: string) => string): string {
+  if (r.os_families.length && !r.os_families.includes(d.os_family)) return `${platforms(r.os_families)} only`;
+  if (r.group_id && r.group_id !== d.group_id) return `Only for group ${groupName(r.group_id)}`;
+  return "Not evaluated yet";
+}
+
+// How long "Check now" waits for the device's fresh report before giving up.
+const CHECK_TIMEOUT_MS = 120_000;
+
+function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "software" | "security") => void }) {
+  const id = d.id;
+  const can = useCan();
+  const qc = useQueryClient();
+  // A pending "Check now": when it started (for the timeout) and the newest evaluation
+  // time before it, so only the server's clock decides when fresh results have landed.
+  const [checking, setChecking] = useState<{ since: number; baseline: string | null } | null>(null);
+  const results = useQuery({
+    queryKey: qk.deviceCompliance(id),
+    queryFn: () => api.devices.compliance(id),
+    refetchInterval: checking ? 3000 : false,
+  });
+  const rules = useQuery({ queryKey: qk.complianceRules, queryFn: api.compliance.rules });
+  const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
+  const [sort, setSort] = useState<{ key: ComplianceSortKey; dir: "asc" | "desc" }>({ key: "result", dir: "asc" });
+  const onSort = (key: ComplianceSortKey) =>
+    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "rule" || key === "result" ? "asc" : "desc" }));
+  const [showOthers, setShowOthers] = useState(false);
+
+  const items = useMemo(() => results.data?.items ?? [], [results.data]);
+  const latest = items.reduce<string | null>((m, r) => (!m || r.evaluated_at > m ? r.evaluated_at : m), null);
+
+  // Stop waiting once a newer evaluation arrives, or after the timeout.
+  useEffect(() => {
+    if (!checking) return;
+    if (latest && (!checking.baseline || latest > checking.baseline)) {
+      setChecking(null);
+      toast.success("Compliance checked", "Results are from the device's latest report.");
+      void qc.invalidateQueries({ queryKey: qk.device(id) });
+      void qc.invalidateQueries({ queryKey: qk.deviceSoftware(id) });
+      return;
+    }
+    const t = setTimeout(
+      () => {
+        setChecking(null);
+        toast.error("No new report yet", "The device hasn't sent its inventory. Results update on their own when it does.");
+      },
+      Math.max(0, checking.since + CHECK_TIMEOUT_MS - Date.now()),
+    );
+    return () => clearTimeout(t);
+  }, [checking, latest, id, qc]);
+
+  const check = useMutation({
+    // Re-checking on the server would only re-read the last report; ask the device for a fresh one.
+    mutationFn: () => api.devices.sendCommand(id, { type: "refresh_inventory", payload: {} }),
+    onMutate: () => setChecking({ since: Date.now(), baseline: latest }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.deviceCommands(id) }),
+    onError: (e) => {
+      setChecking(null);
+      toast.error("Couldn't start the check", e);
+    },
+  });
+
+  const ruleById = useMemo(() => new Map((rules.data?.items ?? []).map((r) => [r.id, r])), [rules.data]);
+  const groupName = (gid: string) => groups.data?.items.find((g) => g.id === gid)?.name ?? "another group";
+  const sorted = useMemo(() => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const bySeverity = (a: ComplianceResult, b: ComplianceResult) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
+    return [...items].sort((a, b) => {
+      let c = 0;
+      if (sort.key === "rule") c = a.rule_name.localeCompare(b.rule_name);
+      else if (sort.key === "severity") c = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+      else if (sort.key === "result") c = Number(a.passed) - Number(b.passed);
+      else c = a.evaluated_at.localeCompare(b.evaluated_at);
+      return c * dir || bySeverity(a, b) || a.rule_name.localeCompare(b.rule_name);
+    });
+  }, [items, sort]);
+  const applying = new Set(items.map((r) => r.rule_id));
+  const others = (rules.data?.items ?? []).filter((r) => r.enabled && !applying.has(r.id));
+
+  if (results.error) return <ErrorState error={results.error} onRetry={results.refetch} />;
+  if (results.isLoading) return <Skeleton className="h-48" />;
+
+  const failing = items.filter((r) => !r.passed).length;
+  const online = d.status === "online";
+  const busy = checking !== null || check.isPending;
+  const ruleWord = items.length === 1 ? "rule" : "rules";
+
+  const othersList = others.length > 0 && (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        onClick={() => setShowOthers((v) => !v)}
+        aria-expanded={showOthers}
+        className="flex w-full items-center gap-1.5 px-4 py-3 text-left text-sm text-muted-foreground hover:text-foreground"
+      >
+        {showOthers ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        {others.length === 1 ? "1 other rule doesn’t" : `${others.length} other rules don’t`} apply to this device
+      </button>
+      {showOthers && (
+        <ul className="divide-y divide-border border-t border-border">
+          {others.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5 pl-10 pr-4 text-sm">
+              <span className="font-medium">{r.name}</span>
+              <span className="text-muted-foreground">{notApplyingReason(r, d, groupName)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  if (!items.length)
     return (
       <Card>
         <EmptyState
           icon={ShieldCheck}
-          title="No compliance rules apply"
-          description="Create rules on the Compliance page. They're evaluated whenever the device reports inventory."
+          title="No compliance rules apply to this device"
+          description={
+            others.length
+              ? "Every enabled rule is limited to other platforms or groups. Change a rule's scope, or move the device into a group, to check it here."
+              : "There are no enabled rules yet. Rules are checked whenever a device reports its inventory."
+          }
+          action={
+            <Link href="/compliance" className="inline-flex h-9 items-center rounded-lg border border-border bg-card px-3.5 text-sm font-medium shadow-sm hover:bg-muted">
+              Manage rules
+            </Link>
+          }
         />
+        {othersList}
       </Card>
     );
+
   return (
-    <Card className="overflow-hidden">
-      <Table>
+    // The column headers pin under the device's sticky tab row (top bar 4rem + row 3.5rem).
+    <Card className="overflow-clip [--sticky-top:7.5rem]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3 pl-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {failing ? (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-danger">
+              <ShieldAlert className="h-4 w-4" />
+              {failing} of {items.length} {ruleWord} failing
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-success">
+              <ShieldCheck className="h-4 w-4" />
+              {items.length} of {items.length} {ruleWord} passing
+            </span>
+          )}
+          {latest && (
+            <span className="text-muted-foreground" title={formatDateTime(latest)}>
+              Last evaluated {relativeTimeShort(latest)}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {can("commands.run") && (
+            // Disabled buttons don't show tooltips, so the hint sits on a wrapper.
+            <span title={online ? "Ask the device for a fresh report and re-check every rule" : "The device is offline. Its rules are checked again when it next reports."}>
+              <Button variant="outline" size="sm" onClick={() => check.mutate()} disabled={!online || busy}>
+                <RefreshCw className={cn(busy && "motion-safe:animate-spin")} /> {busy ? "Checking…" : "Check now"}
+              </Button>
+            </span>
+          )}
+          <Link href="/compliance" className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-medium hover:bg-muted">
+            Manage rules <ChevronRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+      <Table stickyHeader>
         <THead>
           <TR>
-            <TH>Rule</TH>
-            <TH>Severity</TH>
-            <TH>Result</TH>
+            <TH>
+              <SortButton label="Rule" k="rule" sort={sort} onSort={onSort} />
+            </TH>
+            <TH>
+              <SortButton label="Severity" k="severity" sort={sort} onSort={onSort} />
+            </TH>
+            <TH>
+              <SortButton label="Result" k="result" sort={sort} onSort={onSort} />
+            </TH>
             <TH className="hidden md:table-cell">Details</TH>
-            <TH className="hidden sm:table-cell">Evaluated</TH>
+            <TH className="hidden sm:table-cell">
+              <SortButton label="Evaluated" k="evaluated" sort={sort} onSort={onSort} />
+            </TH>
           </TR>
         </THead>
         <TBody>
-          {data.items.map((r) => (
-            <TR key={r.rule_id}>
-              <TD className="font-medium">{r.rule_name}</TD>
-              <TD>
-                <SeverityBadge severity={r.severity} />
-              </TD>
-              <TD>
-                <Badge variant={r.passed ? "success" : "danger"}>{r.passed ? "Pass" : "Fail"}</Badge>
-              </TD>
-              <TD className="hidden max-w-md text-muted-foreground md:table-cell">{r.details}</TD>
-              <TD className="hidden whitespace-nowrap text-muted-foreground sm:table-cell">{relativeTime(r.evaluated_at)}</TD>
-            </TR>
-          ))}
+          {sorted.map((r) => {
+            const rule = ruleById.get(r.rule_id);
+            const target = r.passed ? undefined : drillTarget(rule);
+            const details = (
+              <>
+                <div className={cn(!r.passed && "text-foreground")}>{r.details}</div>
+                {target && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTab(target)}
+                    className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    View in {target === "software" ? "Software" : "Security"} <ChevronRight className="h-3 w-3" />
+                  </button>
+                )}
+              </>
+            );
+            return (
+              <TR key={r.rule_id}>
+                <TD className="align-top">
+                  <div className="font-medium">{r.rule_name}</div>
+                  {rule && (
+                    <div className="mt-0.5 space-y-0.5 text-xs text-muted-foreground">
+                      <div>{ruleScope(rule, groupName)}</div>
+                      <div>{onFailure(rule.actions)}</div>
+                    </div>
+                  )}
+                  {/* The Details column is hidden on phones; show it under the rule instead. */}
+                  <div className="mt-2 text-sm text-muted-foreground md:hidden">{details}</div>
+                </TD>
+                <TD className="align-top">
+                  <SeverityBadge severity={r.severity} />
+                </TD>
+                <TD className="align-top">
+                  <Badge variant={r.passed ? "success" : "danger"}>{r.passed ? "Pass" : "Fail"}</Badge>
+                </TD>
+                <TD className="hidden max-w-md align-top text-muted-foreground md:table-cell">{details}</TD>
+                <TD className="hidden whitespace-nowrap align-top text-muted-foreground sm:table-cell" title={formatDateTime(r.evaluated_at)}>
+                  {relativeTimeShort(r.evaluated_at)}
+                </TD>
+              </TR>
+            );
+          })}
         </TBody>
       </Table>
+      {othersList}
     </Card>
   );
 }

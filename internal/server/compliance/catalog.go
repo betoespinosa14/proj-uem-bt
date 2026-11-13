@@ -39,10 +39,22 @@ var gamePublisher = regexp.MustCompile(`(?i)\b(` +
 	`mihoyo|hoyoverse|cognosphere|roblox|mojang|zynga|gameloft|netease games|tencent games` +
 	`)\b`)
 
+// vmShortcut matches the version Parallels gives the Mac shortcuts it makes
+// for apps inside a Windows VM ("Xbox Game Bar", version "Windows 11").
+var vmShortcut = regexp.MustCompile(`^Windows \d+$`)
+
+// gameTool matches game-engine tools that game publishers ship but that
+// aren't games (Epic's Unreal Engine helpers).
+var gameTool = regexp.MustCompile(`(?i)\bunreal\b|^UE\d`)
+
 // Classify returns FlagGambling, FlagGame or "" for an installed app. Apps
-// shipped by the OS vendor (e.g. macOS Chess) are never flagged.
+// shipped by the OS vendor (e.g. macOS Chess) are never flagged, nor are
+// Parallels shortcuts to apps inside a Windows VM.
 func Classify(s store.Software) string {
 	if s.Source == "apple" {
+		return ""
+	}
+	if s.Source == "unknown" && vmShortcut.MatchString(s.Version) {
 		return ""
 	}
 	if s.Source == "msstore" && microsoft.MatchString(s.Publisher) {
@@ -51,7 +63,10 @@ func Classify(s store.Software) string {
 	if gamblingName.MatchString(s.Name) || gamblingPublisher.MatchString(s.Publisher) {
 		return FlagGambling
 	}
-	if gameName.MatchString(s.Name) || gamePublisher.MatchString(s.Publisher) {
+	if gameName.MatchString(s.Name) {
+		return FlagGame
+	}
+	if gamePublisher.MatchString(s.Publisher) && !gameTool.MatchString(s.Name) {
 		return FlagGame
 	}
 	return ""
@@ -94,11 +109,14 @@ func Category(s store.Software) string {
 	return CategoryThirdParty // mac_app_store, identified_developer, unknown
 }
 
-// flagged returns the names of installed apps carrying the given flag.
+// flagged returns the names of installed apps carrying the given flag, each
+// name once (two installed versions of one app are one finding).
 func flagged(f Facts, flag string) []string {
 	out := []string{}
+	seen := map[string]bool{}
 	for _, s := range f.Software {
-		if Classify(s) == flag {
+		if Classify(s) == flag && !seen[s.Name] {
+			seen[s.Name] = true
 			out = append(out, s.Name)
 		}
 	}

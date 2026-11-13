@@ -7,6 +7,24 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Changed
+- **Device page Compliance tab.** A summary strip ("2 of 3 rules failing", last evaluated with the exact time on
+  hover), **Check now** (asks the device for a fresh report and updates the results when it lands; disabled while
+  the device is offline) and **Manage rules**. Each rule shows its scope ("All devices", "Group: HR", "Windows only")
+  and what happens on failure (alert, tag, webhook, command). Failing rows link to the Software tab (opened on
+  Flagged) or the Security tab. Sortable headers, failing rules first. Rules that don't apply to the device are
+  listed with the reason, and the empty state explains why no rule applies. On phones the details show under the
+  rule name.
+
+### Fixed
+- **False game flags.** Parallels shortcuts to apps inside a Windows VM (version "Windows 11") and Unreal Engine
+  tools published by Epic Games (e.g. UE4EditorServices) are no longer flagged as games. The Epic Games Launcher
+  and Epic's games still are.
+- **Duplicate names.** An app installed in two versions is named once in compliance details and in the Software
+  tab's flagged banner.
+
 ## 2026.11.21 (2026-11-13): Security tab polish
 
 ### Changed

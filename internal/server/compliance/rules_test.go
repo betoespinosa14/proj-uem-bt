@@ -167,12 +167,30 @@ func TestClassify(t *testing.T) {
 		{store.Software{Name: "Microsoft Minesweeper", Publisher: "Microsoft Studios", Source: "msstore"}, ""},
 		{store.Software{Name: "Microsoft Solitaire Collection", Source: "unknown"}, FlagGame}, // installed on a Mac
 		{store.Software{Name: "Candy Crush Saga", Publisher: "king.com", Source: "msstore"}, FlagGame},
+		{store.Software{Name: "Xbox Game Bar", Version: "Windows 11", Source: "unknown"}, ""},                  // Parallels shortcut
+		{store.Software{Name: "Microsoft Solitaire Collection", Version: "Windows 10", Source: "unknown"}, ""}, // Parallels shortcut
+		{store.Software{Name: "UE4EditorServices", Publisher: "Epic Games International, S.a.r.l. (96DBZ92D3Y)", Source: "identified_developer"}, ""},
+		{store.Software{Name: "Unreal Engine", Publisher: "Epic Games, Inc."}, ""},
+		{store.Software{Name: "Epic Games Launcher", Publisher: "Epic Games, Inc."}, FlagGame},
+		{store.Software{Name: "Fortnite", Publisher: "Epic Games, Inc."}, FlagGame},
 		{store.Software{Name: "Roblox", Publisher: "Roblox Corporation", Source: "msstore"}, FlagGame},
 	}
 	for _, c := range cases {
 		if got := Classify(c.sw); got != c.want {
 			t.Errorf("Classify(%q) = %q, want %q", c.sw.Name, got, c.want)
 		}
+	}
+}
+
+func TestFlaggedDedupes(t *testing.T) {
+	f := Facts{Software: []store.Software{
+		{Name: "Candy Crush Soda Saga", Version: "1.2", Publisher: "king.com"},
+		{Name: "Candy Crush Soda Saga", Version: "1.3", Publisher: "king.com"},
+		{Name: "Mahjong"},
+	}}
+	got := flagged(f, FlagGame)
+	if len(got) != 2 || got[0] != "Candy Crush Soda Saga" || got[1] != "Mahjong" {
+		t.Fatalf("flagged = %v, want each name once", got)
 	}
 }
 

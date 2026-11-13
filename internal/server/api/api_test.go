@@ -1013,3 +1013,72 @@ func TestEmployeeName(t *testing.T) {
 		t.Fatalf("name after deleting the group = %q", d.Name)
 	}
 }
+
+func TestTelemetryClampAndBuckets(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "Telemetry")
+	var tok idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "t"}, 201, &tok)
+	dev := e.enroll(t, tok.Token)
+	ctx := context.Background()
+
+	// Rows stored before the battery cap (101%) must still read back as 100%.
+	start := time.Now().Add(-2 * time.Hour).Truncate(time.Hour)
+	for i := range 10 {
+		if _, err := e.store.Pool.Exec(ctx, `
+			INSERT INTO device_telemetry (device_id, ts, cpu_pct, mem_pct, disk_pct, battery_pct)
+			VALUES ($1, $2, $3, 50, 40, 101)`, dev.DeviceID, start.Add(time.Duration(i)*time.Minute), float64(i*10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// New samples are capped on the way in.
+	over := 130.0
+	if err := e.store.RecordTelemetry(ctx, dev.DeviceID, protocol.Telemetry{TS: start.Add(30 * time.Minute), CPUPct: 120, MemPct: 50, DiskPct: 40, BatteryPct: &over}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A device without a battery keeps reporting none (not 100%).
+	if err := e.store.RecordTelemetry(ctx, dev.DeviceID, protocol.Telemetry{TS: start.Add(40 * time.Minute), CPUPct: 5, MemPct: 50, DiskPct: 40}); err != nil {
+		t.Fatal(err)
+	}
+
+	type point struct {
+		CPU     float64  `json:"cpu_pct"`
+		Battery *float64 `json:"battery_pct"`
+	}
+	var raw struct {
+		Items    []point `json:"items"`
+		Interval int     `json:"interval_sec"`
+	}
+	a.do("GET", "/api/devices/"+dev.DeviceID+"/telemetry?hours=24", nil, 200, &raw)
+	if raw.Interval != 60 || len(raw.Items) != 12 {
+		t.Fatalf("24h: interval %d, %d points; want 60, 12", raw.Interval, len(raw.Items))
+	}
+	for _, p := range raw.Items[:11] {
+		if p.CPU > 100 || p.Battery == nil || *p.Battery > 100 {
+			t.Fatalf("24h point over 100%% or missing battery: %+v", p)
+		}
+	}
+	if raw.Items[11].Battery != nil {
+		t.Fatalf("no-battery sample came back as %v, want null", *raw.Items[11].Battery)
+	}
+
+	var weekly struct {
+		Items    []point `json:"items"`
+		Interval int     `json:"interval_sec"`
+	}
+	a.do("GET", "/api/devices/"+dev.DeviceID+"/telemetry?hours=168", nil, 200, &weekly)
+	// Minutes 0-9 fall in two 5-minute buckets (bin origin is "now - 7d", so any
+	// alignment gives 2 or 3 buckets), the capped sample at minute 30 and the
+	// no-battery one at minute 40.
+	if weekly.Interval != 300 || len(weekly.Items) < 4 || len(weekly.Items) > 5 {
+		t.Fatalf("7d: interval %d, %d points; want 300, 4-5", weekly.Interval, len(weekly.Items))
+	}
+	capped := weekly.Items[len(weekly.Items)-2]
+	if capped.CPU != 100 || capped.Battery == nil || *capped.Battery != 100 {
+		t.Fatalf("7d capped sample = %+v, want 100/100", capped)
+	}
+	if weekly.Items[len(weekly.Items)-1].Battery != nil {
+		t.Fatal("7d no-battery bucket should have a null battery")
+	}
+}

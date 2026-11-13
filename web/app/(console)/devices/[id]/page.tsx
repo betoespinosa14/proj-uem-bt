@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ArrowLeft,
   ChevronDown,
@@ -1711,61 +1711,209 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
 }
 
 const RANGES = { "1": "1h", "24": "24h", "168": "7d" } as const;
+type Range = keyof typeof RANGES;
+type Series = "CPU" | "Memory" | "Disk" | "Battery";
+type TelemetryRow = { t: number } & Record<Series, number | null>;
+
+const SERIES: { key: Series; color: string; dash?: string; width: number }[] = [
+  { key: "CPU", color: "hsl(var(--primary))", width: 1.75 },
+  { key: "Memory", color: "hsl(var(--success))", width: 1.75 },
+  { key: "Disk", color: "hsl(var(--warning))", width: 1.75 },
+  { key: "Battery", color: "hsl(var(--muted-foreground))", dash: "4 3", width: 1.5 },
+];
+const HOUR = 3_600_000;
+
+// Ticks on round wall-clock times: every 10 min (1h), every 3 h (24h), each local midnight (7d).
+function telemetryTicks(from: number, to: number, range: Range): number[] {
+  const out: number[] = [];
+  const d = new Date(from);
+  if (range === "168") {
+    d.setHours(24, 0, 0, 0);
+    for (; d.getTime() <= to; d.setDate(d.getDate() + 1)) out.push(d.getTime());
+  } else {
+    const stepMin = range === "1" ? 10 : 180;
+    d.setSeconds(0, 0);
+    const mins = d.getHours() * 60 + d.getMinutes();
+    d.setHours(0, Math.ceil(mins / stepMin) * stepMin, 0, 0);
+    for (; d.getTime() <= to; d.setMinutes(d.getMinutes() + stepMin)) out.push(d.getTime());
+  }
+  return out;
+}
 
 function Telemetry({ id }: { id: string }) {
-  const [hours, setHours] = useState<keyof typeof RANGES>("24");
-  const { data, isLoading, error, refetch } = useQuery({
+  const [hours, setHours] = useState<Range>("24");
+  const [hidden, setHidden] = useState<Set<Series>>(new Set());
+  const { data, dataUpdatedAt, isLoading, error, refetch } = useQuery({
     queryKey: qk.deviceTelemetry(id, Number(hours)),
     queryFn: () => api.devices.telemetry(id, Number(hours)),
     refetchInterval: 60_000,
   });
-  const points = useMemo(
-    () =>
-      (data?.items ?? []).map((p) => ({
-        t: new Date(p.ts).getTime(),
-        CPU: p.cpu_pct,
-        Memory: p.mem_pct,
-        Disk: p.disk_pct,
-        Battery: p.battery_pct,
-      })),
-    [data],
-  );
-  const hasBattery = points.some((p) => p.Battery != null);
-  const fmt = (t: number) =>
-    new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric" } : { hour: "2-digit", minute: "2-digit" });
+
+  // The window is the full range ending when the data was fetched, so 1h always spans an hour.
+  const to = dataUpdatedAt || Date.now();
+  const from = to - Number(hours) * HOUR;
+  const { rows, gaps, samples } = useMemo(() => {
+    const interval = (data?.interval_sec ?? 60) * 1000;
+    const maxGap = interval * 3; // a few missed reports in a row: asleep, off or offline
+    const samples: TelemetryRow[] = (data?.items ?? []).map((p) => ({
+      t: new Date(p.ts).getTime(),
+      CPU: p.cpu_pct,
+      Memory: p.mem_pct,
+      Disk: p.disk_pct,
+      Battery: p.battery_pct,
+    }));
+    const rows: TelemetryRow[] = [];
+    const gaps: { x1: number; x2: number }[] = [];
+    const empty = (t: number): TelemetryRow => ({ t, CPU: null, Memory: null, Disk: null, Battery: null });
+    let prev: number | null = null;
+    for (const s of samples) {
+      if (prev !== null && s.t - prev > maxGap) {
+        gaps.push({ x1: prev, x2: s.t });
+        rows.push(empty(prev + interval)); // a null row breaks the line instead of bridging the gap
+      }
+      rows.push(s);
+      prev = s.t;
+    }
+    if (samples.length) {
+      if (samples[0]!.t - from > maxGap) gaps.unshift({ x1: from, x2: samples[0]!.t });
+      if (to - prev! > maxGap) gaps.push({ x1: prev!, x2: to });
+    }
+    return { rows, gaps, samples };
+  }, [data, from, to]);
+
+  const hasBattery = samples.some((p) => p.Battery != null);
+  const series = SERIES.filter((s) => s.key !== "Battery" || hasBattery);
+  const stat = (k: Series) => {
+    const v = samples.map((p) => p[k]).filter((x): x is number => x != null);
+    if (!v.length) return null;
+    return { avg: v.reduce((a, b) => a + b, 0) / v.length, peak: Math.max(...v), low: Math.min(...v), first: v[0]!, last: v[v.length - 1]! };
+  };
+  const cpu = stat("CPU");
+  const mem = stat("Memory");
+  const disk = stat("Disk");
+  const bat = stat("Battery");
+  const label = RANGES[hours];
+  const ticks = telemetryTicks(from, to, hours);
+  const fmt = (t: number) => new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric" } : { hour: "2-digit", minute: "2-digit" });
+  const toggle = (k: Series) =>
+    setHidden((cur) => {
+      const next = new Set(cur);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+
   if (error) return <ErrorState error={error} onRetry={refetch} />;
+  const pts = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)} pts`;
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>Utilization</CardTitle>
-        <Segmented value={hours} onChange={setHours} options={Object.entries(RANGES).map(([v, l]) => ({ value: v as keyof typeof RANGES, label: l }))} />
-      </CardHeader>
-      <CardContent className="h-80">
-        {isLoading ? (
-          <Skeleton className="h-full" />
-        ) : points.length < 2 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Not enough samples yet. The agent reports every minute.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={points} margin={{ left: -16, right: 8 }}>
-              <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} minTickGap={40} />
-              <YAxis domain={[0, 100]} unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
-              <Tooltip
-                labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
-                formatter={(v) => (typeof v === "number" ? `${v.toFixed(1)}%` : String(v))}
-                contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-              />
-              <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="CPU" stroke="hsl(var(--primary))" dot={false} strokeWidth={1.75} isAnimationActive={false} />
-              <Line type="monotone" dataKey="Memory" stroke="hsl(var(--success))" dot={false} strokeWidth={1.75} isAnimationActive={false} />
-              <Line type="monotone" dataKey="Disk" stroke="hsl(var(--warning))" dot={false} strokeWidth={1.75} isAnimationActive={false} />
-              {hasBattery && <Line type="monotone" dataKey="Battery" stroke="hsl(var(--muted-foreground))" dot={false} strokeWidth={1.5} strokeDasharray="4 3" isAnimationActive={false} />}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      {samples.length > 0 && (
+        <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2", bat ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+          <Metric icon={Cpu} label={`CPU · ${label} average`} value={cpu?.avg} sub={cpu ? `Peak ${formatPct(cpu.peak)}` : undefined} limits={RESOURCE_LIMITS.cpu} />
+          <Metric icon={MemoryStick} label={`Memory · ${label} average`} value={mem?.avg} sub={mem ? `Peak ${formatPct(mem.peak)}` : undefined} limits={RESOURCE_LIMITS.mem} />
+          <Metric
+            icon={HardDrive}
+            label="System disk · latest"
+            value={disk?.last}
+            sub={disk ? `${pts(disk.last - disk.first)} over ${label}` : undefined}
+            limits={RESOURCE_LIMITS.disk}
+          />
+          {bat && <Metric icon={BatteryMedium} label="Battery · latest" charge value={bat.last} sub={`Lowest ${formatPct(bat.low)} over ${label}`} />}
+        </div>
+      )}
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+          <CardTitle>Utilization</CardTitle>
+          <Segmented value={hours} onChange={setHours} options={Object.entries(RANGES).map(([v, l]) => ({ value: v as Range, label: l }))} />
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-80" />
+          ) : samples.length < 2 ? (
+            <div className="flex h-80 items-center justify-center text-sm text-muted-foreground">
+              No samples in the last {label}. The agent reports every minute while the device is on.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Show or hide series">
+                {series.map((s) => {
+                  const on = !hidden.has(s.key);
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggle(s.key)}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        on ? "border-border bg-card text-foreground hover:bg-muted" : "border-dashed border-border text-muted-foreground line-through hover:text-foreground",
+                      )}
+                      title={on ? `Hide ${s.key}` : `Show ${s.key}`}
+                    >
+                      <svg width="14" height="4" aria-hidden className={cn(!on && "opacity-40")}>
+                        <line x1="0" y1="2" x2="14" y2="2" stroke={s.color} strokeWidth="2.5" strokeDasharray={s.dash} />
+                      </svg>
+                      {s.key}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rows} margin={{ left: -16, right: 8 }}>
+                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
+                    {gaps.map((g) => (
+                      <ReferenceArea key={g.x1} x1={g.x1} x2={g.x2} fill="hsl(var(--muted-foreground))" fillOpacity={0.08} strokeOpacity={0} ifOverflow="hidden" />
+                    ))}
+                    <XAxis
+                      dataKey="t"
+                      type="number"
+                      scale="time"
+                      domain={[from, to]}
+                      allowDataOverflow
+                      ticks={ticks}
+                      tickFormatter={fmt}
+                      fontSize={11}
+                      stroke="hsl(var(--muted-foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={24}
+                    />
+                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
+                    <Tooltip
+                      labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
+                      formatter={(v) => (typeof v === "number" ? `${v.toFixed(1)}%` : String(v))}
+                      contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                    />
+                    {series.map((s) => (
+                      <Line
+                        key={s.key}
+                        type="linear"
+                        dataKey={s.key}
+                        hide={hidden.has(s.key)}
+                        stroke={s.color}
+                        strokeDasharray={s.dash}
+                        dot={false}
+                        strokeWidth={s.width}
+                        connectNulls={false}
+                        isAnimationActive={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              {gaps.length > 0 && (
+                <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="h-2.5 w-4 rounded-sm bg-muted-foreground/15" />
+                  Shaded: no samples (device off, asleep or offline).
+                  {hours === "168" && " Points are 5-minute averages."}
+                </p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

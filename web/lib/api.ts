@@ -297,9 +297,9 @@ export type UsageSummary = {
 
 export type TelemetryPoint = {
   ts: string;
-  cpu_pct: number;
-  mem_pct: number;
-  disk_pct: number;
+  cpu_pct: number | null;
+  mem_pct: number | null;
+  disk_pct: number | null;
   battery_pct: number | null;
 };
 
@@ -754,7 +754,7 @@ export const api = {
     softwareExportUrl: (id: string, f: { q?: string; category?: string } = {}) =>
       withQuery(`/api/devices/${enc(id)}/software.csv`, f),
     telemetry: (id: string, hours: number) =>
-      get<Items<TelemetryPoint>>(`/api/devices/${enc(id)}/telemetry`, { hours }),
+      get<Items<TelemetryPoint> & { interval_sec: number }>(`/api/devices/${enc(id)}/telemetry`, { hours }),
     compliance: (id: string) => get<Items<ComplianceResult>>(`/api/devices/${enc(id)}/compliance`),
     commands: (id: string) => get<Items<Command>>(`/api/devices/${enc(id)}/commands`),
     sendCommand: (id: string, b: CommandRequest) => post<Command>(`/api/devices/${enc(id)}/commands`, b),

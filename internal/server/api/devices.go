@@ -261,8 +261,19 @@ func (s *Server) deviceTelemetry(w http.ResponseWriter, r *http.Request) {
 	if hours > 24*30 {
 		hours = 24 * 30
 	}
-	list, err := s.store.ListTelemetry(r.Context(), orgOf(r), chi.URLParam(r, "id"), time.Now().Add(-time.Duration(hours)*time.Hour))
-	items(w, list, err)
+	// Agents sample every minute; past a day, 5-minute averages keep the chart light
+	// (7 days is about 2,000 points instead of 10,000).
+	interval := time.Minute
+	var bucket time.Duration
+	if hours > 24 {
+		interval, bucket = 5*time.Minute, 5*time.Minute
+	}
+	list, err := s.store.ListTelemetry(r.Context(), orgOf(r), chi.URLParam(r, "id"), time.Now().Add(-time.Duration(hours)*time.Hour), bucket)
+	if err != nil {
+		items(w, list, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": list, "interval_sec": int(interval.Seconds())})
 }
 
 func (s *Server) deviceCompliance(w http.ResponseWriter, r *http.Request) {

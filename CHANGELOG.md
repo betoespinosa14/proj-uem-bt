@@ -7,6 +7,24 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.23 (2026-11-13): Telemetry tab
+
+Server and console only; agents stay on 2026.11.21.
+
+### Changed
+- **Device page Telemetry tab.** The chart now spans the whole selected window (1h is a full hour, 7d is seven
+  days with one label per day). Lines break where the device sent no samples (off, asleep or offline) and those
+  stretches are shaded, instead of a line drawn straight across the night. Straight lines between samples instead
+  of smoothed curves. The Y-axis is fixed at 0-100% with ticks every 25%. Above the chart: average and peak CPU and
+  memory for the range, the latest system disk with its change, and the latest battery with its lowest point
+  (laptops only). The legend is clickable to hide or show each series.
+- **7-day telemetry is averaged into 5-minute points** (about 2,000 instead of 10,000 per device), so the 7d chart
+  loads faster.
+
+### Fixed
+- **Telemetry over 100%.** Samples stored as 101% (battery readings from agents before 2026.11.9) read back as 100%,
+  and new samples are capped on the way in. Devices without a battery keep reporting none.
+
 ## 2026.11.22 (2026-11-13): Compliance tab
 
 Server and console only. Agents stay on 2026.11.21 (no agent code changed), so no device shows "Update available".

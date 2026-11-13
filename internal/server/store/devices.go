@@ -362,7 +362,7 @@ func (s *Store) RecordTelemetry(ctx context.Context, id string, t protocol.Telem
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO device_telemetry (device_id, ts, cpu_pct, mem_pct, disk_pct, battery_pct)
-			VALUES ($1, $2, $3, $4, $5, $6)`, id, t.TS, t.CPUPct, t.MemPct, t.DiskPct, t.BatteryPct); err != nil {
+			VALUES ($1, $2, `+capPct("$3")+`, `+capPct("$4")+`, `+capPct("$5")+`, `+capPct("$6::float8")+`)`, id, t.TS, t.CPUPct, t.MemPct, t.DiskPct, t.BatteryPct); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `
@@ -484,12 +484,31 @@ func (s *Store) ListOrgSoftware(ctx context.Context, orgID string) (map[string][
 	return out, rows.Err()
 }
 
-func (s *Store) ListTelemetry(ctx context.Context, orgID, id string, since time.Time) ([]TelemetryPoint, error) {
+// capPct caps a percentage at 100 but keeps NULL (no battery) as NULL, which
+// LEAST alone doesn't: LEAST(NULL, 100) is 100 in Postgres.
+func capPct(expr string) string {
+	return "CASE WHEN " + expr + " > 100 THEN 100 ELSE " + expr + " END"
+}
+
+// ListTelemetry returns a device's samples since the given time, capped at 100%
+// (agents before 2026.11.9 could report a battery at 101%). With bucket > 0 the
+// samples are averaged into buckets of that length, timestamped at the bucket start.
+func (s *Store) ListTelemetry(ctx context.Context, orgID, id string, since time.Time, bucket time.Duration) ([]TelemetryPoint, error) {
 	// The org check is on the device row; telemetry has no org column of its own.
-	rows, err := s.Pool.Query(ctx, `
-		SELECT t.ts, t.cpu_pct, t.mem_pct, t.disk_pct, t.battery_pct
+	query := `
+		SELECT t.ts, ` + capPct("t.cpu_pct") + `, ` + capPct("t.mem_pct") + `, ` + capPct("t.disk_pct") + `, ` + capPct("t.battery_pct") + `
 		FROM device_telemetry t JOIN devices d ON d.id = t.device_id
-		WHERE d.org_id = $1 AND t.device_id = $2 AND t.ts >= $3 ORDER BY t.ts`, orgID, id, since)
+		WHERE d.org_id = $1 AND t.device_id = $2 AND t.ts >= $3 ORDER BY t.ts`
+	args := []any{orgID, id, since}
+	if bucket > 0 {
+		query = `
+		SELECT date_bin($4::interval, t.ts, $3) AS b,
+		       ` + capPct("avg(t.cpu_pct)") + `, ` + capPct("avg(t.mem_pct)") + `, ` + capPct("avg(t.disk_pct)") + `, ` + capPct("avg(t.battery_pct)") + `
+		FROM device_telemetry t JOIN devices d ON d.id = t.device_id
+		WHERE d.org_id = $1 AND t.device_id = $2 AND t.ts >= $3 GROUP BY b ORDER BY b`
+		args = append(args, fmt.Sprintf("%d seconds", int(bucket.Seconds())))
+	}
+	rows, err := s.Pool.Query(ctx, query, args...)
 	return collect(rows, err, func(r pgx.Rows) (TelemetryPoint, error) {
 		var p TelemetryPoint
 		return p, r.Scan(&p.TS, &p.CPUPct, &p.MemPct, &p.DiskPct, &p.BatteryPct)

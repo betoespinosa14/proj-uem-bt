@@ -27,6 +27,11 @@ func netDetails(ctx context.Context, _ string, ifaces []protocol.Interface) netE
 			x.Ifaces[dev] = e
 		}
 	}
+	// The Wi-Fi link (signal, band, PHY mode, rate). The name is often hidden by
+	// macOS; the console then says so instead of "Not connected".
+	if out, err := run(ctx, 30*time.Second, "system_profiler", "SPAirPortDataType", "-json"); err == nil {
+		x.Wifi = parseAirport([]byte(out))
+	}
 	if out, err := run(ctx, 5*time.Second, "scutil", "--dns"); err == nil {
 		x.DNS = parseScutilDNS(out)
 	}

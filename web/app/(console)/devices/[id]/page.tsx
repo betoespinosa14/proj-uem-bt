@@ -1019,9 +1019,20 @@ function Network({ d }: { d: DeviceDetail }) {
   const rows = showInactive ? sorted : sorted.filter(({ i }) => inUse(i));
 
   const wifi = n.wifi ?? (n.wifi_ssid ? { ssid: n.wifi_ssid } : undefined);
-  const wifiText = wifi?.ssid
-    ? [wifi.ssid, wifi.signal_pct != null ? `${wifi.signal_pct}% signal` : null, wifi.band, wifi.radio].filter(Boolean).join(" · ")
-    : null;
+  // Recent macOS hides the network name from the agent; the link still shows
+  // through the Wi-Fi details or a primary adapter that is Wi-Fi.
+  const onWifi = !!primary && (primary.kind ?? guessNetKind(primary.name, primary.description)) === "wifi";
+  const hiddenName = d.os_family === "macos" ? "Connected, name hidden by macOS" : "Connected, name not reported";
+  const wifiDetail = [wifi?.signal_pct != null ? `${wifi.signal_pct}% signal` : null, wifi?.band, wifi?.radio].filter(Boolean).join(" · ");
+  const wifiText =
+    wifi || onWifi ? (
+      <span key="wifi">
+        <span className="block">{wifi?.ssid || hiddenName}</span>
+        {wifiDetail && <span className="block text-xs text-muted-foreground">{wifiDetail}</span>}
+      </span>
+    ) : null;
+  // IPv4 servers first: a router's link-local IPv6 address (fe80::…%en0) is real but less useful.
+  const dns = [...(n.dns ?? [])].sort((a, b) => Number(a.includes(":")) - Number(b.includes(":")));
   const domainLabel = n.domain_joined === false ? "Workgroup" : "Domain";
   const remote = d.remote_ip;
   const dhcp = primary?.dhcp;
@@ -1053,9 +1064,9 @@ function Network({ d }: { d: DeviceDetail }) {
                 ["Default gateway", n.gateway && <CopyValue key="gw" value={n.gateway} label="gateway" mono />],
                 [
                   "DNS servers",
-                  n.dns?.length ? (
+                  dns.length ? (
                     <span key="dns">
-                      {n.dns.map((s) => (
+                      {dns.map((s) => (
                         <span key={s} className="block">
                           <CopyValue value={s} label="DNS server" mono />
                         </span>

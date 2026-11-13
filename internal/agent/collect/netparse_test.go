@@ -219,3 +219,26 @@ func TestNetExtrasApply(t *testing.T) {
 		t.Fatalf("untouched = %+v", m)
 	}
 }
+
+func TestParseAirport(t *testing.T) {
+	// macOS 15+: the name is redacted, the link details aren't.
+	out := `{"SPAirPortDataType":[{"spairport_airport_interfaces":[
+	  {"_name":"en0","spairport_status_information":"spairport_status_connected",
+	   "spairport_current_network_information":{"_name":"<redacted>","spairport_network_channel":"44 (5GHz, 80MHz)",
+	     "spairport_network_phymode":"802.11ax","spairport_network_rate":573,"spairport_signal_noise":"-64 dBm / -94 dBm"}},
+	  {"_name":"awdl0"}]}]}`
+	w := parseAirport([]byte(out))
+	if w == nil || w.SSID != "" || w.Band != "5 GHz" || w.Radio != "802.11ax" || w.RxMbps != 573 || w.SignalPct == nil || *w.SignalPct != 72 {
+		t.Fatalf("airport = %+v", w)
+	}
+	// Older macOS still gives the name; 2.4 GHz channels read "(2GHz".
+	old := `{"SPAirPortDataType":[{"spairport_airport_interfaces":[{"_name":"en0","spairport_status_information":"spairport_status_connected",
+	  "spairport_current_network_information":{"_name":"V-Office","spairport_network_channel":"6 (2GHz, 20MHz)","spairport_signal_noise":"-40 dBm / -90 dBm"}}]}]}`
+	if w := parseAirport([]byte(old)); w == nil || w.SSID != "V-Office" || w.Band != "2.4 GHz" || *w.SignalPct != 100 {
+		t.Fatalf("old = %+v", w)
+	}
+	// Wi-Fi switched off (this Mac Mini): nothing.
+	if parseAirport([]byte(`{"SPAirPortDataType":[{"spairport_airport_interfaces":[{"_name":"en1","spairport_status_information":"spairport_status_off"}]}]}`)) != nil {
+		t.Fatal("off should be nil")
+	}
+}

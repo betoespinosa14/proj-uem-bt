@@ -464,3 +464,69 @@ func parseIPAddrDynamic(out string) map[string]bool {
 	}
 	return m
 }
+
+// ---- macOS Wi-Fi ----
+
+var (
+	dbmValue    = regexp.MustCompile(`(-?\d+)\s*dBm`)
+	channelBand = regexp.MustCompile(`(?i)\((2|2\.4|5|6)\s*GHz`)
+)
+
+// signalPct turns a signal strength in dBm into the 0–100% scale Windows
+// shows: -50 dBm or better is 100%, -100 dBm or worse is 0%.
+func signalPct(dbm int) int {
+	p := 2 * (dbm + 100)
+	return max(0, min(100, p))
+}
+
+// parseAirport reads "system_profiler SPAirPortDataType -json": the connected
+// Wi-Fi link's signal, band, PHY mode and rate. Recent macOS hides the network
+// name from apps without Location access ("<redacted>"), so SSID is often
+// empty; the link itself is still reported. nil when no interface is connected.
+func parseAirport(out []byte) *protocol.WifiLink {
+	var v struct {
+		Data []struct {
+			Interfaces []struct {
+				Status  string `json:"spairport_status_information"`
+				Current *struct {
+					Name    string  `json:"_name"`
+					Channel string  `json:"spairport_network_channel"`
+					PHY     string  `json:"spairport_network_phymode"`
+					Rate    float64 `json:"spairport_network_rate"`
+					Signal  string  `json:"spairport_signal_noise"`
+				} `json:"spairport_current_network_information"`
+			} `json:"spairport_airport_interfaces"`
+		} `json:"SPAirPortDataType"`
+	}
+	if json.Unmarshal(out, &v) != nil {
+		return nil
+	}
+	for _, d := range v.Data {
+		for _, i := range d.Interfaces {
+			c := i.Current
+			if c == nil || (i.Status != "" && i.Status != "spairport_status_connected") {
+				continue
+			}
+			w := &protocol.WifiLink{Radio: strings.TrimSpace(c.PHY), RxMbps: c.Rate}
+			if name := strings.TrimSpace(c.Name); name != "" && !strings.Contains(name, "redacted") {
+				w.SSID = name
+			}
+			if m := dbmValue.FindStringSubmatch(c.Signal); m != nil {
+				if dbm, err := strconv.Atoi(m[1]); err == nil {
+					p := signalPct(dbm)
+					w.SignalPct = &p
+				}
+			}
+			if m := channelBand.FindStringSubmatch(c.Channel); m != nil {
+				switch m[1] {
+				case "2", "2.4":
+					w.Band = "2.4 GHz"
+				default:
+					w.Band = m[1] + " GHz"
+				}
+			}
+			return w
+		}
+	}
+	return nil
+}

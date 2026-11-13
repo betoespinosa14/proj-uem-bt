@@ -7,6 +7,18 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.19 (2026-11-13): Mac Wi-Fi details
+
+### Added
+- **Wi-Fi details on Macs (agent).** Recent macOS hides the Wi-Fi network's name from programs without Location
+  access, BEACON's agent included. The agent now reads the connection itself from system_profiler: signal strength,
+  band (2.4, 5 or 6 GHz), Wi-Fi standard and link rate, and still the name on older macOS.
+
+### Fixed
+- **"Not connected" on Macs that are on Wi-Fi.** When the device's main adapter is Wi-Fi but no network name came
+  through, the Network tab now says "Connected, name hidden by macOS" (with the signal, band and standard on the line
+  below once the agent is updated). IPv4 DNS servers are listed before IPv6 ones.
+
 ## 2026.11.18 (2026-11-13): Network details and a clearer Network tab
 
 ### Added

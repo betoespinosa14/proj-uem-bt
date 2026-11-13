@@ -987,6 +987,42 @@ function Address({ addr, muted }: { addr: string; muted?: boolean }) {
   );
 }
 
+// IPv4 first, then global IPv6, then unique-local (fd…), then anything else.
+function addrRank(a: string) {
+  if (!a.includes(":")) return 0;
+  const first = a.slice(0, 4).toLowerCase();
+  if (/^[23]/.test(first)) return 1;
+  if (/^f[cd]/.test(first)) return 2;
+  return 3;
+}
+
+const ADDRS_SHOWN = 2;
+
+/** An adapter's addresses: the first two, the rest behind "+N more" so dual-stack rows stay short. */
+function AddressList({ addrs, muted }: { addrs: string[]; muted?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const sorted = [...addrs].sort((a, b) => addrRank(a) - addrRank(b));
+  const extra = sorted.length - ADDRS_SHOWN;
+  const shown = open || extra <= 0 ? sorted : sorted.slice(0, ADDRS_SHOWN);
+  return (
+    <>
+      {shown.map((a) => (
+        <Address key={a} addr={a} muted={muted} />
+      ))}
+      {extra > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="mt-0.5 rounded text-[11px] font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {open ? "Show less" : `+${extra} more`}
+        </button>
+      )}
+    </>
+  );
+}
+
 const NET_INACTIVE_KEY = "device-net-show-inactive";
 
 function Network({ d }: { d: DeviceDetail }) {
@@ -1129,7 +1165,7 @@ function Network({ d }: { d: DeviceDetail }) {
             {rows.map(({ i }) => {
               const active = inUse(i);
               const kind = i.kind ?? guessNetKind(i.name, i.description);
-              const real = usable(i).sort((a, b) => Number(a.includes(":")) - Number(b.includes(":")));
+              const real = usable(i);
               const local = i.addrs.filter(linkLocal);
               const speed = formatSpeed(kind === "wifi" && i === primary && wifi?.rx_mbps ? wifi.rx_mbps : i.speed_mbps);
               return (
@@ -1174,9 +1210,7 @@ function Network({ d }: { d: DeviceDetail }) {
                   <TD className="text-xs">
                     {real.length > 0 ? (
                       <>
-                        {real.map((a) => (
-                          <Address key={a} addr={a} muted={!active} />
-                        ))}
+                        <AddressList addrs={real} muted={!active} />
                         {!active && <span className="mt-0.5 block text-[11px] italic">Not in use (last known address)</span>}
                       </>
                     ) : local.length > 0 ? (

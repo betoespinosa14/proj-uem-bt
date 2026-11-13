@@ -7,6 +7,13 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## Unreleased
+
+### Changed
+- **Network tab addresses.** Each adapter lists at most two addresses (IPv4 first, then global IPv6, then
+  unique-local), with "+N more" to show the rest, so dual-stack adapters with several IPv6 privacy addresses keep a
+  short row.
+
 ## 2026.11.19 (2026-11-13): Mac Wi-Fi details
 
 ### Added

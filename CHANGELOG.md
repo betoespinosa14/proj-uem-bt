@@ -7,6 +7,17 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.31 (2026-11-14): Usage chart strip aligned to the bars
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Reported / No data strip** under "Active hours per day" now starts and ends exactly at the edges of the first and
+  last bar of each stretch, instead of half a day early.
+- **Days that reported but had no active use** (apps open, nobody typing or using the mouse, e.g. weekends on
+  always-on machines) show a small gray stub on the baseline, the tooltip says "No active use", and the legend
+  explains it. They stay green in the strip because the devices did report.
+
 ## 2026.11.30 (2026-11-14): Usage chart as daily bars
 
 Server and console; agents stay on 2026.11.29.

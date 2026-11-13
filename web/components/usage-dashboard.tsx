@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { UsageAppStat, UsageSummary } from "@/lib/api";
@@ -291,6 +291,8 @@ export function Trend({
     return {
       t: d.getTime(),
       active: row ? row.active_seconds / 3600 : null,
+      // Reported but nobody used anything: a stub on the baseline, so it doesn't look like a no-data day.
+      stub: row && row.active_seconds === 0 ? 1 : 0,
       apps: row?.apps ?? 0,
       devices: row?.devices ?? 0,
       today: i === days - 1,
@@ -298,8 +300,26 @@ export function Trend({
   });
   const byT = new Map(points.map((p) => [p.t, p]));
   const hasGaps = points.some((p) => p.active === null);
+  const hasIdleDays = points.some((p) => p.stub);
+  // The strip's segments start and end at bar edges, not band edges; that needs the plot width in px.
+  const gapPct = days > 31 ? 0.12 : 0.28;
+  const MAX_BAR = 44;
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [stripWidth, setStripWidth] = useState(0);
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setStripWidth(e!.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasGaps]); // the strip mounts only when there are gaps
+  const band = stripWidth / days;
+  const barW = Math.min(band * (1 - 2 * gapPct), MAX_BAR);
+  const barLeft = (i: number) => i * band + (band - barW) / 2;
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const axis = durationAxis(Math.max(0, ...points.map((p) => p.active ?? 0)));
+  // The stub is a sliver (1.5% of the axis), stacked under the (zero) active bar.
+  const data = points.map((p) => ({ ...p, stubV: p.stub ? axis.top * 0.015 : 0 }));
   // Runs of reported / not reported days for the strip under the chart.
   const runs: { from: number; to: number; on: boolean }[] = [];
   points.forEach((p, i) => {
@@ -312,7 +332,7 @@ export function Trend({
     <div>
       <div className={compact ? "h-40" : "h-56"}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={points} margin={{ left: 0, right: TREND_RIGHT, top: 8 }} barCategoryGap={days > 31 ? "12%" : "28%"}>
+          <BarChart data={data} margin={{ left: 0, right: TREND_RIGHT, top: 8 }} barCategoryGap={`${gapPct * 100}%`}>
             <defs>
               <pattern id="usage-today" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                 <rect width="6" height="6" fill="hsl(var(--primary))" fillOpacity={0.25} />
@@ -335,6 +355,13 @@ export function Trend({
                     </p>
                     {p.active === null ? (
                       <p className="text-muted-foreground">No data reported</p>
+                    ) : p.stub ? (
+                      <>
+                        <p className="font-medium">No active use</p>
+                        <p className="text-muted-foreground">
+                          {device ? "Apps were open, but no one used them." : `${p.devices} ${p.devices === 1 ? "device" : "devices"} reported, but no one used them.`}
+                        </p>
+                      </>
                     ) : (
                       <>
                         <p>
@@ -349,7 +376,8 @@ export function Trend({
                 );
               }}
             />
-            <Bar dataKey="active" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={44}>
+            <Bar dataKey="stubV" stackId="day" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} isAnimationActive={false} maxBarSize={MAX_BAR} minPointSize={0} legendType="none" />
+            <Bar dataKey="active" stackId="day" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={MAX_BAR}>
               {points.map((p) => (
                 <Cell key={p.t} fill={p.today ? "url(#usage-today)" : "hsl(var(--primary))"} fillOpacity={p.today ? 1 : 0.85} />
               ))}
@@ -357,29 +385,45 @@ export function Trend({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {hasGaps && (
+      {(hasGaps || hasIdleDays) && (
         <>
-          {/* Same idea as Telemetry's strip: when the device (or fleet) reported, under the matching bars. */}
-          <div className="relative mt-1 h-2" style={{ marginLeft: TREND_LEFT, marginRight: TREND_RIGHT }} role="img" aria-label="Days with usage data">
-            <div className="absolute inset-0 overflow-hidden rounded-full">
+          {/* Same idea as Telemetry's strip: when the device (or fleet) reported. Each run starts at its
+              first bar's left edge and ends at its last bar's right edge, so it sits right under the bars. */}
+          {hasGaps && (
+          <div ref={stripRef} className="relative mt-1 h-2" style={{ marginLeft: TREND_LEFT, marginRight: TREND_RIGHT }} role="img" aria-label="Days with usage data">
+            <div className="absolute inset-0">
               {runs.map((r) => (
                 <div
                   key={r.from}
-                  className={cn("absolute inset-y-0", r.on ? "bg-success/60" : "bg-muted-foreground/20")}
-                  style={{ left: `${(r.from / days) * 100}%`, width: `${((r.to - r.from + 1) / days) * 100}%` }}
+                  className={cn("absolute inset-y-0 rounded-full", r.on ? "bg-success/60" : "bg-muted-foreground/20")}
+                  style={
+                    stripWidth
+                      ? { left: barLeft(r.from), width: barLeft(r.to) + barW - barLeft(r.from) }
+                      : { left: `${(r.from / days) * 100}%`, width: `${((r.to - r.from + 1) / days) * 100}%` }
+                  }
                   title={`${r.on ? "Reported" : "No data"}: ${fmt(points[r.from]!.t)}${r.to > r.from ? ` – ${fmt(points[r.to]!.t)}` : ""}`}
                 />
               ))}
             </div>
           </div>
+          )}
           <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" style={{ marginLeft: TREND_LEFT }}>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-3 rounded-full bg-success/60" /> Reported
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-3 rounded-full bg-muted-foreground/20" />
-              No data ({device ? "agent not installed yet, device off, or tracking off" : "agent not installed yet, devices off, or tracking off"})
-            </span>
+            {hasGaps && (
+              <>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-3 rounded-full bg-success/60" /> Reported
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-3 rounded-full bg-muted-foreground/20" />
+                  No data ({device ? "agent not installed yet, device off, or tracking off" : "agent not installed yet, devices off, or tracking off"})
+                </span>
+              </>
+            )}
+            {hasIdleDays && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0.5 w-3 bg-muted-foreground/40" /> Reported, no one used it
+              </span>
+            )}
           </p>
         </>
       )}

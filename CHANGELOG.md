@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.24 (2026-11-14): Telemetry availability strip
+
+Console only; agents stay on 2026.11.21.
+
+### Changed
+- **Telemetry tab: no more gray blocks.** Instead of shading the chart where a device sent no samples, the lines
+  just stop, and a slim strip under the time axis shows when the device was online (green) and off, asleep or
+  offline (gray), lined up with the chart. Hover a segment for its times and length.
+
 ## 2026.11.23 (2026-11-13): Telemetry tab
 
 Server and console only; agents stay on 2026.11.21.

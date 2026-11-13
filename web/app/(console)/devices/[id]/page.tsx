@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CartesianGrid, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   ArrowLeft,
   ChevronDown,
@@ -1722,6 +1722,44 @@ const SERIES: { key: Series; color: string; dash?: string; width: number }[] = [
   { key: "Battery", color: "hsl(var(--muted-foreground))", dash: "4 3", width: 1.5 },
 ];
 const HOUR = 3_600_000;
+// The plot area's horizontal insets (Y-axis width on the left, margin on the right),
+// shared by the chart and the availability strip under it so their times line up.
+const PLOT_LEFT = 44;
+const PLOT_RIGHT = 8;
+
+// A slim timeline under the chart: when the device reported (online) and when it didn't.
+function AvailabilityStrip({ from, to, gaps, fmt }: { from: number; to: number; gaps: { x1: number; x2: number }[]; fmt: (t: number) => string }) {
+  const span = to - from;
+  const segs: { x1: number; x2: number; on: boolean }[] = [];
+  let cur = from;
+  for (const g of gaps) {
+    const a = Math.max(from, g.x1);
+    const b = Math.min(to, g.x2);
+    if (a > cur) segs.push({ x1: cur, x2: a, on: true });
+    if (b > a) segs.push({ x1: a, x2: b, on: false });
+    cur = Math.max(cur, b);
+  }
+  if (cur < to) segs.push({ x1: cur, x2: to, on: true });
+  const at = (t: number) => `${((t - from) / span) * 100}%`;
+  return (
+    <div className="relative h-2" style={{ marginLeft: PLOT_LEFT, marginRight: PLOT_RIGHT }} role="img" aria-label="When the device was reporting">
+      <div className="absolute inset-0 overflow-hidden rounded-full">
+        {segs.map((s) => (
+          <div
+            key={s.x1}
+            className={cn("absolute inset-y-0", s.on ? "bg-success/60" : "bg-muted-foreground/20")}
+            style={{ left: at(s.x1), width: `calc(${at(s.x2)} - ${at(s.x1)})` }}
+            title={
+              s.on
+                ? `Online ${fmt(s.x1)} – ${fmt(s.x2)}`
+                : `Off ${formatDuration((s.x2 - s.x1) / 1000)} (no samples), ${fmt(s.x1)} – ${fmt(s.x2)}`
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Ticks on round wall-clock times: every 10 min (1h), every 3 h (24h), each local midnight (7d).
 function telemetryTicks(from: number, to: number, range: Range): number[] {
@@ -1860,11 +1898,8 @@ function Telemetry({ id }: { id: string }) {
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={rows} margin={{ left: -16, right: 8 }}>
+                  <LineChart data={rows} margin={{ left: 0, right: PLOT_RIGHT }}>
                     <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    {gaps.map((g) => (
-                      <ReferenceArea key={g.x1} x1={g.x1} x2={g.x2} fill="hsl(var(--muted-foreground))" fillOpacity={0.08} strokeOpacity={0} ifOverflow="hidden" />
-                    ))}
                     <XAxis
                       dataKey="t"
                       type="number"
@@ -1879,7 +1914,7 @@ function Telemetry({ id }: { id: string }) {
                       axisLine={false}
                       minTickGap={24}
                     />
-                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
+                    <YAxis width={PLOT_LEFT} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
                     <Tooltip
                       labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
                       formatter={(v) => (typeof v === "number" ? `${v.toFixed(1)}%` : String(v))}
@@ -1902,13 +1937,16 @@ function Telemetry({ id }: { id: string }) {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-              {gaps.length > 0 && (
-                <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="h-2.5 w-4 rounded-sm bg-muted-foreground/15" />
-                  Shaded: no samples (device off, asleep or offline).
-                  {hours === "168" && " Points are 5-minute averages."}
-                </p>
-              )}
+              <AvailabilityStrip from={from} to={to} gaps={gaps} fmt={(t) => new Date(t).toLocaleString(undefined, hours === "168" ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit" })} />
+              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" style={{ marginLeft: PLOT_LEFT }}>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-3 rounded-full bg-success/60" /> Online
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-3 rounded-full bg-muted-foreground/20" /> Off, asleep or offline (no samples)
+                </span>
+                {hours === "168" && <span>Points are 5-minute averages</span>}
+              </p>
             </>
           )}
         </CardContent>

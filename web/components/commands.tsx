@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Copy, RotateCw, TriangleAlert } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, qk, SHELLS, type Command, type CommandRequest, type CommandType, type Shell } from "@/lib/api";
-import { formatDateTime, titleCase } from "@/lib/utils";
+import { api, qk, SHELLS, TERMINAL_COMMAND_STATUSES, type Command, type CommandRequest, type CommandType, type Shell } from "@/lib/api";
+import { copyToClipboard, formatDateTime, titleCase } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
@@ -18,6 +18,14 @@ import { toast } from "./toast";
 export function useAgentLatest() {
   return useQuery({ queryKey: qk.agentLatest, queryFn: api.agents.latest, staleTime: 5 * 60_000 });
 }
+
+/** Shells the agent can run on each OS (internal/agent/exec): no bash/sh/zsh on Windows, no cmd elsewhere. */
+const OS_SHELLS: Record<string, Shell[]> = {
+  windows: ["powershell", "cmd"],
+  macos: ["zsh", "bash", "sh"],
+  linux: ["bash", "sh", "zsh"],
+};
+const OS_NAME: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
 /** First line of the script the server sends to agents that predate self-update. */
 const ONE_TIME_UPDATE = "# BEACON: one-time update";
@@ -58,6 +66,7 @@ export function CommandDialog({
   type,
   deviceIds,
   targetLabel,
+  os,
   onIssued,
 }: {
   open: boolean;
@@ -65,6 +74,8 @@ export function CommandDialog({
   type: CommandType;
   deviceIds: string[];
   targetLabel: string;
+  /** The targets' OS family when they all share one: library scripts and the ad-hoc shell follow it. */
+  os?: string;
   onIssued?: (cmds: Command[]) => void;
 }) {
   const qc = useQueryClient();
@@ -72,7 +83,9 @@ export function CommandDialog({
   const [mode, setMode] = useState<"library" | "adhoc">("library");
   const [typedCount, setTypedCount] = useState("");
   const [scriptId, setScriptId] = useState("");
-  const [shell, setShell] = useState<Shell>("bash");
+  const osShells = os ? OS_SHELLS[os] : undefined;
+  const [shell, setShell] = useState<Shell>(osShells?.[0] ?? "bash");
+  const [showAllScripts, setShowAllScripts] = useState(false);
   const [body, setBody] = useState("");
   const [timeout, setTimeoutSecs] = useState(300);
   const [delay, setDelay] = useState(0);
@@ -123,6 +136,13 @@ export function CommandDialog({
     mutation.mutate(req);
   };
 
+  const allScripts = scripts.data?.items ?? [];
+  const fits = (sh: Shell) => !osShells || osShells.includes(sh);
+  const libraryScripts = showAllScripts ? allScripts : allScripts.filter((s) => fits(s.shell));
+  const hiddenScripts = allScripts.length - allScripts.filter((s) => fits(s.shell)).length;
+  // Nothing to run yet: no library script chosen, or an empty ad-hoc script.
+  const incomplete = type === "run_script" && (mode === "library" ? !scriptId : !body.trim());
+
   const copy = type === "run_script" ? { title: "Run script", confirm: "Run", danger: false } : ACTION_COPY[type];
   const count = deviceIds.length;
   const guarded = count > BIG_BATCH && DISRUPTIVE.includes(type);
@@ -143,7 +163,7 @@ export function CommandDialog({
           <Button
             variant={copy.danger ? "destructive" : "default"}
             loading={mutation.isPending}
-            disabled={guarded && typedCount.trim() !== String(count)}
+            disabled={incomplete || (guarded && typedCount.trim() !== String(count))}
             onClick={submit}
           >
             {confirmLabel}
@@ -167,9 +187,26 @@ export function CommandDialog({
                 id="script"
                 value={scriptId}
                 onValueChange={setScriptId}
-                placeholder={scripts.isLoading ? "Loading…" : scripts.data?.items.length ? "Choose a script" : "No scripts in library"}
-                options={(scripts.data?.items ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.shell})` }))}
+                placeholder={scripts.isLoading ? "Loading…" : libraryScripts.length ? "Choose a script" : os ? `No ${OS_NAME[os] ?? os} scripts in library` : "No scripts in library"}
+                options={libraryScripts.map((s) => ({ value: s.id, label: `${s.name} (${s.shell})${fits(s.shell) ? "" : " · other platform"}` }))}
               />
+              {os && hiddenScripts > 0 && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {showAllScripts
+                    ? `Showing scripts for every platform. Those marked "other platform" won't run on ${OS_NAME[os] ?? os}.`
+                    : `${hiddenScripts} ${hiddenScripts === 1 ? "script" : "scripts"} for other platforms hidden.`}{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-primary underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setShowAllScripts((v) => !v);
+                      setScriptId("");
+                    }}
+                  >
+                    {showAllScripts ? `Show ${OS_NAME[os] ?? os} only` : "Show all"}
+                  </button>
+                </p>
+              )}
             </Field>
           ) : (
             <>
@@ -241,11 +278,33 @@ export function CommandDialog({
   );
 }
 
-/** Expandable command row content: payload, timing and output. */
-export function CommandOutput({ cmd }: { cmd: Command }) {
+/** Commands that can be sent again as they were. Agent updates are left to the Update agent action (it picks the version). */
+const RERUNNABLE: CommandType[] = ["run_script", "lock", "display_message", "refresh_inventory"];
+
+/** Expandable command row content: payload, timing and output, with Run again for finished commands. */
+export function CommandOutput({ cmd, onRerun }: { cmd: Command; onRerun?: () => void }) {
   const script = typeof cmd.payload.script === "string" ? cmd.payload.script : null;
+  const qc = useQueryClient();
+  const rerun = useMutation({
+    mutationFn: () => api.devices.sendCommand(cmd.device_id, { type: cmd.type, payload: cmd.payload }),
+    onSuccess: () => {
+      toast.success("Command queued", "It appears at the top of the list.");
+      void qc.invalidateQueries({ queryKey: qk.deviceCommands(cmd.device_id) });
+      onRerun?.();
+    },
+    onError: (e) => toast.error("Couldn't run it again", e),
+  });
+  const oneTimeUpdate = script?.startsWith(ONE_TIME_UPDATE) ?? false;
+  const canRerun = !!onRerun && !oneTimeUpdate && RERUNNABLE.includes(cmd.type) && TERMINAL_COMMAND_STATUSES.includes(cmd.status);
   return (
     <div className="space-y-3 text-sm">
+      {canRerun && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" loading={rerun.isPending} onClick={() => rerun.mutate()}>
+            <RotateCw /> Run again
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
         <span>
           Status: <CommandStatusBadge status={cmd.status} />
@@ -269,9 +328,23 @@ export function CommandOutput({ cmd }: { cmd: Command }) {
 }
 
 function OutputBlock({ label, text, tone }: { label: string; text: string; tone?: "error" }) {
+  const copyText = async () => {
+    if (await copyToClipboard(text)) toast.success(`Copied ${label.split(" ")[0]!.toLowerCase()}`);
+    else toast.error("Couldn't copy to clipboard");
+  };
   return (
     <div>
-      <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <button
+          type="button"
+          onClick={copyText}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Copy ${label}`}
+        >
+          <Copy className="h-3.5 w-3.5" /> Copy
+        </button>
+      </div>
       <pre
         className={
           "max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/50 p-3 font-mono text-xs " +

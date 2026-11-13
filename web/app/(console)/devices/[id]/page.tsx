@@ -264,7 +264,7 @@ export default function DevicePage() {
           <Telemetry id={id} />
         </TabsContent>
         <TabsContent value="commands">
-          <Commands id={id} onRun={can("commands.run") ? () => setAction("run_script") : undefined} />
+          <Commands id={id} />
         </TabsContent>
       </Tabs>
 
@@ -275,6 +275,7 @@ export default function DevicePage() {
           type={action}
           deviceIds={[id]}
           targetLabel={d.name}
+          os={d.os_family}
           onIssued={() => setTab("commands")}
         />
       )}
@@ -1967,45 +1968,122 @@ function Telemetry({ id }: { id: string }) {
   );
 }
 
-function Commands({ id, onRun }: { id: string; onRun?: () => void }) {
+type CommandFilter = "all" | "failed" | "scripts" | "actions" | "updates";
+const AGENT_TYPES: CommandType[] = ["update_agent", "uninstall_agent"];
+// The one-time update for old agents is sent as a script but is an agent update.
+const commandKind = (c: Command): Exclude<CommandFilter, "all" | "failed"> =>
+  AGENT_TYPES.includes(c.type) || commandLabel(c.type, c.payload).startsWith("Update agent") ? "updates" : c.type === "run_script" ? "scripts" : "actions";
+const FAILED_STATUSES = ["failed", "timeout"];
+
+function Commands({ id }: { id: string }) {
   const { data, isLoading, error, refetch } = useQuery({ queryKey: qk.deviceCommands(id), queryFn: () => api.devices.commands(id) });
+  const can = useCan();
   const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<CommandFilter>("all");
+  const all = useMemo(() => data?.items ?? [], [data]);
+  const counts = useMemo(
+    () => ({
+      all: all.length,
+      failed: all.filter((c) => FAILED_STATUSES.includes(c.status)).length,
+      scripts: all.filter((c) => commandKind(c) === "scripts").length,
+      actions: all.filter((c) => commandKind(c) === "actions").length,
+      updates: all.filter((c) => commandKind(c) === "updates").length,
+    }),
+    [all],
+  );
+  const items = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return all.filter((c) => {
+      if (filter === "failed" ? !FAILED_STATUSES.includes(c.status) : filter !== "all" && commandKind(c) !== filter) return false;
+      if (!needle) return true;
+      return `${commandLabel(c.type, c.payload)} ${c.issued_by_email ?? c.source} ${c.status}`.toLowerCase().includes(needle);
+    });
+  }, [all, q, filter]);
+  const filtered = filter !== "all" || q.trim() !== "";
+  const pills: { value: CommandFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "failed", label: "Failed" },
+    { value: "scripts", label: "Scripts" },
+    { value: "actions", label: "Actions" },
+    { value: "updates", label: "Agent updates" },
+  ];
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   return (
     <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <p className="text-sm font-medium">Command history</p>
-        {onRun && (
-          <Button size="sm" onClick={onRun}>
-            <Terminal /> Run script
-          </Button>
+      <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
+        <div className="relative w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search commands" className="pl-8" aria-label="Search commands" />
+        </div>
+        {/* On narrow screens the pills scroll sideways rather than squashing into two-line labels. */}
+        <div className="max-w-full overflow-x-auto [&_button]:whitespace-nowrap">
+          <Segmented
+            value={filter}
+            onChange={setFilter}
+            options={pills.map((p) => ({ value: p.value, label: `${p.label} (${counts[p.value]})` }))}
+          />
+        </div>
+        {filtered && (
+          <span className="text-xs text-muted-foreground">
+            {items.length} of {all.length} commands
+          </span>
         )}
       </div>
       {isLoading ? (
         <TableSkeleton rows={4} cols={4} />
-      ) : !data?.items.length ? (
+      ) : !all.length ? (
         <EmptyState icon={Terminal} title="No commands yet" description="Scripts and actions you send to this device appear here with their output." />
+      ) : !items.length ? (
+        <EmptyState
+          icon={Search}
+          title="No commands match"
+          description={filter === "failed" && !q ? "Nothing has failed on this device." : "Try another search or filter."}
+          action={
+            <Button
+              variant="outline"
+              onClick={() => {
+                setQ("");
+                setFilter("all");
+              }}
+            >
+              Clear filters
+            </Button>
+          }
+        />
       ) : (
         <ul className="divide-y divide-border">
-          {data.items.map((c: Command) => {
+          {items.map((c: Command) => {
             const expanded = open === c.id;
+            const who = c.issued_by_email ?? titleCase(c.source);
             return (
               <li key={c.id}>
+                {/* Fixed columns so operator, time and status line up whatever the badge width. */}
                 <button
                   type="button"
                   onClick={() => setOpen(expanded ? null : c.id)}
                   aria-expanded={expanded}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/50"
+                  className="grid w-full grid-cols-[1rem_minmax(0,1fr)_6.5rem] items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/50 sm:grid-cols-[1rem_minmax(0,1fr)_14rem_4.5rem_6.5rem]"
                 >
                   {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                  <span className="min-w-0 flex-1 truncate font-medium">{commandLabel(c.type, c.payload)}</span>
-                  <span className="hidden text-xs text-muted-foreground sm:inline">{c.issued_by_email ?? titleCase(c.source)}</span>
-                  <span className="w-28 text-right text-xs text-muted-foreground">{relativeTime(c.created_at)}</span>
-                  <CommandStatusBadge status={c.status} />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{commandLabel(c.type, c.payload)}</span>
+                    {/* Phones: the time sits under the name so the name keeps its width. */}
+                    <span className="block text-xs text-muted-foreground sm:hidden">{relativeTimeShort(c.created_at)}</span>
+                  </span>
+                  <span className="hidden truncate text-xs text-muted-foreground sm:block" title={who}>
+                    {who}
+                  </span>
+                  <span className="hidden text-right text-xs text-muted-foreground tabular sm:block" title={formatDateTime(c.created_at)}>
+                    {relativeTimeShort(c.created_at)}
+                  </span>
+                  <span>
+                    <CommandStatusBadge status={c.status} />
+                  </span>
                 </button>
                 {expanded && (
                   <div className="border-t border-border bg-muted/20 px-4 py-3 pl-11">
-                    <CommandOutput cmd={c} />
+                    <CommandOutput cmd={c} onRerun={can("commands.run") ? () => setFilter("all") : undefined} />
                   </div>
                 )}
               </li>

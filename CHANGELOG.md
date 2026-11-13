@@ -7,6 +7,22 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.27 (2026-11-14): Commands tab
+
+Console only; agents stay on 2026.11.21.
+
+### Changed
+- **Device page Commands tab.** Search plus filters with counts: All, Failed, Scripts, Actions and Agent updates
+  (the one-time update for old agents counts as an agent update). Rows have fixed columns so operator, time and
+  status line up, with short times ("7 h ago") and the exact time on hover; on phones the time sits under the name.
+  The duplicate Run script button in the card is gone (the one in the device header stays).
+- **Expanded command.** Copy buttons on the script, output and error, and **Run again** for finished scripts,
+  lock, messages and inventory refreshes (not for agent updates: use Update agent).
+- **Run script dialog follows the target's OS.** The library lists only scripts that run there (Windows:
+  PowerShell and cmd; Mac: zsh, bash, sh; Linux: bash, sh, zsh), with "N scripts for other platforms hidden ·
+  Show all". Ad-hoc scripts default to PowerShell on Windows, zsh on Macs, bash on Linux. From the Devices list
+  this applies when all selected devices share an OS. **Run** stays disabled until a script is chosen or typed.
+
 ## 2026.11.26 (2026-11-14): Telemetry hover, simplified
 
 Console only; agents stay on 2026.11.21.

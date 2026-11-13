@@ -414,6 +414,12 @@ function DevicesView() {
           }}
           type={action}
           deviceIds={targets ?? [...selected]}
+          // Scripts and the default shell follow the OS when every target shares one.
+          os={(() => {
+            const ids = new Set(targets ?? selected);
+            const oses = new Set(items.filter((d) => ids.has(d.id)).map((d) => d.os_family));
+            return oses.size === 1 ? [...oses][0] : undefined;
+          })()}
           targetLabel={
             targets
               ? `${targets.length} device${targets.length === 1 ? "" : "s"} on an older agent (latest ${latestAgent})`

@@ -145,6 +145,11 @@ func (s *Server) agentWS(w http.ResponseWriter, r *http.Request) {
 	s.core.Hub.RegisterAgent(dev.ID, conn)
 	log := slog.With("device", dev.ID)
 	log.Info("agent connected", "ip", clientIP(r))
+	if ip := clientIP(r); ip != "" {
+		if err := s.store.SetDeviceRemoteIP(ctx, dev.ID, ip); err != nil {
+			log.Error("save remote ip", "err", err)
+		}
+	}
 
 	defer func() {
 		conn.Close()

@@ -75,6 +75,8 @@ export type Device = {
   logged_in_user: string;
   /** Once set, the device's name is generated as "<group> | <employee>". */
   employee_name: string;
+  /** The address the agent last connected from, as the server saw it. */
+  remote_ip: string;
   status: DeviceStatus;
   last_seen_at: string | null;
   enrolled_at: string;
@@ -115,7 +117,22 @@ export type MemoryLayout = {
 };
 export type PhysicalDrive = { model: string; media?: string; bus?: string; size_bytes?: number; health?: string };
 
-export type NetInterface = { name: string; mac: string; addrs: string[]; up: boolean };
+export type NetKind = "ethernet" | "wifi" | "vpn" | "virtual" | "bluetooth";
+
+export type NetInterface = {
+  name: string;
+  mac: string;
+  addrs: string[];
+  up: boolean;
+  // From agents 2026.11.18 on.
+  kind?: NetKind;
+  description?: string;
+  speed_mbps?: number;
+  dhcp?: boolean;
+  gateway?: string;
+};
+
+export type WifiLink = { ssid?: string; signal_pct?: number; band?: string; radio?: string; rx_mbps?: number };
 
 export type Inventory = {
   collected_at: string;
@@ -160,6 +177,13 @@ export type Inventory = {
     primary_mac: string;
     wifi_ssid: string | null;
     interfaces: NetInterface[];
+    // From agents 2026.11.18 on (details is set when they were collected).
+    details?: boolean;
+    gateway?: string;
+    dns?: string[];
+    domain?: string;
+    domain_joined?: boolean;
+    wifi?: WifiLink;
   };
   security: {
     disk_encrypted: boolean | null;

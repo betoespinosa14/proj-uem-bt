@@ -392,11 +392,22 @@ export function UsageBar({
  * A value people often paste elsewhere (hostname, serial, IP, MAC), with a copy
  * button that shows on hover or keyboard focus.
  */
-export function CopyValue({ value, label, mono }: { value: string; label: string; mono?: boolean }) {
+export function CopyValue({
+  value,
+  label,
+  mono,
+  display,
+}: {
+  value: string;
+  label: string;
+  mono?: boolean;
+  /** Shown instead of the value (e.g. an address with its "/24"); the value is what's copied. */
+  display?: React.ReactNode;
+}) {
   const [copied, setCopied] = React.useState(false);
   return (
     <span className="group inline-flex max-w-full items-center gap-1.5">
-      <span className={cn("min-w-0 break-all", mono && "font-mono")}>{value}</span>
+      <span className={cn("min-w-0 break-all", mono && "font-mono")}>{display ?? value}</span>
       <button
         type="button"
         onClick={async () => {

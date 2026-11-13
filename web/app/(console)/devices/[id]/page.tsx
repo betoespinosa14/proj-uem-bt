@@ -25,7 +25,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory } from "@/lib/api";
+import { agentOutdated, api, qk, type Command, type CommandType, type DeviceDetail, type Disk, type Inventory, type NetInterface, type NetKind } from "@/lib/api";
 import { useCan } from "@/lib/session";
 import { cn, RESOURCE_LIMITS, copyToClipboard, formatBytes, formatDate, formatDateTime, formatDuration, formatPct, osLabel, relativeTime, relativeTimeShort, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/dropdown";
 import { Field, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Segmented, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -238,7 +239,7 @@ export default function DevicePage() {
           <Usage id={id} os={d.os_family} />
         </TabsContent>
         <TabsContent value="network">
-          <Network inv={d.inventory} />
+          <Network d={d} />
         </TabsContent>
         <TabsContent value="security">
           <Security inv={d.inventory} />
@@ -934,46 +935,250 @@ function Usage({ id, os }: { id: string; os: string }) {
   );
 }
 
-function Network({ inv }: { inv: Inventory | null }) {
+const NET_KIND_LABEL: Record<NetKind, string> = {
+  ethernet: "Ethernet",
+  wifi: "Wi-Fi",
+  vpn: "VPN",
+  virtual: "Virtual",
+  bluetooth: "Bluetooth",
+};
+
+// The agent's own guess (internal/agent/collect/netparse.go kindFromName), for
+// agents before 2026.11.18 that don't report an adapter's type.
+function guessNetKind(name: string, desc = ""): NetKind | undefined {
+  const s = `${name} ${desc}`;
+  const any = (re: RegExp) => re.test(name) || re.test(desc);
+  if (/bluetooth/i.test(s)) return "bluetooth";
+  if (any(/tailscale|wireguard|openvpn|\bvpn\b|surfshark|nordvpn|expressvpn|protonvpn|tap-windows|wintun|zerotier|fortinet|forticlient|anyconnect|globalprotect|pangp|\bipsec|^utun\d|^tun\d|^wg\d|^ppp\d/i)) return "vpn";
+  if (any(/wi-fi direct|^local area connection\*|vethernet|hyper-v|virtualbox|vmware|docker|^veth|^br-|^virbr|^bridge\d|^awdl|^llw|^anpi|^ap\d|^gif\d|^stf\d|isatap|teredo|kernel debug|loopback|wan miniport/i)) return "virtual";
+  if (any(/wi-?fi|wireless|wlan|802\.11|^wl/i)) return "wifi";
+  if (any(/ethernet|^eth\d|^en[pso]\d|gbe|gigabit/i)) return "ethernet";
+  return undefined;
+}
+
+/** 169.254.x.x and fe80:: addresses: assigned automatically, never used to reach the device. */
+const linkLocal = (a: string) => a.startsWith("169.254.") || a.toLowerCase().startsWith("fe80:");
+const bareIP = (a: string) => a.split("/")[0] ?? a;
+const isPrivateIP = (ip: string) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|::1$|f[cd][0-9a-f]{2}:)/i.test(ip);
+
+function formatSpeed(mbps?: number) {
+  if (!mbps || mbps <= 0) return null;
+  if (mbps >= 1000) return `${+(mbps / 1000).toFixed(1)} Gbps`;
+  return `${+mbps.toFixed(mbps < 10 ? 1 : 0)} Mbps`;
+}
+
+function Address({ addr, muted }: { addr: string; muted?: boolean }) {
+  const ip = bareIP(addr);
+  const prefix = addr.split("/")[1];
+  return (
+    <span className={cn("block", muted && "text-muted-foreground")}>
+      <CopyValue
+        value={ip}
+        label="address"
+        mono
+        display={
+          <>
+            {ip}
+            {prefix && <span className="text-muted-foreground">/{prefix}</span>}
+          </>
+        }
+      />
+    </span>
+  );
+}
+
+const NET_INACTIVE_KEY = "device-net-show-inactive";
+
+function Network({ d }: { d: DeviceDetail }) {
+  const [showInactive, setShowInactiveState] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(NET_INACTIVE_KEY) === "1") setShowInactiveState(true);
+    } catch {}
+  }, []);
+  const setShowInactive = (v: boolean) => {
+    setShowInactiveState(v);
+    try {
+      localStorage.setItem(NET_INACTIVE_KEY, v ? "1" : "0");
+    } catch {}
+  };
+
+  const inv = d.inventory;
   if (!inv) return <NoInventory />;
   const n = inv.network;
+  const primary =
+    n.interfaces.find((i) => n.primary_ip && i.addrs.some((a) => bareIP(a) === n.primary_ip)) ??
+    n.interfaces.find((i) => n.primary_mac && i.mac === n.primary_mac);
+  // In use: the primary adapter, or one that's up with a real address. macOS
+  // reports idle ports and system tunnels as "up" with only a link-local address.
+  const usable = (i: NetInterface) => i.addrs.filter((a) => !linkLocal(a));
+  const inUse = (i: NetInterface) => i === primary || (i.up && usable(i).length > 0);
+  const rank = (i: NetInterface) => (i === primary ? 0 : inUse(i) ? 1 : 2);
+  const sorted = n.interfaces.map((i, idx) => ({ i, idx })).sort((a, b) => rank(a.i) - rank(b.i) || a.idx - b.idx);
+  const inactive = sorted.filter(({ i }) => !inUse(i)).length;
+  const rows = showInactive ? sorted : sorted.filter(({ i }) => inUse(i));
+
+  const wifi = n.wifi ?? (n.wifi_ssid ? { ssid: n.wifi_ssid } : undefined);
+  const wifiText = wifi?.ssid
+    ? [wifi.ssid, wifi.signal_pct != null ? `${wifi.signal_pct}% signal` : null, wifi.band, wifi.radio].filter(Boolean).join(" · ")
+    : null;
+  const domainLabel = n.domain_joined === false ? "Workgroup" : "Domain";
+  const remote = d.remote_ip;
+  const dhcp = primary?.dhcp;
+
   return (
     <div className="space-y-4">
       <Card>
         <CardContent className="pt-5">
-          <KeyValues
-            items={[
-              ["Hostname", n.hostname],
-              ["Primary IP", <span key="ip" className="font-mono">{n.primary_ip}</span>],
-              ["Primary MAC", <span key="mac" className="font-mono">{n.primary_mac}</span>],
-              ["Wi-Fi network", n.wifi_ssid ?? "Not connected / unavailable"],
-            ]}
-          />
+          <div className="grid grid-cols-1 gap-x-10 gap-y-2.5 lg:grid-cols-2">
+            <KeyValues
+              items={[
+                ["Hostname", n.hostname && <CopyValue key="h" value={n.hostname} label="hostname" />],
+                [
+                  "Primary IP",
+                  n.primary_ip && (
+                    <span key="ip" className="inline-flex flex-wrap items-center gap-x-2">
+                      <CopyValue value={n.primary_ip} label="IP address" mono />
+                      {primary && <span className="text-xs text-muted-foreground">via {primary.name}</span>}
+                    </span>
+                  ),
+                ],
+                ["Primary MAC", n.primary_mac && <CopyValue key="mac" value={n.primary_mac} label="MAC address" mono />],
+                ["Address assignment", dhcp == null ? "" : dhcp ? "DHCP (automatic)" : "Static"],
+                ["Wi-Fi", wifiText ?? <span className="text-muted-foreground">Not connected</span>],
+              ]}
+            />
+            <KeyValues
+              items={[
+                ["Default gateway", n.gateway && <CopyValue key="gw" value={n.gateway} label="gateway" mono />],
+                [
+                  "DNS servers",
+                  n.dns?.length ? (
+                    <span key="dns">
+                      {n.dns.map((s) => (
+                        <span key={s} className="block">
+                          <CopyValue value={s} label="DNS server" mono />
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    ""
+                  ),
+                ],
+                ...(d.os_family === "windows" || n.domain ? [[domainLabel, n.domain ?? ""] as [string, string]] : []),
+                [
+                  "Connects from",
+                  !remote ? (
+                    ""
+                  ) : isPrivateIP(remote) ? (
+                    <span key="rf" title={`Seen by the server as ${remote}, the office firewall`}>
+                      Office network
+                    </span>
+                  ) : (
+                    <span key="rf" className="inline-flex flex-wrap items-center gap-x-2">
+                      <CopyValue value={remote} label="public IP" mono />
+                      <span className="text-xs text-muted-foreground">public IP</span>
+                    </span>
+                  ),
+                ],
+              ]}
+            />
+          </div>
+          {!n.details && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Update this device&apos;s agent to see the gateway, DNS servers, {d.os_family === "windows" ? "domain, " : ""}link speeds and Wi-Fi signal.
+            </p>
+          )}
         </CardContent>
       </Card>
-      <Card className="overflow-hidden">
-        <Table>
+      <Card className="overflow-clip [--sticky-top:7.5rem]">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <p className="text-sm font-medium">
+            Adapters <span className="font-normal text-muted-foreground">· {sorted.length - inactive} in use</span>
+          </p>
+          {inactive > 0 && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch checked={showInactive} onCheckedChange={setShowInactive} aria-label="Show inactive adapters" />
+              Show inactive ({inactive})
+            </label>
+          )}
+        </div>
+        <Table stickyHeader>
           <THead>
             <TR>
-              <TH>Interface</TH>
+              <TH>Adapter</TH>
+              <TH>Type</TH>
               <TH>State</TH>
-              <TH>MAC</TH>
+              <TH className="hidden sm:table-cell">Speed</TH>
+              <TH className="hidden md:table-cell">MAC</TH>
               <TH>Addresses</TH>
             </TR>
           </THead>
           <TBody>
-            {n.interfaces.map((i) => (
-              <TR key={i.name}>
-                <TD className="font-medium">{i.name}</TD>
-                <TD>
-                  <Badge variant={i.up ? "success" : "neutral"} dot>
-                    {i.up ? "Up" : "Down"}
-                  </Badge>
-                </TD>
-                <TD className="font-mono text-xs">{i.mac || "—"}</TD>
-                <TD className="font-mono text-xs">{i.addrs.length ? i.addrs.join(", ") : "—"}</TD>
-              </TR>
-            ))}
+            {rows.map(({ i }) => {
+              const active = inUse(i);
+              const kind = i.kind ?? guessNetKind(i.name, i.description);
+              const real = usable(i).sort((a, b) => Number(a.includes(":")) - Number(b.includes(":")));
+              const local = i.addrs.filter(linkLocal);
+              const speed = formatSpeed(kind === "wifi" && i === primary && wifi?.rx_mbps ? wifi.rx_mbps : i.speed_mbps);
+              return (
+                <TR key={i.name} className={cn(!active && "text-muted-foreground")}>
+                  <TD className="font-medium">
+                    <span className="flex max-w-[20rem] items-center gap-2">
+                      <span className="min-w-0 truncate" title={i.name}>
+                        {i.name}
+                      </span>
+                      {i === primary && (
+                        <Badge variant="primary" className="shrink-0" title="The adapter this device uses to reach the internet">
+                          Primary
+                        </Badge>
+                      )}
+                    </span>
+                    {i.description && i.description !== i.name && (!kind || i.description !== NET_KIND_LABEL[kind]) && (
+                      <span className="block max-w-[20rem] truncate text-xs font-normal text-muted-foreground" title={i.description}>
+                        {i.description}
+                      </span>
+                    )}
+                  </TD>
+                  <TD>{kind ? <Badge variant="neutral">{NET_KIND_LABEL[kind]}</Badge> : <span className="text-muted-foreground">—</span>}</TD>
+                  <TD className="whitespace-nowrap">
+                    {active ? (
+                      <Badge variant="success" dot>
+                        Up
+                      </Badge>
+                    ) : i.up ? (
+                      <Badge variant="neutral" dot title="Switched on, but it has no usable address (e.g. a VPN that isn't connected)">
+                        No address
+                      </Badge>
+                    ) : (
+                      <Badge variant="neutral" dot>
+                        Down
+                      </Badge>
+                    )}
+                  </TD>
+                  <TD className="hidden whitespace-nowrap tabular sm:table-cell">{speed ?? <span className="text-muted-foreground">—</span>}</TD>
+                  <TD className="hidden whitespace-nowrap text-xs md:table-cell">
+                    {i.mac ? <CopyValue value={i.mac} label="MAC address" mono /> : <span className="text-muted-foreground">—</span>}
+                  </TD>
+                  <TD className="text-xs">
+                    {real.length > 0 ? (
+                      <>
+                        {real.map((a) => (
+                          <Address key={a} addr={a} muted={!active} />
+                        ))}
+                        {!active && <span className="mt-0.5 block text-[11px] italic">Not in use (last known address)</span>}
+                      </>
+                    ) : local.length > 0 ? (
+                      <span className="text-muted-foreground" title={local.join(", ")}>
+                        Link-local only
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TD>
+                </TR>
+              );
+            })}
           </TBody>
         </Table>
       </Card>

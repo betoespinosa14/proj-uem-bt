@@ -219,7 +219,17 @@ func network(ctx context.Context, hostname string) protocol.Network {
 	if ssid := wifiSSID(ctx); ssid != "" {
 		n.WifiSSID = &ssid
 	}
+	netDetails(ctx, primary, n.Interfaces).apply(&n, primary)
 	return n
+}
+
+func hasIPv4(addrs []string) bool {
+	for _, a := range addrs {
+		if strings.Contains(a, ".") && !strings.HasPrefix(a, "169.254.") {
+			return true
+		}
+	}
+	return false
 }
 
 func loggedInUsers(ctx context.Context) []string {

@@ -7,9 +7,28 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## Unreleased
+## 2026.11.18 (2026-11-13): Network details and a clearer Network tab
+
+### Added
+- **Network details (agent).** The agent now also reports the default gateway, DNS servers, whether each adapter
+  got its address by DHCP or is static, each adapter's type (Ethernet, Wi-Fi, VPN, Virtual, Bluetooth), description
+  and link speed, the Windows domain or workgroup, and the Wi-Fi link's signal, band and radio type. Windows reads
+  them in one PowerShell call (Get-NetAdapter, Get-NetRoute, Get-DnsClientServerAddress, Get-NetIPInterface) plus
+  `netsh wlan`; macOS from route, scutil, networksetup, ifconfig and ipconfig; Linux from ip, resolvectl or
+  resolv.conf and sysfs. Older agents keep working; their Network tab shows a hint to update.
+- **Where a device connects from.** The server records the address each agent connects from. The Network tab shows
+  "Office network" for devices in the office (they arrive through the office firewall) and the public IP for devices
+  elsewhere.
 
 ### Changed
+- **Device page Network tab.** The summary shows hostname, primary IP (and the adapter it uses), MAC, DHCP or static,
+  Wi-Fi, default gateway, DNS servers, domain or workgroup, and where the device connects from, with copy buttons.
+  The adapter list puts the primary adapter first with a **Primary** badge, then the others in use; adapters that are
+  down or have no usable address (Wi-Fi Direct, Bluetooth, disconnected VPNs) are hidden behind
+  **Show inactive (N)**. Each adapter shows its type and speed. Automatic 169.254.x.x and fe80:: addresses are no
+  longer listed (an adapter with only those reads "Link-local only"), an adapter that's up without a usable address
+  (such as a VPN that isn't connected) reads "No address", and an address Windows keeps on a disconnected adapter is
+  marked "Not in use". The list scrolls with the page with pinned column headers.
 - **Device page Software tab.** The list scrolls with the page (no inner scroll box), with the column headers pinned
   under the device's tab row; each app's publisher sits under its name so the table fits without sideways scrolling,
   dates stay on one line ("9 Dec 2024", "7 min ago"), and sources read Microsoft Store, Registry, APT (dpkg),

@@ -238,6 +238,23 @@ type Network struct {
 	PrimaryMAC string      `json:"primary_mac"`
 	WifiSSID   *string     `json:"wifi_ssid"`
 	Interfaces []Interface `json:"interfaces"`
+	// From 2026.11.18. Details is set by agents that collect the fields below,
+	// so the console can tell "none" (e.g. no gateway) from "not reported".
+	Details      bool      `json:"details,omitempty"`
+	Gateway      string    `json:"gateway,omitempty"`       // default gateway of the primary interface
+	DNS          []string  `json:"dns,omitempty"`           // DNS servers in use
+	Domain       string    `json:"domain,omitempty"`        // AD domain when joined, else the workgroup (Windows)
+	DomainJoined *bool     `json:"domain_joined,omitempty"` // nil where it isn't known
+	Wifi         *WifiLink `json:"wifi,omitempty"`          // the current Wi-Fi connection, if any
+}
+
+// WifiLink describes a connected Wi-Fi network. Empty fields weren't readable.
+type WifiLink struct {
+	SSID      string  `json:"ssid,omitempty"`
+	SignalPct *int    `json:"signal_pct,omitempty"`
+	Band      string  `json:"band,omitempty"`  // "2.4 GHz", "5 GHz", "6 GHz"
+	Radio     string  `json:"radio,omitempty"` // "802.11ax"
+	RxMbps    float64 `json:"rx_mbps,omitempty"`
 }
 
 type Interface struct {
@@ -245,6 +262,12 @@ type Interface struct {
 	MAC   string   `json:"mac"`
 	Addrs []string `json:"addrs"`
 	Up    bool     `json:"up"`
+	// From 2026.11.18.
+	Kind        string  `json:"kind,omitempty"` // ethernet | wifi | vpn | virtual | bluetooth
+	Description string  `json:"description,omitempty"`
+	SpeedMbps   float64 `json:"speed_mbps,omitempty"`
+	DHCP        *bool   `json:"dhcp,omitempty"`
+	Gateway     string  `json:"gateway,omitempty"`
 }
 
 // Security fields are pointers because nil means "could not determine".

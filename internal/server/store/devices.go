@@ -163,7 +163,7 @@ const deviceSelect = `
 	SELECT d.id, d.org_id, d.name, d.hostname, d.os_family, d.os_name, d.os_version, d.os_build, d.arch,
 	       d.serial, d.model, d.manufacturer, d.agent_version, d.ip_address, d.mac_address, d.logged_in_user,
 	       d.status, d.last_seen_at, d.enrolled_at, d.compliance_state, d.group_id, g.name, d.tags,
-	       d.cpu_pct, d.mem_pct, d.disk_pct, d.battery_pct, d.employee_name
+	       d.cpu_pct, d.mem_pct, d.disk_pct, d.battery_pct, d.employee_name, d.remote_ip
 	FROM devices d LEFT JOIN device_groups g ON g.id = d.group_id`
 
 func scanDevice(r pgx.Row) (Device, error) {
@@ -171,7 +171,7 @@ func scanDevice(r pgx.Row) (Device, error) {
 	err := r.Scan(&d.ID, &d.OrgID, &d.Name, &d.Hostname, &d.OSFamily, &d.OSName, &d.OSVersion, &d.OSBuild, &d.Arch,
 		&d.Serial, &d.Model, &d.Manufacturer, &d.AgentVersion, &d.IPAddress, &d.MACAddress, &d.LoggedInUser,
 		&d.Status, &d.LastSeenAt, &d.EnrolledAt, &d.ComplianceState, &d.GroupID, &d.GroupName, &d.Tags,
-		&d.CPUPct, &d.MemPct, &d.DiskPct, &d.BatteryPct, &d.EmployeeName)
+		&d.CPUPct, &d.MemPct, &d.DiskPct, &d.BatteryPct, &d.EmployeeName, &d.RemoteIP)
 	d.Tags = nonNil(d.Tags)
 	return d, err
 }
@@ -315,6 +315,12 @@ func (s *Store) SetDeviceOnline(ctx context.Context, id string, hello protocol.H
 		       agent_version = COALESCE(NULLIF($2, ''), agent_version),
 		       hostname = COALESCE(NULLIF($3, ''), hostname)
 		WHERE id = $1`, id, hello.AgentVersion, hello.Facts.Hostname)
+	return err
+}
+
+// SetDeviceRemoteIP records the address the device's agent connected from.
+func (s *Store) SetDeviceRemoteIP(ctx context.Context, id, ip string) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE devices SET remote_ip = $2 WHERE id = $1 AND remote_ip <> $2`, id, ip)
 	return err
 }
 

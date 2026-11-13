@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.28 (2026-11-14): Clearer ad-hoc script hint
+
+Console only; agents stay on 2026.11.21.
+
+### Changed
+- **Run script, ad-hoc.** The example in the empty Script box is now written as a comment ("# Type your PowerShell
+  script, e.g. …"; "REM …" for cmd) so it can't be mistaken for code already typed in, and a hint under the box
+  says Run is enabled once the script has content.
+
 ## 2026.11.27 (2026-11-14): Commands tab
 
 Console only; agents stay on 2026.11.21.

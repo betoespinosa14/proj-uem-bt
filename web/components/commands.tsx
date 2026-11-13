@@ -27,6 +27,14 @@ const OS_SHELLS: Record<string, Shell[]> = {
 };
 const OS_NAME: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
+const SCRIPT_HINT: Record<Shell, string> = {
+  powershell: "# Type your PowerShell script, e.g. Get-Service | Where Status -eq 'Running'",
+  cmd: "REM Type your cmd script, e.g. ipconfig /all",
+  bash: "# Type your bash script, e.g. uname -a",
+  sh: "# Type your sh script, e.g. uname -a",
+  zsh: "# Type your zsh script, e.g. sw_vers",
+};
+
 /** First line of the script the server sends to agents that predate self-update. */
 const ONE_TIME_UPDATE = "# BEACON: one-time update";
 
@@ -218,8 +226,9 @@ export function CommandDialog({
                   <Input id="timeout" type="number" min={1} max={3600} value={timeout} onChange={(e) => setTimeoutSecs(Number(e.target.value))} />
                 </Field>
               </div>
-              <Field label="Script" htmlFor="body">
-                <CodeEditor id="body" rows={10} value={body} onChange={(e) => setBody(e.target.value)} placeholder={shell === "powershell" ? "Get-Service | Where Status -eq 'Running'" : "uname -a"} />
+              <Field label="Script" htmlFor="body" hint="Run is enabled once the script has content.">
+                {/* Written as a comment so the example can't be mistaken for code already typed in. */}
+                <CodeEditor id="body" rows={10} value={body} onChange={(e) => setBody(e.target.value)} placeholder={SCRIPT_HINT[shell]} />
               </Field>
             </>
           )}

@@ -114,9 +114,14 @@ export default function DevicePage() {
     );
   }
 
-  const quick: { type: CommandType; label: string; icon: typeof Play }[] = [
-    { type: "run_script", label: "Run script", icon: Terminal },
-    { type: "refresh_inventory", label: "Refresh", icon: RefreshCw },
+  const quick: { type: CommandType; label: string; icon: typeof Play; hint: string }[] = [
+    { type: "run_script", label: "Run script", icon: Terminal, hint: "Run a script on this device" },
+    {
+      type: "refresh_inventory",
+      label: "Refresh",
+      icon: RefreshCw,
+      hint: "Asks the device to send a fresh inventory report. The tabs update when it arrives (Compliance > Check now also waits for it)",
+    },
   ];
 
   return (
@@ -162,7 +167,7 @@ export default function DevicePage() {
         <div className="flex flex-wrap items-center gap-2">
           {can("commands.run") &&
             quick.map((q) => (
-              <Button key={q.type} variant="outline" onClick={() => setAction(q.type)}>
+              <Button key={q.type} variant="outline" onClick={() => setAction(q.type)} title={q.hint}>
                 <q.icon /> {q.label}
               </Button>
             ))}
@@ -1439,7 +1444,8 @@ function Security({ d }: { d: DeviceDetail }) {
   );
 }
 
-type ComplianceSortKey = "rule" | "severity" | "result" | "evaluated";
+// All of a device's rules are evaluated together, so the time lives once in the summary strip.
+type ComplianceSortKey = "rule" | "severity" | "result";
 const SEVERITY_RANK: Record<Severity, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 const PLATFORM: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
 const platforms = (os: string[]) => os.map((o) => PLATFORM[o] ?? o).join(" & ");
@@ -1493,7 +1499,7 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
   const [sort, setSort] = useState<{ key: ComplianceSortKey; dir: "asc" | "desc" }>({ key: "result", dir: "asc" });
   const onSort = (key: ComplianceSortKey) =>
-    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "rule" || key === "result" ? "asc" : "desc" }));
+    setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "severity" ? "desc" : "asc" }));
   const [showOthers, setShowOthers] = useState(false);
 
   const items = useMemo(() => results.data?.items ?? [], [results.data]);
@@ -1539,8 +1545,7 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
       let c = 0;
       if (sort.key === "rule") c = a.rule_name.localeCompare(b.rule_name);
       else if (sort.key === "severity") c = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
-      else if (sort.key === "result") c = Number(a.passed) - Number(b.passed);
-      else c = a.evaluated_at.localeCompare(b.evaluated_at);
+      else c = Number(a.passed) - Number(b.passed);
       return c * dir || bySeverity(a, b) || a.rule_name.localeCompare(b.rule_name);
     });
   }, [items, sort]);
@@ -1606,7 +1611,7 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3 pl-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           {failing ? (
-            <span className="inline-flex items-center gap-1.5 font-semibold text-danger">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-destructive">
               <ShieldAlert className="h-4 w-4" />
               {failing} of {items.length} {ruleWord} failing
             </span>
@@ -1625,7 +1630,13 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
         <div className="flex flex-wrap items-center gap-2">
           {can("commands.run") && (
             // Disabled buttons don't show tooltips, so the hint sits on a wrapper.
-            <span title={online ? "Ask the device for a fresh report and re-check every rule" : "The device is offline. Its rules are checked again when it next reports."}>
+            <span
+              title={
+                online
+                  ? "Asks the device for a fresh report, then waits here and updates these results when it arrives"
+                  : "The device is offline. Its rules are checked again when it next reports."
+              }
+            >
               <Button variant="outline" size="sm" onClick={() => check.mutate()} disabled={!online || busy}>
                 <RefreshCw className={cn(busy && "motion-safe:animate-spin")} /> {busy ? "Checking…" : "Check now"}
               </Button>
@@ -1649,9 +1660,6 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
               <SortButton label="Result" k="result" sort={sort} onSort={onSort} />
             </TH>
             <TH className="hidden md:table-cell">Details</TH>
-            <TH className="hidden sm:table-cell">
-              <SortButton label="Evaluated" k="evaluated" sort={sort} onSort={onSort} />
-            </TH>
           </TR>
         </THead>
         <TBody>
@@ -1692,9 +1700,6 @@ function Compliance({ d, onOpenTab }: { d: DeviceDetail; onOpenTab: (tab: "softw
                   <Badge variant={r.passed ? "success" : "danger"}>{r.passed ? "Pass" : "Fail"}</Badge>
                 </TD>
                 <TD className="hidden max-w-md align-top text-muted-foreground md:table-cell">{details}</TD>
-                <TD className="hidden whitespace-nowrap align-top text-muted-foreground sm:table-cell" title={formatDateTime(r.evaluated_at)}>
-                  {relativeTimeShort(r.evaluated_at)}
-                </TD>
               </TR>
             );
           })}

@@ -47,6 +47,13 @@ var vmShortcut = regexp.MustCompile(`^Windows \d+$`)
 // aren't games (Epic's Unreal Engine helpers).
 var gameTool = regexp.MustCompile(`(?i)\bunreal\b|^UE\d`)
 
+// antiCheat matches games' anti-cheat drivers. They often stay installed after
+// the game itself is removed, so findings say what they are.
+var antiCheat = regexp.MustCompile(`(?i)\b(vanguard|easy ?anti-?cheat|battleye|faceit|ricochet|anti-?cheat)\b`)
+
+// IsAntiCheat reports whether an app name is a game's anti-cheat component.
+func IsAntiCheat(name string) bool { return antiCheat.MatchString(name) }
+
 // Classify returns FlagGambling, FlagGame or "" for an installed app. Apps
 // shipped by the OS vendor (e.g. macOS Chess) are never flagged, nor are
 // Parallels shortcuts to apps inside a Windows VM.

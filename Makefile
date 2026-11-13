@@ -11,7 +11,12 @@ LDFLAGS := -s -w -X main.Version=$(VERSION)
 # like 2026.11.16-2-gc5b074e); otherwise they report VERSION like the server.
 AGENT_SRC := cmd/agent internal/agent internal/protocol internal/agentdist go.mod go.sum
 LAST_TAG := $(shell git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null)
-AGENT_VERSION ?= $(if $(LAST_TAG),$(if $(shell git diff --quiet $(LAST_TAG) -- $(AGENT_SRC) 2>/dev/null && echo same),$(patsubst v%,%,$(LAST_TAG)),$(VERSION)),$(VERSION))
+# Agents already built (dist/manifest.json) keep their version while their code
+# matches that release's tag, so tagging a console/server-only release doesn't
+# relabel identical agents and show every device "Update available".
+SHIPPED_AGENT := $(shell sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' dist/manifest.json 2>/dev/null | head -1)
+SHIPPED_SAME := $(if $(SHIPPED_AGENT),$(shell git rev-parse -q --verify "refs/tags/v$(SHIPPED_AGENT)" >/dev/null && git diff --quiet "v$(SHIPPED_AGENT)" -- $(AGENT_SRC) 2>/dev/null && echo same))
+AGENT_VERSION ?= $(if $(SHIPPED_SAME),$(SHIPPED_AGENT),$(if $(LAST_TAG),$(if $(shell git diff --quiet $(LAST_TAG) -- $(AGENT_SRC) 2>/dev/null && echo same),$(patsubst v%,%,$(LAST_TAG)),$(VERSION)),$(VERSION)))
 AGENT_LDFLAGS := -s -w -X main.Version=$(AGENT_VERSION)
 GO_PKGS := ./cmd/... ./internal/...
 AGENT_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64

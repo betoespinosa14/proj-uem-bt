@@ -194,6 +194,19 @@ func TestFlaggedDedupes(t *testing.T) {
 	}
 }
 
+func TestAntiCheatDetail(t *testing.T) {
+	r := store.Rule{Match: "all", Conditions: []store.Condition{{Field: "software.games", Op: "none_found"}}}
+	f := Facts{Inventory: &protocol.Inventory{}, Software: []store.Software{{Name: "Riot Vanguard", Publisher: "Riot Games, Inc.", Source: "registry"}, {Name: "Steam"}}}
+	passed, details := Evaluate(r, f)
+	want := `Games: found "Riot Vanguard" (anti-cheat, can remain after the game is uninstalled), "Steam"`
+	if passed || details != want {
+		t.Fatalf("Evaluate = %v, %q; want false, %q", passed, details, want)
+	}
+	if IsAntiCheat("Valorant") || !IsAntiCheat("EasyAntiCheat") && !IsAntiCheat("Easy Anti-Cheat") {
+		t.Fatal("IsAntiCheat misclassifies")
+	}
+}
+
 func TestCategory(t *testing.T) {
 	cases := []struct {
 		sw   store.Software

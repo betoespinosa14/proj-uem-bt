@@ -267,6 +267,9 @@ func EvalCondition(c store.Condition, facts Facts) ConditionResult {
 			quoted := make([]string, len(found))
 			for i, n := range found {
 				quoted[i] = strconv.Quote(n)
+				if IsAntiCheat(n) {
+					quoted[i] += " (anti-cheat, can remain after the game is uninstalled)"
+				}
 			}
 			detail = fmt.Sprintf("%s: found %s", f.Label, strings.Join(quoted, ", "))
 		}

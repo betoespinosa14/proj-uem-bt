@@ -1727,46 +1727,13 @@ const HOUR = 3_600_000;
 const PLOT_LEFT = 44;
 const PLOT_RIGHT = 8;
 
-type TipItem = { dataKey?: unknown; value?: unknown; color?: string; stroke?: string; hide?: boolean };
-
-// The chart's hover box. Inside a gap there are no values (the line is broken there),
-// so it says so, matching the gray segment of the strip below, instead of showing nothing.
-function TelemetryTip({
-  active,
-  payload,
-  t,
-  gaps,
-  fmt,
-}: {
-  active?: boolean;
-  payload?: readonly TipItem[];
-  t: number;
-  gaps: { x1: number; x2: number }[];
-  fmt: (t: number) => string;
-}) {
-  if (!active || !Number.isFinite(t)) return null;
-  // filterNull is off on the Tooltip (so the box shows in gaps), so drop empty and hidden series here.
-  const values = (payload ?? []).filter((p) => typeof p.value === "number" && !p.hide);
-  const gap = values.length ? undefined : gaps.find((g) => t >= g.x1 && t <= g.x2);
-  if (!values.length && !gap) return null;
-  return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
-      <p className="mb-1 font-medium">{new Date(t).toLocaleString()}</p>
-      {gap ? (
-        <p className="text-muted-foreground">
-          No samples · off {formatDuration((gap.x2 - gap.x1) / 1000)} ({fmt(gap.x1)} – {fmt(gap.x2)})
-        </p>
-      ) : (
-        values.map((p) => (
-          <p key={String(p.dataKey)} className="flex items-center gap-2 tabular">
-            <span className="h-0.5 w-3 rounded-full" style={{ background: p.stroke ?? p.color }} />
-            <span className="text-muted-foreground">{String(p.dataKey)}</span>
-            <span className="ml-auto pl-3 font-medium">{(p.value as number).toFixed(1)}%</span>
-          </p>
-        ))
-      )}
-    </div>
-  );
+// The chart's hover line, drawn only where there are values. Over an offline gap the
+// hover box has nothing to show (Recharts drops null values), so the line stays hidden
+// too instead of standing alone; the strip below already shows the device was off.
+function TelemetryCursor({ points, payload }: { points?: { x: number; y: number }[]; payload?: readonly { value?: unknown }[] }) {
+  if (!points || points.length < 2 || !payload?.some((p) => typeof p.value === "number")) return null;
+  const [a, b] = points as [{ x: number; y: number }, { x: number; y: number }];
+  return <path d={`M${a.x},${a.y}L${b.x},${b.y}`} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.5} pointerEvents="none" />;
 }
 
 // A slim timeline under the chart: when the device reported (online) and when it didn't.
@@ -1960,11 +1927,10 @@ function Telemetry({ id }: { id: string }) {
                     />
                     <YAxis width={PLOT_LEFT} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} allowDataOverflow unit="%" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
                     <Tooltip
-                      // Recharts hides the box when every value is null; keep nulls so a gap can say "No samples".
-                      filterNull={false}
-                      content={({ active, payload, label }) => (
-                        <TelemetryTip active={active} payload={payload as unknown as readonly TipItem[] | undefined} t={Number(label)} gaps={gaps} fmt={stripFmt} />
-                      )}
+                      cursor={<TelemetryCursor />}
+                      labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
+                      formatter={(v) => (typeof v === "number" ? `${v.toFixed(1)}%` : String(v))}
+                      contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
                     />
                     {series.map((s) => (
                       <Line

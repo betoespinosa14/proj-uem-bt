@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.26 (2026-11-14): Telemetry hover, simplified
+
+Console only; agents stay on 2026.11.21.
+
+### Changed
+- **Telemetry hover over a gap shows nothing.** The "No samples · off 8m" box from 2026.11.25 is gone (it read as
+  jargon to non-technical viewers). Over a stretch with no samples neither the hover line nor a box appears; the
+  strip under the chart already shows the device was off. Over data the hover is unchanged.
+
 ## 2026.11.25 (2026-11-14): Telemetry hover in gaps
 
 Console only; agents stay on 2026.11.21.

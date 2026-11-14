@@ -108,14 +108,15 @@ function LiveIndicator() {
   const state = useLiveState();
   const label = state === "open" ? "Live" : state === "connecting" ? "Connecting" : "Offline";
   return (
-    <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex" title="Real-time updates">
+    // Phones show just the dot; the word appears from tablet width up.
+    <span className="inline-flex items-center gap-1.5 px-1 text-xs text-muted-foreground" title={`Real-time updates: ${label}`} aria-label={`Real-time updates: ${label}`}>
       <span
         className={cn(
           "h-2 w-2 rounded-full",
           state === "open" ? "bg-success dark:bg-neon" : state === "connecting" ? "animate-pulse bg-warning" : "bg-muted-foreground/50",
         )}
       />
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </span>
   );
 }

@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { agentOutdated, api, qk, type Command, type Dashboard, type FleetSnapshot } from "@/lib/api";
 import { useCan, useMe } from "@/lib/session";
-import { cn, formatDuration, osLabel, relativeTime, titleCase } from "@/lib/utils";
+import { cn, formatDateTime, formatDuration, osLabel, relativeTimeShort, titleCase } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -180,15 +180,20 @@ function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) =>
     },
   ];
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {tiles.map((t) => {
+    // 5 tiles: phones 2 + 2 + Open alerts across both columns; tablets 3 + 2 on a 6-column grid; desktop one row.
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5">
+      {tiles.map((t, i) => {
         const tone = tileTone[t.tone];
+        const last = i === tiles.length - 1;
         return (
           <Link
             key={t.label}
             href={t.href}
             className={cn(
-              "group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40",
+              "group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 lg:col-span-1",
+              last ? "col-span-2 sm:col-span-3" : i < 3 ? "sm:col-span-2" : "sm:col-span-3",
+              // Full-width on phones: the number and its trend share a row.
+              last && "max-sm:flex-row max-sm:flex-wrap max-sm:items-end max-sm:gap-x-4 max-sm:[&>span:first-child]:basis-full",
               tone.tile,
             )}
           >
@@ -198,7 +203,7 @@ function StatTiles({ data, inGroup }: { data: Dashboard; inGroup: (p: string) =>
             </span>
             <span className={cn("text-3xl font-semibold tracking-tight tabular", tone.value)}>{t.value}</span>
             {t.sub && <span className={cn("text-xs", t.tone === "danger" ? "font-medium text-destructive" : "text-muted-foreground")}>{t.sub}</span>}
-            <Trend history={data.trend} spec={t.trend} className="mt-auto pt-2" />
+            <Trend history={data.trend} spec={t.trend} className={cn("mt-auto pt-2", last && "max-sm:ml-auto max-sm:pb-1")} />
           </Link>
         );
       })}
@@ -245,7 +250,8 @@ function Trend({ history, spec, className }: { history: FleetSnapshot[]; spec: T
   const since = history[baseIndex]!.day === target ? "last week" : shortDay(history[baseIndex]!.day);
   const good = spec.better === "none" || diff === 0 ? null : (diff > 0) === (spec.better === "up");
   return (
-    <span className={cn("flex items-center gap-2", className)}>
+    // Wraps under the sparkline in narrow tiles (half-width on phones) instead of overflowing; desktop unchanged.
+    <span className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 lg:flex-nowrap", className)}>
       <Sparkline values={values} days={history.map((n) => n.day)} suffix={spec.suffix ?? ""} />
       <span
         className={cn(
@@ -285,7 +291,7 @@ function Sparkline({ values, days, suffix }: { values: number[]; days: string[];
 
 function TilesSkeleton() {
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5">
       {[0, 1, 2, 3, 4].map((i) => (
         <Skeleton key={i} className="h-24 rounded-xl" />
       ))}
@@ -428,7 +434,7 @@ function NeedsAttention({ data, className, inGroup }: { data?: Dashboard; classN
                                 ) : (
                                   <span className="font-semibold">{a.title}</span>
                                 )}
-                                <span className="text-xs text-muted-foreground">· {relativeTime(a.created_at)}</span>
+                                <span className="text-xs text-muted-foreground" title={formatDateTime(a.created_at)}>· {relativeTimeShort(a.created_at)}</span>
                               </p>
                               {found ? (
                                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
@@ -530,7 +536,7 @@ function DeviceHealth({ data, className }: { data?: Dashboard; className?: strin
                           <span className={cn("h-full", critical ? "bg-destructive" : "bg-warning")} style={{ width: `${Math.min(h.value, 100)}%` }} />
                         </span>
                       ) : (
-                        <p className="text-xs text-muted-foreground">Last seen {relativeTime(h.last_seen_at)}</p>
+                        <p className="text-xs text-muted-foreground" title={formatDateTime(h.last_seen_at)}>Last seen {relativeTimeShort(h.last_seen_at)}</p>
                       )}
                     </div>
                     <span className={cn("shrink-0 text-right text-sm font-semibold tabular", critical ? "text-destructive" : "text-warning")}>
@@ -626,21 +632,25 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
               <Link
                 key={m.label}
                 href={m.href}
-                className="flex flex-col gap-2 rounded-lg border border-border p-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
+                className={cn(
+                  "flex flex-col gap-2 rounded-lg border border-border p-3 transition-colors hover:border-primary/40 hover:bg-muted/40",
+                  // Phones: value beside the label, bar under them, note and trend on one row (about a third shorter).
+                  "max-sm:flex-row max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-2",
+                )}
               >
-                <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground max-sm:order-1 max-sm:min-w-0 max-sm:flex-1">
                   <m.icon className="h-4 w-4" />
                   {m.label}
                 </span>
-                <span className="text-xl font-semibold tabular">
+                <span className="text-xl font-semibold tabular max-sm:order-2 max-sm:ml-auto max-sm:text-lg max-sm:leading-none">
                   {m.good == null ? "—" : Math.max(0, m.good)}
                   <span className="text-sm font-normal text-muted-foreground"> / {total}</span>
                 </span>
                 {/* Always one line, so every card's bar sits at the same height. */}
-                <span className="min-h-4 text-xs leading-4 text-muted-foreground">{m.note ?? " "}</span>
+                <span className="min-h-4 text-xs leading-4 text-muted-foreground max-sm:order-4 max-sm:min-w-0 max-sm:flex-1">{m.note ?? " "}</span>
                 <span
                   className={cn(
-                    "mt-auto flex h-1.5 overflow-hidden rounded-full",
+                    "mt-auto flex h-1.5 overflow-hidden rounded-full max-sm:order-3 max-sm:mt-0 max-sm:basis-full",
                     ok || m.good == null ? "bg-muted" : ratio >= 0.5 ? "bg-warning/20" : "bg-destructive/20",
                   )}
                 >
@@ -649,7 +659,7 @@ function SecurityPosture({ data, inGroup }: { data?: Dashboard; inGroup: (p: str
                     style={{ width: `${ratio * 100}%` }}
                   />
                 </span>
-                <Trend history={data.trend} spec={m.trend} />
+                <Trend history={data.trend} spec={m.trend} className="max-sm:order-5 max-sm:ml-auto" />
               </Link>
             );
           })}
@@ -880,8 +890,8 @@ function RecentActivity({ data, className }: { data?: Dashboard; className?: str
                           <span>{b.items.length} devices</span>
                         )}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {b.by} · {relativeTime(b.at)}
+                      <p className="truncate text-xs text-muted-foreground" title={formatDateTime(b.at)}>
+                        {b.by} · {relativeTimeShort(b.at)}
                       </p>
                     </div>
                     {single ? (

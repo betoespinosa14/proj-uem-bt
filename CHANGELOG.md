@@ -7,6 +7,20 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.33 (2026-11-14): Dashboard on phones
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **KPI tiles.** On phones Open alerts spans the full width with its trend beside the number, instead of sitting
+  alone next to an empty half; on tablets the five tiles fill two rows (3 + 2). Desktop is unchanged. Trend text
+  in the half-width phone tiles now wraps instead of sticking out (the page no longer scrolls sideways at 390px).
+- **Security posture on phones.** Each check shows its value on the same line as its name, the bar under them,
+  and the note and trend on one line, about 265px shorter overall.
+- **Live indicator on phones.** The green dot now shows on small screens too (the word "Live" from tablet width).
+- **Times on the Dashboard** use the short form ("2 h ago", "4 d ago") with the exact time on hover, like the
+  device tabs.
+
 ## 2026.11.32 (2026-11-14): Usage chart strip, continuous
 
 Console only; agents stay on 2026.11.29.

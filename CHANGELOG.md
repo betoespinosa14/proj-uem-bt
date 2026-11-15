@@ -7,6 +7,24 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.36 (2026-11-15): Groups
+
+Console only; agents stay on 2026.11.29.
+
+### Added
+- **Move to group** on the Devices list. Select devices, then pick a group or "No group". Each device is updated
+  like a single change: audit-logged, and the new group's blocklist is pushed straight away. The window warns that
+  devices with an employee name are renamed to match the group (e.g. "VStudios | Arnold Nacario").
+
+### Changed
+- **Group device counts** are teal links to Devices filtered by that group; groups with no devices show a gray 0.
+- **Delete group** icon is red, like other destructive actions.
+- **Blocked applications** hint explains to use the process name (`chrome`), not the app name (Google Chrome);
+  matching ignores case and ".exe".
+- **Name** is marked "Required." in New/Edit group (Save was already disabled without one, and the server already
+  refused blank names).
+- **Bulk selection bar** wraps on phones instead of pushing Clear off the edge.
+
 ## 2026.11.35 (2026-11-15): Enrollment polish, Devices on phones
 
 Server and console; agents stay on 2026.11.29.

@@ -77,9 +77,17 @@ export default function GroupsPage() {
                       {g.description && <p className="text-xs text-muted-foreground">{g.description}</p>}
                     </TD>
                     <TD>
-                      <Link href={`/devices?group=${g.id}`} className="tabular hover:underline">
-                        {g.device_count}
-                      </Link>
+                      {g.device_count > 0 ? (
+                        <Link
+                          href={`/devices?group=${g.id}`}
+                          className="tabular font-medium text-primary hover:underline"
+                          title={`See the devices in ${g.name}`}
+                        >
+                          {g.device_count}
+                        </Link>
+                      ) : (
+                        <span className="tabular text-muted-foreground">0</span>
+                      )}
                     </TD>
                     <TD className="hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
@@ -100,7 +108,13 @@ export default function GroupsPage() {
                           <Button variant="ghost" size="icon-sm" onClick={() => setEditing(g)} aria-label={`Edit ${g.name}`}>
                             <Pencil />
                           </Button>
-                          <Button variant="ghost" size="icon-sm" onClick={() => setDeleting(g)} aria-label={`Delete ${g.name}`}>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => setDeleting(g)}
+                            aria-label={`Delete ${g.name}`}
+                          >
                             <Trash2 />
                           </Button>
                         </div>
@@ -161,7 +175,7 @@ function GroupDialog({ group, onClose }: { group: Group | null; onClose: () => v
       }
     >
       <div className="space-y-4">
-        <Field label="Name" htmlFor="gname">
+        <Field label="Name" htmlFor="gname" hint="Required.">
           <Input id="gname" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Retail kiosks" />
         </Field>
         <Field label="Description" htmlFor="gdesc">
@@ -170,7 +184,12 @@ function GroupDialog({ group, onClose }: { group: Group | null; onClose: () => v
         <Field
           label="Blocked applications"
           htmlFor="gblocked"
-          hint="Process names the agent terminates on devices in this group, e.g. utorrent, steam.exe. Each block is audit-logged."
+          hint={
+            <>
+              Programs the agent closes on devices in this group. Use the process name (<span className="font-mono">chrome</span>), not
+              the app name (Google Chrome). Not case-sensitive; .exe is optional. Each block is audit-logged.
+            </>
+          }
         >
           <TagInput id="gblocked" value={blocked} onChange={setBlocked} placeholder="Type a process name and press Enter" />
         </Field>

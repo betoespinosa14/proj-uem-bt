@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpCircle, ChevronDown, FolderTree, Monitor, Search, UserPlus, X } from "lucide-react";
 import { agentOutdated, api, qk, type CommandType, type Device, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
 import { cn, RESOURCE_LIMITS, formatDateTime, formatPct, osLabel, relativeTimeShort } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Checkbox, Input } from "@/components/ui/input";
+import { Dialog } from "@/components/ui/dialog";
+import { Checkbox, Field, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { ComplianceBadge, EmptyState, ErrorState, ExportLink, OsIcon, PageHeader, StatusBadge, UsageBar } from "@/components/common";
 import { CommandDialog, useAgentLatest } from "@/components/commands";
+import { toast } from "@/components/toast";
 
 const LIMITS = [RESOURCE_LIMITS.cpu, RESOURCE_LIMITS.mem, RESOURCE_LIMITS.disk];
 
@@ -131,12 +133,15 @@ function DevicesView() {
     keys.includes(sort.key) ? (sort.dir === "asc" ? "ascending" : "descending") : undefined;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<CommandType | null>(null);
+  const [moving, setMoving] = useState(false);
   // Devices for "Update agents (N)"; null means the action applies to the selection.
   const [targets, setTargets] = useState<string[] | null>(null);
 
   const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId, posture, token: tokenId || undefined };
   const devices = useQuery({ queryKey: qk.devices(filters), queryFn: () => api.devices.list(filters), placeholderData: (p) => p });
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
+  // Selecting devices serves bulk commands and bulk group moves.
+  const canSelect = can("commands.run") || can("devices.write");
   const tokens = useQuery({ queryKey: qk.enrollment, queryFn: api.enrollment.list, enabled: !!tokenId });
   const tokenName = tokens.data?.items.find((t) => t.id === tokenId)?.description || "this token";
   const items = useMemo(() => devices.data?.items ?? [], [devices.data]);
@@ -265,23 +270,30 @@ function DevicesView() {
         )}
       </div>
 
-      {selected.size > 0 && can("commands.run") && (
-        <div className="mb-3 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm animate-fade-in">
-          <span className="font-medium">{allSelected ? `All ${items.length} shown selected` : `${selected.size} selected`}</span>
-          <Dropdown>
-            <DropdownTrigger>
-              <Button size="sm">
-                Actions <ChevronDown />
-              </Button>
-            </DropdownTrigger>
-            <DropdownContent align="start">
-              {BULK_ACTIONS.map((a) => (
-                <DropdownItem key={a.type} onSelect={() => setAction(a.type)} destructive={a.type === "reboot"}>
-                  {a.label}
-                </DropdownItem>
-              ))}
-            </DropdownContent>
-          </Dropdown>
+      {selected.size > 0 && canSelect && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm animate-fade-in">
+          <span className="whitespace-nowrap font-medium">{allSelected ? `All ${items.length} shown selected` : `${selected.size} selected`}</span>
+          {can("commands.run") && (
+            <Dropdown>
+              <DropdownTrigger>
+                <Button size="sm">
+                  Actions <ChevronDown />
+                </Button>
+              </DropdownTrigger>
+              <DropdownContent align="start">
+                {BULK_ACTIONS.map((a) => (
+                  <DropdownItem key={a.type} onSelect={() => setAction(a.type)} destructive={a.type === "reboot"}>
+                    {a.label}
+                  </DropdownItem>
+                ))}
+              </DropdownContent>
+            </Dropdown>
+          )}
+          {can("devices.write") && (
+            <Button size="sm" variant="outline" onClick={() => setMoving(true)}>
+              <FolderTree /> Move to group
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
             Clear
           </Button>
@@ -313,7 +325,7 @@ function DevicesView() {
             <Table containerClassName="table-cq" stickyHeader>
               <THead>
                 <TR>
-                  {can("commands.run") && (
+                  {canSelect && (
                     <TH className="w-10">
                       <Checkbox checked={allSelected} onChange={toggleAll} aria-label="Select all devices" />
                     </TH>
@@ -344,7 +356,7 @@ function DevicesView() {
               <TBody>
                 {rows.map((d) => (
                   <TR key={d.id} className="cursor-pointer" onClick={() => router.push(`/devices/${d.id}`)}>
-                    {can("commands.run") && (
+                    {canSelect && (
                       <TD onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selected.has(d.id)} onChange={() => toggle(d.id)} aria-label={`Select ${d.name}`} />
                       </TD>
@@ -449,6 +461,86 @@ function DevicesView() {
           onIssued={() => (targets ? setTargets(null) : setSelected(new Set()))}
         />
       )}
+      {moving && (
+        <MoveToGroupDialog
+          devices={items.filter((d) => selected.has(d.id))}
+          onClose={() => setMoving(false)}
+          onMoved={() => {
+            setMoving(false);
+            setSelected(new Set());
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// Moves the selected devices into a group (or out of all groups) through the same
+// per-device update as the device page, so each move is audit-logged as usual.
+function MoveToGroupDialog({ devices, onClose, onMoved }: { devices: Device[]; onClose: () => void; onMoved: () => void }) {
+  const qc = useQueryClient();
+  const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
+  const [target, setTarget] = useState("");
+  const NONE = "__none__";
+  const targetName = target === NONE ? "no group" : groups.data?.items.find((g) => g.id === target)?.name;
+  const renamed = devices.filter((d) => d.employee_name).length;
+  const move = useMutation({
+    mutationFn: async () => {
+      const groupId = target === NONE ? null : target;
+      const results = await Promise.allSettled(devices.map((d) => api.devices.update(d.id, { group_id: groupId })));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === devices.length) throw (results[0] as PromiseRejectedResult).reason;
+      return failed;
+    },
+    onSuccess: (failed) => {
+      const moved = devices.length - failed;
+      const label = `${moved} device${moved === 1 ? "" : "s"}`;
+      if (failed) toast.error(`Moved ${label}; ${failed} couldn't be moved`);
+      else toast.success(target === NONE ? `Removed ${label} from their groups` : `Moved ${label} to ${targetName}`);
+      void qc.invalidateQueries({ queryKey: qk.devices() });
+      void qc.invalidateQueries({ queryKey: qk.groups });
+      onMoved();
+    },
+    onError: (e) => toast.error("Couldn't move devices", e),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Move to group"
+      description={`${devices.length} device${devices.length === 1 ? "" : "s"} selected`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button loading={move.isPending} disabled={!target} onClick={() => move.mutate()}>
+            Move
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="Group" htmlFor="move-group">
+          <Select
+            id="move-group"
+            value={target}
+            onValueChange={setTarget}
+            placeholder="Choose a group"
+            options={[
+              ...(groups.data?.items ?? []).map((g) => ({ value: g.id, label: g.name })),
+              { value: NONE, label: "No group" },
+            ]}
+          />
+        </Field>
+        {renamed > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Device names follow the group (e.g. IT | Alberto Espinosa), so {renamed === devices.length ? "these" : `${renamed} of these`} will be
+            renamed to match.
+          </p>
+        )}
+        <p className="text-sm text-muted-foreground">The group&apos;s blocklist applies right away on online devices, and on offline ones when they reconnect.</p>
+      </div>
+    </Dialog>
   );
 }

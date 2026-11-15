@@ -100,6 +100,8 @@ function DevicesView() {
   const [status, setStatus] = useState(params.get("status") ?? "");
   // Set by the Dashboard's Security posture links, e.g. ?posture=unencrypted.
   const [posture, setPosture] = useState(params.get("posture") ?? "");
+  // Set by the Enrollment page's device counts, e.g. ?token=<id>.
+  const [tokenId, setTokenId] = useState(params.get("token") ?? "");
   const [os, setOs] = useState(params.get("os") ?? "");
   const [compliance, setCompliance] = useState(params.get("compliance") ?? "");
   const [groupId, setGroupId] = useState(params.get("group") ?? "");
@@ -132,9 +134,11 @@ function DevicesView() {
   // Devices for "Update agents (N)"; null means the action applies to the selection.
   const [targets, setTargets] = useState<string[] | null>(null);
 
-  const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId, posture };
+  const filters: DeviceFilters = { q: useDebounced(q.trim()), status, os, compliance, group_id: groupId, posture, token: tokenId || undefined };
   const devices = useQuery({ queryKey: qk.devices(filters), queryFn: () => api.devices.list(filters), placeholderData: (p) => p });
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list });
+  const tokens = useQuery({ queryKey: qk.enrollment, queryFn: api.enrollment.list, enabled: !!tokenId });
+  const tokenName = tokens.data?.items.find((t) => t.id === tokenId)?.description || "this token";
   const items = useMemo(() => devices.data?.items ?? [], [devices.data]);
   const rows = useMemo(() => sortDevices(items, sort.key, sort.dir), [items, sort]);
   const latestAgent = useAgentLatest().data?.version;
@@ -158,7 +162,7 @@ function DevicesView() {
       else next.add(id);
       return next;
     });
-  const filtered = !!(q || status || os || compliance || groupId || posture);
+  const filtered = !!(q || status || os || compliance || groupId || posture || tokenId);
 
   return (
     <>
@@ -247,6 +251,16 @@ function DevicesView() {
             title="Clear this filter"
           >
             {POSTURE_LABELS[posture] ?? posture} <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {tokenId && (
+          <button
+            type="button"
+            onClick={() => setTokenId("")}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-nav-accent/40 bg-nav-accent/15 px-3 text-sm font-medium text-nav-accent"
+            title="Clear this filter"
+          >
+            Enrolled with: {tokenName} <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>

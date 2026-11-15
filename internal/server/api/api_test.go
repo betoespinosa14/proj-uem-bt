@@ -235,6 +235,40 @@ func TestEnrollmentTokenLimits(t *testing.T) {
 	}
 }
 
+// Devices remember the token they enrolled with: the token lists its creator
+// and last use, and the device list filters by it.
+func TestEnrollmentTokenDevices(t *testing.T) {
+	e := setup(t)
+	a := e.signup(t, "TokenDevices")
+	var one, two idResp
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "one"}, 201, &one)
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "two"}, 201, &two)
+	d1 := e.enroll(t, one.Token)
+	e.enroll(t, two.Token)
+
+	var devs struct{ Items []struct{ ID string } }
+	a.do("GET", "/api/devices?token="+one.ID, nil, 200, &devs)
+	if len(devs.Items) != 1 || devs.Items[0].ID != d1.DeviceID {
+		t.Fatalf("devices for token one: %+v, want only %s", devs.Items, d1.DeviceID)
+	}
+	var toks struct {
+		Items []struct {
+			ID         string
+			CreatedBy  *string    `json:"created_by"`
+			LastUsedAt *time.Time `json:"last_used_at"`
+		}
+	}
+	a.do("GET", "/api/enrollment-tokens", nil, 200, &toks)
+	for _, tk := range toks.Items {
+		if tk.CreatedBy == nil || *tk.CreatedBy == "" {
+			t.Errorf("token %s: no creator", tk.ID)
+		}
+		if tk.LastUsedAt == nil {
+			t.Errorf("token %s: no last use after an enrollment", tk.ID)
+		}
+	}
+}
+
 func TestRBACAndCSRF(t *testing.T) {
 	e := setup(t)
 	owner := e.signup(t, "Rbac")

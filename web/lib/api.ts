@@ -406,6 +406,10 @@ export type EnrollmentToken = {
   uses: number;
   revoked: boolean;
   created_at: string;
+  /** Creator's email; null if that user was deleted. */
+  created_by: string | null;
+  /** When a device last enrolled with this token. */
+  last_used_at: string | null;
 };
 export type EnrollmentTokenInput = {
   description: string;
@@ -604,6 +608,8 @@ export type DeviceFilters = {
   group_id?: string;
   /** Devices missing a security setting, as linked from the Dashboard. */
   posture?: string;
+  /** Devices enrolled with this enrollment token, as linked from Enrollment. */
+  token?: string;
 };
 
 export type Items<T> = { items: T[] };

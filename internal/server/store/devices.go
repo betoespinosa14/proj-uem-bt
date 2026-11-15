@@ -81,12 +81,14 @@ func (s *Store) GroupBelongs(ctx context.Context, orgID, groupID string) error {
 // ---- Enrollment tokens ----
 
 const tokenSelect = `
-	SELECT t.id, t.org_id, t.token, t.description, t.group_id, g.name, t.expires_at, t.max_uses, t.uses, t.revoked, t.created_at
-	FROM enrollment_tokens t LEFT JOIN device_groups g ON g.id = t.group_id`
+	SELECT t.id, t.org_id, t.token, t.description, t.group_id, g.name, t.expires_at, t.max_uses, t.uses, t.revoked, t.created_at,
+	       u.email, (SELECT max(d.enrolled_at) FROM devices d WHERE d.enrollment_token_id = t.id)
+	FROM enrollment_tokens t LEFT JOIN device_groups g ON g.id = t.group_id LEFT JOIN users u ON u.id = t.created_by`
 
 func scanToken(r pgx.Row) (EnrollmentToken, error) {
 	var t EnrollmentToken
-	err := r.Scan(&t.ID, &t.OrgID, &t.Token, &t.Description, &t.GroupID, &t.GroupName, &t.ExpiresAt, &t.MaxUses, &t.Uses, &t.Revoked, &t.CreatedAt)
+	err := r.Scan(&t.ID, &t.OrgID, &t.Token, &t.Description, &t.GroupID, &t.GroupName, &t.ExpiresAt, &t.MaxUses, &t.Uses, &t.Revoked, &t.CreatedAt,
+		&t.CreatedBy, &t.LastUsedAt)
 	return t, err
 }
 
@@ -143,10 +145,10 @@ func (s *Store) EnrollDevice(ctx context.Context, token string, facts protocol.F
 			name = "unnamed-device"
 		}
 		return tx.QueryRow(ctx, `
-			INSERT INTO devices (org_id, group_id, secret_hash, name, hostname, os_family, os_name, os_version, arch, serial, agent_version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+			INSERT INTO devices (org_id, group_id, secret_hash, name, hostname, os_family, os_name, os_version, arch, serial, agent_version, enrollment_token_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
 			t.OrgID, t.GroupID, secretHash, name, facts.Hostname, facts.OSFamily, facts.OSName, facts.OSVersion,
-			facts.Arch, facts.Serial, facts.AgentVersion).Scan(&deviceID)
+			facts.Arch, facts.Serial, facts.AgentVersion, t.ID).Scan(&deviceID)
 	})
 	if err != nil {
 		if errors.Is(err, ErrTokenInvalid) {
@@ -182,6 +184,7 @@ type DeviceFilter struct {
 	OSFamily   string
 	Compliance string
 	GroupID    string
+	TokenID    string // enrolled with this enrollment token
 	Posture    string // a gap to show: see postureFilters
 	IDs        []string
 }
@@ -218,6 +221,9 @@ func (s *Store) ListDevices(ctx context.Context, orgID string, f DeviceFilter) (
 	}
 	if f.GroupID != "" {
 		add("d.group_id::text = $%d", f.GroupID)
+	}
+	if f.TokenID != "" {
+		add("d.enrollment_token_id::text = $%d", f.TokenID)
 	}
 	if cond, ok := postureFilters[f.Posture]; ok {
 		where = append(where, `EXISTS (SELECT 1 FROM devices x LEFT JOIN device_inventory i ON i.device_id = x.id

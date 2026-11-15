@@ -41,7 +41,8 @@ func deviceFilter(r *http.Request) store.DeviceFilter {
 	q := r.URL.Query()
 	return store.DeviceFilter{
 		Query: strings.TrimSpace(q.Get("q")), Status: q.Get("status"), OSFamily: q.Get("os"),
-		Compliance: q.Get("compliance"), GroupID: q.Get("group_id"), Posture: q.Get("posture"),
+		Compliance: q.Get("compliance"), GroupID: q.Get("group_id"), TokenID: q.Get("token"),
+		Posture: q.Get("posture"),
 	}
 }
 

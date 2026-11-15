@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Apple, Check, Copy, KeyRound, Monitor, Plus, Server, Terminal } from "lucide-react";
+import { Apple, Check, ChevronDown, Copy, KeyRound, Monitor, Plus, Server, Terminal } from "lucide-react";
 import { api, qk, type EnrollmentToken } from "@/lib/api";
 import { useCan } from "@/lib/session";
-import { copyToClipboard, formatDateTime, relativeTime } from "@/lib/utils";
+import { cn, copyToClipboard, formatDateTime, relativeTime, relativeTimeShort } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { Field, Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { Segmented } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, PageHeader } from "@/components/common";
 import { toast } from "@/components/toast";
 
@@ -24,6 +26,35 @@ function tokenState(t: EnrollmentToken): { label: string; variant: "success" | "
   return { label: "Active", variant: "success" };
 }
 
+const GUIDE_KEY = "enrollment-guide";
+
+// The three-step guide: open while there are no tokens, folded away once there
+// are (unless the viewer opened it, which this browser remembers).
+function useGuideOpen(hasTokens: boolean): [boolean, () => void] {
+  const [stored, setStored] = useState<"open" | "closed" | null>(null);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(GUIDE_KEY);
+      if (v === "open" || v === "closed") setStored(v);
+    } catch {}
+  }, []);
+  const open = stored ? stored === "open" : !hasTokens;
+  const toggle = () => {
+    const next = open ? "closed" : "open";
+    setStored(next);
+    try {
+      localStorage.setItem(GUIDE_KEY, next);
+    } catch {}
+  };
+  return [open, toggle];
+}
+
+const STEPS = [
+  { icon: KeyRound, title: "1. Create a token", body: "Optionally assign a group, an expiry and a use limit." },
+  { icon: Terminal, title: "2. Run the installer", body: "Paste the one-liner as admin/root on the device." },
+  { icon: Monitor, title: "3. Device appears", body: "It shows up online within seconds with full inventory." },
+];
+
 export default function EnrollmentPage() {
   const can = useCan();
   const qc = useQueryClient();
@@ -31,6 +62,12 @@ export default function EnrollmentPage() {
   const [creating, setCreating] = useState(false);
   const [showing, setShowing] = useState<EnrollmentToken | null>(null);
   const [revoking, setRevoking] = useState<EnrollmentToken | null>(null);
+  const [view, setView] = useState<"active" | "all">("active");
+  const all = data?.items ?? [];
+  const active = all.filter((t) => tokenState(t).label === "Active");
+  const shown = view === "active" ? active : all;
+  // While loading, keep the guide folded so it doesn't flash open then shut.
+  const [guideOpen, toggleGuide] = useGuideOpen(isLoading || all.length > 0);
 
   const revoke = useMutation({
     mutationFn: (id: string) => api.enrollment.revoke(id),
@@ -56,20 +93,30 @@ export default function EnrollmentPage() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[
-          { icon: KeyRound, title: "1. Create a token", body: "Optionally assign a group, an expiry and a use limit." },
-          { icon: Terminal, title: "2. Run the installer", body: "Paste the one-liner as admin/root on the device." },
-          { icon: Monitor, title: "3. Device appears", body: "It shows up online within seconds with full inventory." },
-        ].map((s) => (
-          <Card key={s.title} className="flex gap-3 p-4">
-            <s.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-            <div>
-              <p className="text-sm font-medium">{s.title}</p>
-              <p className="text-sm text-muted-foreground">{s.body}</p>
-            </div>
-          </Card>
-        ))}
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={toggleGuide}
+          aria-expanded={guideOpen}
+          aria-controls="enrollment-guide"
+          className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown className={cn("h-4 w-4 transition-transform", !guideOpen && "-rotate-90")} />
+          How enrollment works
+        </button>
+        {guideOpen && (
+          <div id="enrollment-guide" className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {STEPS.map((s) => (
+              <Card key={s.title} className="flex gap-3 p-4">
+                <s.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">{s.title}</p>
+                  <p className="text-sm text-muted-foreground">{s.body}</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -78,7 +125,7 @@ export default function EnrollmentPage() {
         <Card className="overflow-hidden">
           {isLoading ? (
             <TableSkeleton rows={3} cols={5} />
-          ) : !data?.items.length ? (
+          ) : !all.length ? (
             <EmptyState
               icon={KeyRound}
               title="No enrollment tokens"
@@ -86,56 +133,125 @@ export default function EnrollmentPage() {
               action={can("enrollment.write") ? <Button onClick={() => setCreating(true)}>Create token</Button> : undefined}
             />
           ) : (
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Token</TH>
-                  <TH>Status</TH>
-                  <TH className="hidden md:table-cell">Group</TH>
-                  <TH>Uses</TH>
-                  <TH className="hidden lg:table-cell">Expires</TH>
-                  <TH className="w-48" />
-                </TR>
-              </THead>
-              <TBody>
-                {data.items.map((t) => {
-                  const st = tokenState(t);
-                  return (
-                    <TR key={t.id}>
-                      <TD>
-                        <p className="font-medium">{t.description || "Untitled token"}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{t.token.slice(0, 12)}…</p>
-                      </TD>
-                      <TD>
-                        <Badge variant={st.variant}>{st.label}</Badge>
-                      </TD>
-                      <TD className="hidden md:table-cell">{t.group_name ?? <span className="text-muted-foreground">—</span>}</TD>
-                      <TD className="tabular">
-                        {t.uses}
-                        {t.max_uses != null && <span className="text-muted-foreground"> / {t.max_uses}</span>}
-                      </TD>
-                      <TD className="hidden text-muted-foreground lg:table-cell">
-                        {t.expires_at ? <span title={formatDateTime(t.expires_at)}>{relativeTime(t.expires_at)}</span> : "Never"}
-                      </TD>
-                      <TD>
-                        <div className="flex justify-end gap-2">
+            <>
+              <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
+                <Segmented
+                  value={view}
+                  onChange={setView}
+                  options={[
+                    { value: "active", label: `Active (${active.length})` },
+                    { value: "all", label: `All (${all.length})` },
+                  ]}
+                />
+                {view === "all" && <span className="text-xs text-muted-foreground">Includes revoked, expired and used-up tokens.</span>}
+              </div>
+              {!shown.length ? (
+                <EmptyState
+                  icon={KeyRound}
+                  title="No active tokens"
+                  description="Every token is revoked, expired or used up. Create a new one to enroll more devices."
+                  action={
+                    <Button variant="outline" onClick={() => setView("all")}>
+                      Show all tokens
+                    </Button>
+                  }
+                />
+              ) : (
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Token</TH>
+                      <TH className="hidden sm:table-cell">Status</TH>
+                      <TH className="hidden md:table-cell">Group</TH>
+                      <TH className="hidden sm:table-cell">Devices enrolled</TH>
+                      <TH className="hidden lg:table-cell">Last used</TH>
+                      <TH className="hidden lg:table-cell">Created</TH>
+                      <TH className="hidden lg:table-cell">Expires</TH>
+                      <TH className="hidden w-48 sm:table-cell" />
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {shown.map((t) => {
+                      const st = tokenState(t);
+                      // One set of buttons: in their own column from sm up, under the name on phones.
+                      const actions = (
+                        <>
                           {st.label === "Active" && (
                             <Button size="sm" variant="outline" onClick={() => setShowing(t)}>
                               Install commands
                             </Button>
                           )}
                           {can("enrollment.write") && !t.revoked && (
-                            <Button size="sm" variant="ghost" onClick={() => setRevoking(t)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => setRevoking(t)}
+                            >
                               Revoke
                             </Button>
                           )}
-                        </div>
-                      </TD>
-                    </TR>
-                  );
-                })}
-              </TBody>
-            </Table>
+                        </>
+                      );
+                      const count =
+                        t.uses > 0 ? (
+                          <Link
+                            href={`/devices?token=${encodeURIComponent(t.id)}`}
+                            className="font-medium text-primary hover:underline"
+                            title="See the devices enrolled with this token"
+                          >
+                            {t.uses}
+                          </Link>
+                        ) : (
+                          t.uses
+                        );
+                      return (
+                        <TR key={t.id}>
+                          <TD>
+                            <p className="font-medium">{t.description || "Untitled token"}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{t.token.slice(0, 12)}…</p>
+                            {/* Phones: status, count and buttons stack under the name instead of their own columns. */}
+                            <div className="mt-2 flex items-center gap-2 text-sm tabular sm:hidden">
+                              <Badge variant={st.variant}>{st.label}</Badge>
+                              <span>
+                                {count}
+                                <span className="text-muted-foreground">
+                                  {t.max_uses != null ? ` / ${t.max_uses} devices` : ` device${t.uses === 1 ? "" : "s"} · no limit`}
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-2 flex gap-2 sm:hidden">{actions}</div>
+                          </TD>
+                          <TD className="hidden sm:table-cell">
+                            <Badge variant={st.variant}>{st.label}</Badge>
+                          </TD>
+                          <TD className="hidden md:table-cell">{t.group_name ?? <span className="text-muted-foreground">—</span>}</TD>
+                          <TD className="tabular hidden whitespace-nowrap sm:table-cell">
+                            {count}
+                            <span className="text-muted-foreground">{t.max_uses != null ? ` / ${t.max_uses}` : " · no limit"}</span>
+                          </TD>
+                          <TD className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
+                            {t.last_used_at ? <span title={formatDateTime(t.last_used_at)}>{relativeTimeShort(t.last_used_at)}</span> : "Never"}
+                          </TD>
+                          <TD className="hidden whitespace-nowrap text-muted-foreground lg:table-cell">
+                            <span title={`${formatDateTime(t.created_at)}${t.created_by ? ` by ${t.created_by}` : ""}`}>
+                              {relativeTimeShort(t.created_at)}
+                            </span>
+                            {t.created_by && <p className="max-w-[12rem] truncate text-xs">{t.created_by}</p>}
+                          </TD>
+                          <TD className="hidden text-muted-foreground lg:table-cell">
+                            {t.expires_at ? <span title={formatDateTime(t.expires_at)}>{relativeTime(t.expires_at)}</span> : "Never"}
+                          </TD>
+                          <TD className="hidden sm:table-cell">
+                            <div className="flex justify-end gap-2">{actions}</div>
+                          </TD>
+                        </TR>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              )}
+            </>
           )}
         </Card>
       )}

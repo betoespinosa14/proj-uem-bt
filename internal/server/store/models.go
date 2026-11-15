@@ -57,6 +57,8 @@ type EnrollmentToken struct {
 	Uses        int        `json:"uses"`
 	Revoked     bool       `json:"revoked"`
 	CreatedAt   time.Time  `json:"created_at"`
+	CreatedBy   *string    `json:"created_by"`   // creator's email; nil if the user was deleted
+	LastUsedAt  *time.Time `json:"last_used_at"` // newest enrollment with this token
 }
 
 type Device struct {

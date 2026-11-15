@@ -7,6 +7,26 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.34 (2026-11-15): Enrollment tokens
+
+Server and console; agents stay on 2026.11.29. The server adds a database migration (00012).
+
+### Added
+- **Devices remember their enrollment token.** New enrollments record the token used. Devices enrolled earlier
+  are linked where the organization has only ever had one token (all 10 current devices).
+- **Devices enrolled** (was "Uses") shows `10 · no limit` or `3 / 25`. The count links to Devices filtered to that
+  token, with a removable "Enrolled with: …" chip.
+- **Last used** (newest enrollment) and **Created** (date and creator) columns on wide screens.
+- **Active / All** filter; Active is the default, so revoked, expired and used-up tokens stay out of the way.
+  Tokens can't be deleted, because each one is the record behind its audit entries and devices.
+
+### Changed
+- **Revoke** is red, like other destructive actions; the confirmation was already red.
+- **How enrollment works**: the three-step guide folds away once tokens exist. Open it with one click; the
+  browser remembers the choice.
+- **Phones**: each token's status, device count and buttons sit under its name, instead of the buttons being
+  pushed off the right edge.
+
 ## 2026.11.33 (2026-11-14): Dashboard on phones
 
 Console only; agents stay on 2026.11.29.

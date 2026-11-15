@@ -224,6 +224,7 @@ func TestEnrollmentTokenLimits(t *testing.T) {
 	if resp.StatusCode != 401 {
 		t.Fatalf("exhausted token: got %d, want 401", resp.StatusCode)
 	}
+	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "   "}, 400, nil)
 	var tok2 idResp
 	a.do("POST", "/api/enrollment-tokens", map[string]any{"description": "two"}, 201, &tok2)
 	a.do("DELETE", "/api/enrollment-tokens/"+tok2.ID, nil, 200, nil)

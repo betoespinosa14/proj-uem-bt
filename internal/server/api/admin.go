@@ -123,6 +123,12 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// Every token needs a name: it's how the token list and audit log tell them apart.
+	req.Description = strings.TrimSpace(req.Description)
+	if req.Description == "" {
+		fail(w, badRequest("description is required"))
+		return
+	}
 	if req.GroupID != nil && *req.GroupID == "" {
 		req.GroupID = nil
 	}
@@ -145,7 +151,7 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest("max_uses must be positive"))
 		return
 	}
-	t, err := s.store.CreateToken(r.Context(), orgOf(r), "enr_"+auth.RandomToken(24), strings.TrimSpace(req.Description),
+	t, err := s.store.CreateToken(r.Context(), orgOf(r), "enr_"+auth.RandomToken(24), req.Description,
 		req.GroupID, expires, req.MaxUses, who(r).User.ID)
 	if err != nil {
 		fail(w, err)

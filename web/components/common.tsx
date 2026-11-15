@@ -335,7 +335,7 @@ export function OsIcon({ os, className }: { os: string; className?: string }) {
   const Icon = os === "macos" ? Apple : os === "linux" ? Server : Monitor;
   return (
     <Icon
-      className={cn("h-4 w-4 text-muted-foreground", className)}
+      className={cn("h-4 w-4 shrink-0 text-muted-foreground", className)}
       aria-label={osLabel(os)}
     />
   );

@@ -181,7 +181,8 @@ export default function EnrollmentPage() {
                               Install commands
                             </Button>
                           )}
-                          {can("enrollment.write") && !t.revoked && (
+                          {/* Expired, used-up and revoked tokens can't enroll anything, so they get no buttons. */}
+                          {can("enrollment.write") && st.label === "Active" && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -220,6 +221,14 @@ export default function EnrollmentPage() {
                                 </span>
                               </span>
                             </div>
+                            <p className="mt-1 text-xs text-muted-foreground sm:hidden">
+                              {t.expires_at
+                                ? `${new Date(t.expires_at).getTime() < Date.now() ? "Expired" : "Expires"} ${relativeTime(t.expires_at)}`
+                                : "Never expires"}
+                              {" · "}
+                              {t.last_used_at ? `Last used ${relativeTimeShort(t.last_used_at)}` : "Never used"}
+                              {t.group_name && ` · Group: ${t.group_name}`}
+                            </p>
                             <div className="mt-2 flex gap-2 sm:hidden">{actions}</div>
                           </TD>
                           <TD className="hidden sm:table-cell">
@@ -289,7 +298,7 @@ function CreateToken({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const create = useMutation({
     mutationFn: () =>
       api.enrollment.create({
-        description,
+        description: description.trim(),
         group_id: groupId || undefined,
         expires_in_hours: expiry ? Number(expiry) : undefined,
         max_uses: maxUses ? Number(maxUses) : undefined,
@@ -310,14 +319,14 @@ function CreateToken({ onClose, onCreated }: { onClose: () => void; onCreated: (
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button loading={create.isPending} onClick={() => create.mutate()}>
+          <Button loading={create.isPending} disabled={!description.trim()} onClick={() => create.mutate()}>
             Create token
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Description" htmlFor="tdesc">
+        <Field label="Description" htmlFor="tdesc" hint="Required. Names the token in this list and the audit log.">
           <Input id="tdesc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. London office laptops" />
         </Field>
         <Field label="Enroll into group" htmlFor="tgroup">

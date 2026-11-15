@@ -7,6 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.35 (2026-11-15): Enrollment polish, Devices on phones
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Token buttons only on Active tokens.** Expired and used-up tokens no longer offer Revoke. They can't enroll
+  anything, so they now match revoked tokens.
+- **Every token needs a description.** Create token stays disabled until one is typed, and the server refuses a
+  blank one too ("description is required").
+- **Token details on phones.** Each token shows one line with when it expires, when it was last used and its
+  group, e.g. "Expires in 30 days · Never used · Group: Admin".
+- **Devices list on phones.** "Last seen" uses the short form ("8 h ago") with the exact time on hover. Long OS ·
+  IP lines end in "…" inside the card instead of being cut off at its edge. Device icons no longer shrink on
+  rows with long text.
+
 ## 2026.11.34 (2026-11-15): Enrollment tokens
 
 Server and console; agents stay on 2026.11.29. The server adds a database migration (00012).

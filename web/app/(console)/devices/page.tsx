@@ -8,7 +8,7 @@ import { ArrowUpCircle, ChevronDown, Monitor, Search, UserPlus, X } from "lucide
 import { agentOutdated, api, qk, type CommandType, type Device, type DeviceFilters } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan } from "@/lib/session";
-import { cn, RESOURCE_LIMITS, formatDateTime, formatPct, osLabel, relativeTime, relativeTimeShort } from "@/lib/utils";
+import { cn, RESOURCE_LIMITS, formatDateTime, formatPct, osLabel, relativeTimeShort } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox, Input } from "@/components/ui/input";
@@ -350,7 +350,8 @@ function DevicesView() {
                       </TD>
                     )}
                     <TD>
-                      <div className="flex max-w-[22rem] items-center gap-2.5">
+                      {/* On phones the cell can't be 22rem wide: cap it to the screen so long OS · IP lines end in "…" inside the card. */}
+                      <div className="flex max-w-[22rem] items-center gap-2.5 max-sm:max-w-[calc(100vw-6.75rem)]">
                         <OsIcon os={d.os_family} />
                         <div className="min-w-0">
                           <Link
@@ -368,7 +369,9 @@ function DevicesView() {
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:hidden">
                             <StatusBadge status={d.status} />
                             <ComplianceBadge state={d.compliance_state} />
-                            <span className="text-xs text-muted-foreground">{relativeTime(d.last_seen_at)}</span>
+                            <span className="text-xs text-muted-foreground" title={d.last_seen_at ? formatDateTime(d.last_seen_at) : undefined}>
+                              {relativeTimeShort(d.last_seen_at)}
+                            </span>
                           </div>
                         </div>
                       </div>

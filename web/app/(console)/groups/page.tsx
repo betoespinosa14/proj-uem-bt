@@ -75,6 +75,17 @@ export default function GroupsPage() {
                     <TD>
                       <p className="font-medium">{g.name}</p>
                       {g.description && <p className="text-xs text-muted-foreground">{g.description}</p>}
+                      {/* Below md the Blocked apps column is hidden; show the blocklist here instead. */}
+                      {g.blocked_apps.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1 md:hidden">
+                          <span className="text-xs text-muted-foreground">Blocked:</span>
+                          {g.blocked_apps.map((a) => (
+                            <Badge key={a} variant="danger" className="font-mono">
+                              {a}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </TD>
                     <TD>
                       {g.device_count > 0 ? (

@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.37 (2026-11-15): Groups on phones
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Blocked apps on phones and small tablets.** A group that blocks apps shows them under its description
+  ("Blocked: utorrent steam") where the Blocked apps column is hidden. Groups without a blocklist stay compact.
+- **Clear** sits at the right end of the Devices selection bar on phones when the bar wraps.
+
 ## 2026.11.36 (2026-11-15): Groups
 
 Console only; agents stay on 2026.11.29.

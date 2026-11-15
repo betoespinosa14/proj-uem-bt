@@ -294,7 +294,7 @@ function DevicesView() {
               <FolderTree /> Move to group
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+          <Button size="sm" variant="ghost" className="max-sm:ml-auto" onClick={() => setSelected(new Set())}>
             Clear
           </Button>
         </div>

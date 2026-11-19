@@ -238,6 +238,8 @@ export type UsageGroup = "app" | "app_user";
 export type FleetUsageRow = {
   device_id: string;
   device_name: string;
+  /** Account signed in on the device (shown on unused rows, which have no user). */
+  device_user: string;
   app: string;
   /** Empty for an installed app with no active use in the period. */
   user: string;

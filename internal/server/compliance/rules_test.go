@@ -221,6 +221,8 @@ func TestCategory(t *testing.T) {
 		{store.Software{Name: "procps", Publisher: "Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>", Source: "dpkg"}, CategorySystem},
 		{store.Software{Name: "zabbix-agent", Publisher: "Zabbix Packager <info@zabbix.com>", Source: "dpkg"}, CategoryThirdParty},
 		{store.Software{Name: "NewApp", Source: "unknown"}, CategoryThirdParty},
+		{store.Software{Name: "Calculator", Version: "Windows 11", Source: "unknown"}, CategorySystem}, // Parallels shortcut
+		{store.Software{Name: "Docs", Version: "", Source: "unknown"}, CategoryThirdParty},
 		{store.Software{Name: "Realtek High Definition Audio Driver", Publisher: "Realtek Semiconductor Corp.", Source: "registry"}, CategorySystem},
 		{store.Software{Name: "Realtek Card Reader", Publisher: "Realtek Semiconductor Corp.", Source: "registry"}, CategorySystem},
 		{store.Software{Name: "Marvell AQtion Network Adapter Drivers (64 bit)", Publisher: "Marvell", Source: "registry"}, CategorySystem},

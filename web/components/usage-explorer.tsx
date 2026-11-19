@@ -485,12 +485,17 @@ function ByAppTable({
           <TH className="text-right" title={ACTIVE_HINT}>
             {head("Active", "active")}
           </TH>
-          <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
-            {head("Open", "open")}
-          </TH>
-          <TH className="text-right" title={USERS_HINT}>
-            {head("Users", "users")}
-          </TH>
+          {/* Open and Users are always empty in the Not used list. */}
+          {!unused && (
+            <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
+              {head("Open", "open")}
+            </TH>
+          )}
+          {!unused && (
+            <TH className="text-right" title={USERS_HINT}>
+              {head("Users", "users")}
+            </TH>
+          )}
           {scoped ? (
             <TH title="Whether the app is in this device's installed software list">{head("Installed", "installed")}</TH>
           ) : (
@@ -506,8 +511,10 @@ function ByAppTable({
           <TR key={u.app}>
             <AppCell app={u.app} infra={infra} />
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
-            <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
-            <TD className="text-right tabular">{u.users}</TD>
+            {!unused && (
+              <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
+            )}
+            {!unused && <TD className="text-right tabular">{u.users}</TD>}
             {scoped ? (
               <TD className={u.installed_on ? "" : "text-muted-foreground"}>{u.installed_on ? "Yes" : "No"}</TD>
             ) : (
@@ -551,7 +558,7 @@ function ByUserTable({
         case "device":
           return u.device_name;
         case "user":
-          return u.user || null;
+          return (unused ? u.device_user : u.user) || null;
         case "active":
           return used ? (noActive ? u.minutes : u.active_seconds) : null;
         case "open":
@@ -563,7 +570,7 @@ function ByUserTable({
       }
     };
     return sortRows(items, value, sort.dir);
-  }, [items, sort, noActive]);
+  }, [items, sort, noActive, unused]);
   const head = (label: string, k: UserSortKey) => <SortButton label={label} k={k} sort={sort} onSort={onSort} />;
   return (
     <Table stickyHeader>
@@ -571,16 +578,21 @@ function ByUserTable({
         <TR>
           <TH>{head("App", "app")}</TH>
           {!scoped && <TH>{head("Device", "device")}</TH>}
-          <TH>{head("User", "user")}</TH>
+          {/* Nobody used the app on a Not used row, so this shows who signs in on the device instead. */}
+          <TH title={unused ? "The account signed in on the device" : undefined}>{head(unused ? "Device user" : "User", "user")}</TH>
           <TH className="text-right" title={ACTIVE_HINT}>
             {head("Active", "active")}
           </TH>
-          <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
-            {head("Open", "open")}
-          </TH>
-          <TH className="text-right" title="Days with keyboard or mouse use in this period">
-            {head("Days used", "days")}
-          </TH>
+          {!unused && (
+            <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
+              {head("Open", "open")}
+            </TH>
+          )}
+          {!unused && (
+            <TH className="text-right" title="Days with keyboard or mouse use in this period">
+              {head("Days used", "days")}
+            </TH>
+          )}
           <TH title={LAST_HINT}>{head("Last active", "last")}</TH>
         </TR>
       </THead>
@@ -595,10 +607,21 @@ function ByUserTable({
                 </Link>
               </TD>
             )}
-            <TD className={cn("whitespace-nowrap", !u.user && "text-muted-foreground")}>{u.user || "—"}</TD>
+            {u.user ? (
+              <TD className="whitespace-nowrap">{u.user}</TD>
+            ) : (
+              <TD
+                className="whitespace-nowrap text-muted-foreground"
+                title={u.device_user ? "Signed in on this device; didn't use this app in the period" : undefined}
+              >
+                {u.device_user || "—"}
+              </TD>
+            )}
             <ActiveCell seconds={u.active_seconds} used={!!u.user} noActive={noActive} />
-            <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
-            <TD className="whitespace-nowrap text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>
+            {!unused && (
+              <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
+            )}
+            {!unused && <TD className="whitespace-nowrap text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>}
             <LastUsed ts={u.last_used} />
           </TR>
         ))}

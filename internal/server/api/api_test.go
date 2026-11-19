@@ -988,6 +988,51 @@ func TestUsageTracking(t *testing.T) {
 	if err != nil || len(rows) != 2 || rows[1][0] != "Figma" {
 		t.Fatalf("reclaim csv with a helper component = %v, err = %v", rows, err)
 	}
+
+	// Parallels' shortcuts to Windows apps (source unknown, version
+	// "Windows 11") are Windows built-ins: out of "Not used" in both views,
+	// even next to the Mac's own app of the same name. Unused per-user rows
+	// carry the account signed in on the device.
+	send(protocol.TypeInventory, protocol.Inventory{OS: protocol.OSInfo{Family: "macos"}, Users: protocol.Users{LoggedIn: []string{"zed"}}, Software: []protocol.Software{
+		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Figma", Source: "identified_developer"},
+		{Name: "Calculator", Source: "apple"}, {Name: "Calculator", Version: "Windows 11", Source: "unknown"},
+		{Name: "Command Prompt", Version: "Windows 11", Source: "unknown"},
+	}})
+	poll("/api/usage?group=app&days=1&app=calculator", func() bool { return len(usage.Items) == 1 })
+	a.do("GET", "/api/usage?group=app&days=1&unused=true", nil, 200, &usage)
+	byApp := map[string]bool{}
+	for _, u := range usage.Items {
+		byApp[u.App] = true
+	}
+	var perUser struct {
+		Items []struct {
+			App        string
+			DeviceUser string `json:"device_user"`
+		}
+	}
+	a.do("GET", "/api/usage?days=1&unused=true", nil, 200, &perUser)
+	byUser := map[string]bool{}
+	for _, u := range perUser.Items {
+		byUser[u.App] = true
+		if u.DeviceUser != "zed" {
+			t.Fatalf("unused row without the device's user = %+v", perUser.Items)
+		}
+	}
+	if byApp["Calculator"] || byApp["Command Prompt"] || byUser["Calculator"] || byUser["Command Prompt"] || !byApp["Figma"] || len(byApp) != len(byUser) {
+		t.Fatalf("unused with Parallels shortcuts: by app %v, by user %v", byApp, byUser)
+	}
+
+	// The reclaim list flags infrastructure apps.
+	a.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "Figma"}, 204, nil)
+	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv?days=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) < 2 || rows[0][9] != "infrastructure" || rows[1][0] != "Figma" || rows[1][9] != "yes" {
+		t.Fatalf("reclaim csv with an infrastructure app = %v, err = %v", rows, err)
+	}
 }
 
 func TestPolicyAnnouncesServerURL(t *testing.T) {

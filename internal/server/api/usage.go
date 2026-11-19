@@ -186,7 +186,7 @@ func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
 		return nil, err
 	}
 	return markThirdParty(s, r, f, list, func(u *store.FleetUsageRow) (store.Software, *bool) {
-		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}, &u.ThirdParty
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source, Version: u.Version}, &u.ThirdParty
 	})
 }
 
@@ -200,7 +200,7 @@ func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
 		return nil, err
 	}
 	return markThirdParty(s, r, f, list, func(u *store.FleetAppRow) (store.Software, *bool) {
-		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}, &u.ThirdParty
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source, Version: u.Version}, &u.ThirdParty
 	})
 }
 
@@ -234,7 +234,7 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unused, sum.Totals.UnusedComponents = reviewable(unused, func(u store.FleetAppRow) store.Software {
-		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source, Version: u.Version}
 	})
 	sum.Totals.UnusedApps = len(unused)
 	// Same split for the idle ranking, so Terminal or System Settings left
@@ -313,6 +313,14 @@ func (s *Server) exportFleetUsage(w http.ResponseWriter, r *http.Request) {
 			activeHours(u.ActiveSeconds), hours(u.Minutes), strconv.Itoa(u.DaysUsed), timeOrEmpty(u.LastUsed), strconv.Itoa(days)})
 	}
 	cw.Flush()
+}
+
+// yesNo is a CSV flag procurement can filter on.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 func timeOrEmpty(t *time.Time) string {
@@ -402,18 +410,18 @@ func (s *Server) exportReclaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list, _ = reviewable(list, func(x store.ReclaimRow) store.Software {
-		return store.Software{Name: x.App, Publisher: x.Publisher, Source: x.Source}
+		return store.Software{Name: x.App, Publisher: x.Publisher, Source: x.Source, Version: x.Version}
 	})
 	s.record(r, "usage.export", "org", orgOf(r), map[string]any{"kind": "reclaim", "days": days, "app": f.App, "group_id": f.GroupID, "device_id": f.DeviceID, "count": len(list)})
 	cw := csvResponse(w, "license-reclaim")
-	_ = cw.Write([]string{"app", "publisher", "version", "device", "device_user", "device_last_seen", "last_used", "installed_on", "period_days"})
+	_ = cw.Write([]string{"app", "publisher", "version", "device", "device_user", "device_last_seen", "last_used", "installed_on", "period_days", "infrastructure"})
 	for _, x := range list {
 		last := "never"
 		if x.LastUsed != nil {
 			last = timeOrEmpty(x.LastUsed)
 		}
 		_ = cw.Write([]string{csvSafe(x.App), csvSafe(x.Publisher), csvSafe(x.Version), csvSafe(x.DeviceName), csvSafe(x.DeviceUser),
-			timeOrEmpty(x.DeviceSeen), last, csvSafe(x.InstallDate), strconv.Itoa(days)})
+			timeOrEmpty(x.DeviceSeen), last, csvSafe(x.InstallDate), strconv.Itoa(days), yesNo(x.Infrastructure)})
 	}
 	cw.Flush()
 }

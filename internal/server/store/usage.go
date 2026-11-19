@@ -116,6 +116,7 @@ type FleetUsageFilter struct {
 type FleetUsageRow struct {
 	DeviceID      string     `json:"device_id"`
 	DeviceName    string     `json:"device_name"`
+	DeviceUser    string     `json:"device_user"` // account signed in on the device
 	App           string     `json:"app"`
 	User          string     `json:"user"`
 	Installed     bool       `json:"installed"`
@@ -126,6 +127,7 @@ type FleetUsageRow struct {
 	ThirdParty    bool       `json:"third_party"` // set by the caller
 	Publisher     string     `json:"-"`
 	Source        string     `json:"-"`
+	Version       string     `json:"-"`
 }
 
 // FleetUsage joins installed software with usage so installed-but-unused
@@ -143,12 +145,15 @@ func (s *Store) FleetUsage(ctx context.Context, orgID string, f FleetUsageFilter
 			SELECT u.device_id, lower(u.app) AS app, max(`+lastActive+`) AS last_used
 			FROM app_usage u JOIN devices d ON d.id = u.device_id WHERE u.org_id = $1 GROUP BY u.device_id, lower(u.app)
 		), installed AS (
-			SELECT DISTINCT ON (device_id, lower(name)) device_id, name, publisher, source
+			-- One install per (device, app); one with a known source wins over an
+			-- "unknown" one (e.g. a Parallels shortcut next to the Mac's own app).
+			SELECT DISTINCT ON (device_id, lower(name)) device_id, name, publisher, source, version
 			FROM device_software WHERE org_id = $1
+			ORDER BY device_id, lower(name), source = 'unknown'
 		)
-		SELECT d.id, d.name, COALESCE(u.app, i.name), COALESCE(u.username, ''), i.name IS NOT NULL,
+		SELECT d.id, d.name, COALESCE(d.logged_in_user, ''), COALESCE(u.app, i.name), COALESCE(u.username, ''), i.name IS NOT NULL,
 			COALESCE(u.last_used, e.last_used), COALESCE(u.days, 0), COALESCE(u.minutes, 0), COALESCE(u.active, 0),
-			COALESCE(i.publisher, ''), COALESCE(i.source, '')
+			COALESCE(i.publisher, ''), COALESCE(i.source, ''), COALESCE(i.version, '')
 		FROM installed i
 		FULL OUTER JOIN used u ON u.device_id = i.device_id AND lower(u.app) = lower(i.name)
 		JOIN devices d ON d.id = COALESCE(i.device_id, u.device_id) AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
@@ -159,8 +164,8 @@ func (s *Store) FleetUsage(ctx context.Context, orgID string, f FleetUsageFilter
 		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (FleetUsageRow, error) {
 		var u FleetUsageRow
-		return u, r.Scan(&u.DeviceID, &u.DeviceName, &u.App, &u.User, &u.Installed,
-			&u.LastUsed, &u.DaysUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source)
+		return u, r.Scan(&u.DeviceID, &u.DeviceName, &u.DeviceUser, &u.App, &u.User, &u.Installed,
+			&u.LastUsed, &u.DaysUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source, &u.Version)
 	})
 }
 
@@ -178,6 +183,7 @@ type FleetAppRow struct {
 	ThirdParty    bool       `json:"third_party"` // set by the caller
 	Publisher     string     `json:"-"`
 	Source        string     `json:"-"`
+	Version       string     `json:"-"`
 }
 
 // FleetUsageByApp totals usage per app (case-insensitive name) across the
@@ -196,8 +202,12 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 				max(last_used) AS last_used, sum(minutes) AS minutes, sum(active) AS active
 			FROM per GROUP BY k
 		), installed AS (
+			-- Classified from one install, a known source first (not a mix of
+			-- several installs' fields).
 			SELECT lower(s.name) AS k, min(s.name) AS app, count(DISTINCT s.device_id) AS installed_on,
-				min(s.publisher) AS publisher, min(s.source) AS source
+				(array_agg(s.publisher ORDER BY s.source = 'unknown', s.source, s.publisher))[1] AS publisher,
+				(array_agg(s.source ORDER BY s.source = 'unknown', s.source, s.publisher))[1] AS source,
+				(array_agg(s.version ORDER BY s.source = 'unknown', s.source, s.publisher))[1] AS version
 			FROM device_software s JOIN devices d ON d.id = s.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
 			WHERE s.org_id = $1
 			GROUP BY lower(s.name)
@@ -207,7 +217,7 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 		)
 		SELECT COALESCE(u.app, i.app), COALESCE(u.users, 0), COALESCE(u.devices, 0), COALESCE(i.installed_on, 0),
 			COALESCE(u.last_used, e.last_used), COALESCE(u.minutes, 0), COALESCE(u.active, 0),
-			COALESCE(i.publisher, ''), COALESCE(i.source, '')
+			COALESCE(i.publisher, ''), COALESCE(i.source, ''), COALESCE(i.version, '')
 		FROM installed i
 		FULL OUTER JOIN used u ON u.k = i.k
 		LEFT JOIN ever e ON e.k = COALESCE(u.k, i.k)
@@ -217,7 +227,7 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (FleetAppRow, error) {
 		var u FleetAppRow
-		return u, r.Scan(&u.App, &u.Users, &u.Devices, &u.InstalledOn, &u.LastUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source)
+		return u, r.Scan(&u.App, &u.Users, &u.Devices, &u.InstalledOn, &u.LastUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source, &u.Version)
 	})
 }
 
@@ -508,12 +518,12 @@ func (s *Store) SoftwareInfo(ctx context.Context, orgID string, names []string) 
 		return out, nil
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT DISTINCT min(name), COALESCE(publisher, ''), COALESCE(source, '')
+		SELECT DISTINCT min(name), COALESCE(publisher, ''), COALESCE(source, ''), COALESCE(version, '')
 		FROM device_software WHERE org_id = $1 AND lower(name) IN (SELECT lower(x) FROM unnest($2::text[]) x)
-		GROUP BY lower(name), COALESCE(publisher, ''), COALESCE(source, '')`, orgID, names)
+		GROUP BY lower(name), COALESCE(publisher, ''), COALESCE(source, ''), COALESCE(version, '')`, orgID, names)
 	list, err := collect(rows, err, func(r pgx.Rows) (Software, error) {
 		var sw Software
-		return sw, r.Scan(&sw.Name, &sw.Publisher, &sw.Source)
+		return sw, r.Scan(&sw.Name, &sw.Publisher, &sw.Source, &sw.Version)
 	})
 	for _, sw := range list {
 		k := strings.ToLower(sw.Name)
@@ -562,6 +572,8 @@ type ReclaimRow struct {
 	DeviceUser  string
 	DeviceSeen  *time.Time
 	LastUsed    *time.Time // most recent active use ever; nil if never
+	// Infrastructure: marked as open by design in App usage, so not a reclaim candidate by default.
+	Infrastructure bool
 }
 
 // ReclaimList returns installed apps with no active use since a day, per device, on
@@ -570,14 +582,15 @@ func (s *Store) ReclaimList(ctx context.Context, orgID string, f FleetUsageFilte
 	rows, err := s.Pool.Query(ctx, `
 		SELECT DISTINCT ON (lower(sw.name), d.name, d.id) sw.name, COALESCE(sw.publisher, ''), COALESCE(sw.version, ''), COALESCE(sw.source, ''),
 			COALESCE(sw.install_date::text, ''), d.name, COALESCE(d.logged_in_user, ''), d.last_seen_at,
-			(SELECT max(`+lastActive+`) FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name))
+			(SELECT max(`+lastActive+`) FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name)),
+			EXISTS (SELECT 1 FROM usage_infrastructure_apps ia WHERE ia.org_id = $1 AND lower(ia.app) = lower(sw.name))
 		FROM device_software sw JOIN devices d ON d.id = sw.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		WHERE sw.org_id = $1 AND ($3 = '' OR lower(sw.name) LIKE '%' || lower($3) || '%')
 			AND NOT EXISTS (SELECT 1 FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name) AND u.day >= $2 AND ($6::date IS NULL OR u.day <= $6) AND `+activeRow+`)
-		ORDER BY lower(sw.name), d.name, d.id
+		ORDER BY lower(sw.name), d.name, d.id, sw.source = 'unknown'
 		LIMIT 50000`, orgID, f.Since, f.App, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (ReclaimRow, error) {
 		var x ReclaimRow
-		return x, r.Scan(&x.App, &x.Publisher, &x.Version, &x.Source, &x.InstallDate, &x.DeviceName, &x.DeviceUser, &x.DeviceSeen, &x.LastUsed)
+		return x, r.Scan(&x.App, &x.Publisher, &x.Version, &x.Source, &x.InstallDate, &x.DeviceName, &x.DeviceUser, &x.DeviceSeen, &x.LastUsed, &x.Infrastructure)
 	})
 }

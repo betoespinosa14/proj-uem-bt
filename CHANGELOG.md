@@ -7,6 +7,25 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.49 (2026-11-19): Windows shortcuts out of "Not used"; leaner Not used columns
+
+Server and console; agents stay on 2026.11.29.
+
+### Fixed
+- **Parallels shortcuts to Windows apps no longer count as installed software.** A Mac running Windows in Parallels
+  lists Mac shortcuts to the Windows apps (Calculator, Command Prompt, Paint, Task Manager…, version "Windows 11").
+  They were treated as third-party apps, so about 50 Windows built-ins sat in "Not used". They're now system
+  apps, like the Windows originals. Where an app is on a device twice (the Mac's own Calculator and the shortcut),
+  the real install decides, so "By app" and "By app and user" always agree on what counts.
+
+### Changed
+- **"Not used" hides columns that are always empty:** Open and Users in "By app", Open and Days used in "By app and
+  user". Active keeps the "Unused" badge.
+- **"By app and user" shows the device's user on Not used rows.** The column becomes "Device user": the account
+  signed in on that device, so you know whom to ask before reclaiming.
+- **The reclaim CSV has an "infrastructure" column** (yes/no), so apps marked as infrastructure aren't reclaimed
+  by mistake.
+
 ## 2026.11.48 (2026-11-19): "Not used" sorts by last active
 
 Console only; agents stay on 2026.11.29.

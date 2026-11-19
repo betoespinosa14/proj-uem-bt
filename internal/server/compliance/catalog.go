@@ -140,6 +140,13 @@ func Category(s store.Software) string {
 		if distro.MatchString(s.Publisher) {
 			return CategorySystem
 		}
+	case "unknown":
+		// Parallels' Mac shortcuts to the apps inside a Windows VM
+		// (Calculator, Command Prompt, version "Windows 11") are Windows
+		// built-ins, not software installed on the Mac.
+		if vmShortcut.MatchString(s.Version) {
+			return CategorySystem
+		}
 	}
 	return CategoryThirdParty // mac_app_store, identified_developer, unknown
 }

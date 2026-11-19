@@ -811,6 +811,37 @@ func TestUsageTracking(t *testing.T) {
 		len(sum.TopUsers) == 0 || len(sum.TopUsers[0].Groups) != 1 || sum.TopUsers[0].Groups[0] != "Sales" {
 		t.Fatalf("summary with a system app and a group = %+v / %+v", sum.IdleApps, sum.TopUsers)
 	}
+
+	// An app that is a Windows built-in on one install and user-installed on
+	// another (Edge) is third-party in the idle ranking, as in the background
+	// card. A Realtek driver is a system app.
+	send(protocol.TypeInventory, protocol.Inventory{OS: protocol.OSInfo{Family: "macos"}, Software: []protocol.Software{
+		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Contacts", Source: "apple"},
+		{Name: "Microsoft Edge", Publisher: "Microsoft Corporation", Source: "registry"},
+		{Name: "Microsoft Edge", Publisher: "Microsoft Corporation (UBF8T346G9)", Source: "identified_developer"},
+		{Name: "Realtek Audio Driver", Publisher: "Realtek Semiconductor Corp.", Source: "registry"},
+	}})
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: today, App: "Microsoft Edge", User: "dan", Minutes: 600, ActiveSeconds: 60, LastSeen: time.Now()},
+		{Date: today, App: "Realtek Audio Driver", User: "dan", Minutes: 500, ActiveSeconds: 1, LastSeen: time.Now()},
+	}})
+	idle := map[string]bool{}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary", nil, 200, &sum)
+		idle = map[string]bool{}
+		for _, x := range sum.IdleApps {
+			idle[x.App] = x.ThirdParty
+		}
+		if len(idle) == 4 {
+			break
+		}
+	}
+	if third, ok := idle["Microsoft Edge"]; !ok || !third {
+		t.Fatalf("Edge in idle apps = %+v", sum.IdleApps)
+	}
+	if third, ok := idle["Realtek Audio Driver"]; !ok || third {
+		t.Fatalf("Realtek driver in idle apps = %+v", sum.IdleApps)
+	}
 }
 
 func TestPolicyAnnouncesServerURL(t *testing.T) {

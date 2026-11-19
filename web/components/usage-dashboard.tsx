@@ -53,6 +53,7 @@ export function UsageDashboard({
           <CardHeader className="pb-2">
             <CardTitle>Active hours per day</CardTitle>
             <CardDescription>Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.</CardDescription>
+            <TrendSummary daily={data.daily} />
           </CardHeader>
           <CardContent>
             <Trend daily={data.daily} days={days} device={device} />
@@ -279,6 +280,34 @@ function Background({
   );
 }
 
+/**
+ * "Average 6h 14m a day · Busiest: Fri, Nov 13 (27h 15m)", over full days that
+ * reported: today is still in progress, and days before an agent was installed
+ * would pull the average down.
+ */
+function TrendSummary({ daily }: { daily: UsageSummary["daily"] }) {
+  const today = localDay(new Date());
+  const full = daily.filter((d) => d.day < today);
+  if (!full.length) return null;
+  const avg = full.reduce((n, d) => n + d.active_seconds, 0) / full.length;
+  const busiest = full.reduce((a, b) => (b.active_seconds > a.active_seconds ? b : a));
+  const [y, m, d] = busiest.day.split("-").map(Number);
+  const label = new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return (
+    <p
+      className="text-xs text-muted-foreground"
+      title={`Over ${full.length} full ${full.length === 1 ? "day" : "days"} with reports; today is left out until it ends.`}
+    >
+      Average <span className="font-semibold text-foreground tabular">{formatHours(avg)}</span> a day
+      {busiest.active_seconds > 0 && (
+        <>
+          {" · "}Busiest: {label} (<span className="tabular">{formatHours(busiest.active_seconds)}</span>)
+        </>
+      )}
+    </p>
+  );
+}
+
 function localDay(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -398,6 +427,7 @@ export function Trend({
             <XAxis dataKey="t" tickFormatter={fmt} fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} />
             <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={TREND_LEFT} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.5 }}
               content={({ active, label }) => {
                 const p = active ? byT.get(Number(label)) : undefined;
@@ -525,6 +555,7 @@ function WeekdayPattern({ daily, days }: { daily: UsageSummary["daily"]; days: n
             <XAxis dataKey="short" fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} />
             <YAxis fontSize={11} stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} ticks={axis.ticks} domain={[0, axis.top]} tickFormatter={axisLabel} width={44} />
             <Tooltip
+              isAnimationActive={false}
               cursor={{ fill: "hsl(var(--muted))", fillOpacity: 0.5 }}
               content={({ active, payload }) => {
                 const b = active ? (payload?.[0]?.payload as (typeof bars)[number] | undefined) : undefined;

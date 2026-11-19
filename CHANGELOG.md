@@ -7,6 +7,20 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.39 (2026-11-19): App usage, 7 days
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Hardware drivers count as system software:** Windows packages named "driver(s)" and Realtek packages (audio,
+  card reader, Bluetooth, network). They drop out of "Third-party only", the "Not used" review list and a device's
+  third-party software.
+- **One system/third-party rule across App usage:** an app is third-party if any install of it is. Microsoft Edge
+  (built into Windows, installed by hand on Macs) now ranks in Active vs open like it does in Top apps.
+- **Active hours per day** shows "Average 6h 38m a day · Busiest: Fri 13 Nov (27h 14m)", over full days with
+  reports (today is left out until it ends).
+- **Chart tooltips** appear at the hovered bar instead of sliding in from the left edge.
+
 ## 2026.11.38 (2026-11-19): App usage
 
 Server and console; agents stay on 2026.11.29.

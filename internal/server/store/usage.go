@@ -405,23 +405,25 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	return out, err
 }
 
-// SoftwareInfo returns the publisher and source each named app is installed
-// with on any device in the org, keyed by lowercased name.
-func (s *Store) SoftwareInfo(ctx context.Context, orgID string, names []string) (map[string]Software, error) {
-	out := map[string]Software{}
+// SoftwareInfo returns every publisher and source each named app is
+// installed with across the org, keyed by lowercased name: one app can be a
+// Windows built-in on one device and user-installed on a Mac.
+func (s *Store) SoftwareInfo(ctx context.Context, orgID string, names []string) (map[string][]Software, error) {
+	out := map[string][]Software{}
 	if len(names) == 0 {
 		return out, nil
 	}
 	rows, err := s.Pool.Query(ctx, `
-		SELECT DISTINCT ON (lower(name)) name, COALESCE(publisher, ''), COALESCE(source, '')
+		SELECT DISTINCT min(name), COALESCE(publisher, ''), COALESCE(source, '')
 		FROM device_software WHERE org_id = $1 AND lower(name) IN (SELECT lower(x) FROM unnest($2::text[]) x)
-		ORDER BY lower(name), name`, orgID, names)
+		GROUP BY lower(name), COALESCE(publisher, ''), COALESCE(source, '')`, orgID, names)
 	list, err := collect(rows, err, func(r pgx.Rows) (Software, error) {
 		var sw Software
 		return sw, r.Scan(&sw.Name, &sw.Publisher, &sw.Source)
 	})
 	for _, sw := range list {
-		out[strings.ToLower(sw.Name)] = sw
+		k := strings.ToLower(sw.Name)
+		out[k] = append(out[k], sw)
 	}
 	return out, err
 }

@@ -97,6 +97,13 @@ var distro = regexp.MustCompile(`(?i)ubuntu|canonical|debian|red ?hat|fedora|cen
 
 var microsoft = regexp.MustCompile(`(?i)^microsoft\b`)
 
+// Hardware drivers on Windows (audio, network, card readers, fingerprint
+// readers, database drivers) ship with the machine or another product; they
+// aren't apps anyone licenses or uses. Realtek lists some without "Driver"
+// in the name ("Realtek Card Reader").
+var driver = regexp.MustCompile(`(?i)\bdrivers?\b`)
+var hardwareVendor = regexp.MustCompile(`(?i)^realtek\b`)
+
 // Category splits apps into what ships with or comes from the OS vendor
 // (CategorySystem) and everything installed on top (CategoryThirdParty),
 // using only the source and publisher the agent reports.
@@ -105,6 +112,9 @@ func Category(s store.Software) string {
 	case "apple": // Apple-signed (macOS built-ins)
 		return CategorySystem
 	case "registry", "msstore": // msstore: Microsoft Store apps (Windows)
+		if driver.MatchString(s.Name) || hardwareVendor.MatchString(s.Publisher) {
+			return CategorySystem
+		}
 		if microsoft.MatchString(s.Publisher) && !msAddon.MatchString(s.Name) {
 			return CategorySystem
 		}

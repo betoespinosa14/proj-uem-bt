@@ -7,6 +7,16 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.48 (2026-11-19): "Not used" sorts by last active
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **The "Not used" list opens sorted by Last active, newest first,** in both "By app" and "By app and user". Apps
+  people stopped using recently come first, then those never used. Before, the arrow sat on Active, which is empty
+  for every row in this list, so the rows simply fell back to A–Z. Turning "Not used" off goes back to sorting by
+  Active.
+
 ## 2026.11.47 (2026-11-19): Helper components out of "Not used"
 
 Server and console; agents stay on 2026.11.29.

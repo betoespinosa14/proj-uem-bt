@@ -327,9 +327,18 @@ export function UsageExplorer({
                 </p>
               )}
               {group === "app" ? (
-                <ByAppTable items={byApp.data?.items ?? []} infra={infraSet} scoped={scoped} noActive={noActive} />
+                // Remount on "Not used" so each list starts on its own sort.
+                <ByAppTable key={String(unused)} items={byApp.data?.items ?? []} infra={infraSet} scoped={scoped} noActive={noActive} unused={unused} />
               ) : (
-                <ByUserTable items={byUser.data?.items ?? []} days={days} infra={infraSet} scoped={scoped} noActive={noActive} />
+                <ByUserTable
+                  key={String(unused)}
+                  items={byUser.data?.items ?? []}
+                  days={days}
+                  infra={infraSet}
+                  scoped={scoped}
+                  noActive={noActive}
+                  unused={unused}
+                />
               )}
               {count >= 10000 && <p className="p-3 text-center text-xs text-muted-foreground">Showing the first 10,000 rows. Search an app to narrow it down.</p>}
             </>
@@ -431,8 +440,22 @@ function ActiveCell({ seconds, used, noActive }: { seconds: number; used: boolea
 const APP_TEXT_KEYS = ["app"] as const;
 type AppSortKey = "app" | "active" | "open" | "users" | "installed" | "last";
 
-function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; infra: Set<string>; scoped: boolean; noActive: boolean }) {
-  const { sort, onSort } = useTableSort<AppSortKey>(APP_TEXT_KEYS, "active");
+// The "Not used" list has no active time to sort by, so it opens on Last
+// active, newest first: apps people stopped using recently, then "Never".
+function ByAppTable({
+  items,
+  infra,
+  scoped,
+  noActive,
+  unused,
+}: {
+  items: FleetAppRow[];
+  infra: Set<string>;
+  scoped: boolean;
+  noActive: boolean;
+  unused: boolean;
+}) {
+  const { sort, onSort } = useTableSort<AppSortKey>(APP_TEXT_KEYS, unused ? "last" : "active");
   const rows = useMemo(() => {
     const value = (u: FleetAppRow): SortValue => {
       const used = u.users > 0;
@@ -509,14 +532,16 @@ function ByUserTable({
   infra,
   scoped,
   noActive,
+  unused,
 }: {
   items: FleetUsageRow[];
   days: number;
   infra: Set<string>;
   scoped: boolean;
   noActive: boolean;
+  unused: boolean;
 }) {
-  const { sort, onSort } = useTableSort<UserSortKey>(USER_TEXT_KEYS, "active");
+  const { sort, onSort } = useTableSort<UserSortKey>(USER_TEXT_KEYS, unused ? "last" : "active");
   const rows = useMemo(() => {
     const value = (u: FleetUsageRow): SortValue => {
       const used = !!u.user;

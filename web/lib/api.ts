@@ -297,6 +297,8 @@ export type UsageSummary = {
     /** Rows in `background` that are third-party software rather than system processes. */
     background_third_party: number;
     unused_apps: number;
+    /** Third-party helper components (updaters, crash reporters, runtimes) left out of unused_apps. */
+    unused_components: number;
   };
   /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
   /** users: accounts with any active time that day (people who worked). */

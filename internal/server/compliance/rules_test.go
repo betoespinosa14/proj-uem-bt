@@ -238,3 +238,30 @@ func TestCategory(t *testing.T) {
 		}
 	}
 }
+
+func TestIsComponent(t *testing.T) {
+	helpers := []string{
+		"AAM Registration Notifier", "AAM Updates Notifier", "AAMLauncherUtil", "AASIapp", "ACR_16_1_1_32",
+		"Acrobat Notification Client", "Acrobat Update Helper", "Adobe Acrobat Updater", "Adobe Crash Processor",
+		"Adobe Crash Reporter", "Adobe Creative Cloud Diagnostics", "Adobe Desktop Service", "Adobe Genuine Service",
+		"adobe_lichelper", "adobe_licutil", "AcroLicApp", "UnifiedPluginInstallerAgent", "AdobeCleanUpUtility", "Creative Cloud Helper", "Creative Cloud Installer",
+		"Creative Cloud Uninstaller", "GoogleUpdater", "Microsoft AutoUpdate", "Mozilla Maintenance Service",
+		"Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.44.35211", "Microsoft Windows Desktop Runtime - 8.0.33 (x64)",
+		"Microsoft Edge WebView2 Runtime", "Freshservice Discovery Agent", "Lenovo Vantage Service", "Microsoft Intune Agent",
+	}
+	for _, n := range helpers {
+		if !IsComponent(store.Software{Name: n}) {
+			t.Errorf("IsComponent(%q) = false, want true", n)
+		}
+	}
+	apps := []string{
+		"Adobe Acrobat", "Adobe Acrobat (64-bit)", "Adobe Creative Cloud", "Adobe Photoshop 2026", "Adobe Premiere Pro 2025",
+		"7-Zip 24.09 (x64 edition)", "Acrobat Distiller", "Microsoft Teams", "AnyDesk", "TeamViewer 12", "Disk Utility",
+		"Lenovo Vantage", "Agent Ransack", "Customer Service Desk", "Grammarly for Windows", "Zoom Workplace",
+	}
+	for _, n := range apps {
+		if IsComponent(store.Software{Name: n}) {
+			t.Errorf("IsComponent(%q) = true, want false", n)
+		}
+	}
+}

@@ -104,6 +104,24 @@ var microsoft = regexp.MustCompile(`(?i)^microsoft\b`)
 var driver = regexp.MustCompile(`(?i)\bdrivers?\b`)
 var hardwareVendor = regexp.MustCompile(`(?i)^realtek\b`)
 
+// component matches helper pieces that come with an app or the OS but that
+// no one opens or licenses on their own: updaters, notifiers, crash
+// reporters, installers, runtimes and redistributables, licensing helpers,
+// and items named as a background service or agent. Adobe ships several
+// under internal names (AAM*, ACR_*, AASI*).
+var component = regexp.MustCompile(`(?i)` +
+	`updaters?\b|\bauto ?update\b|\bupdate (helper|service|notifier)\b|\bnotifier\b|\bnotification client\b|` +
+	`\bcrash ?(reporter|processor|handler|pad)\b|\bdiagnostics?\b|installer(agent)?\b|` +
+	`\bredistributables?\b|\bruntime\b|\bwebview2\b|` +
+	`\blicens(e|ing) ?helper\b|lic(app|helper|util)\b|\bgenuine service\b|clean ?up ?utility\b|` +
+	`\bmaintenance service\b|\bhelper\b|\b(service|agent)$|` +
+	`^(aam|acr_|aasi)`)
+
+// IsComponent reports whether an installed app is a helper component rather
+// than an app someone would open: "not used" is meaningless for those, so
+// they're left out of license reviews.
+func IsComponent(s store.Software) bool { return component.MatchString(s.Name) }
+
 // Category splits apps into what ships with or comes from the OS vendor
 // (CategorySystem) and everything installed on top (CategoryThirdParty),
 // using only the source and publisher the agent reports.

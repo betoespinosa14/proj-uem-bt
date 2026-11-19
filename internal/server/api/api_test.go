@@ -959,6 +959,35 @@ func TestUsageTracking(t *testing.T) {
 	poll("/api/usage?group=app&days=1&app=zoom", func() bool {
 		return len(usage.Items) == 1 && usage.Items[0].Users == 1 && usage.Items[0].LastUsed != nil
 	})
+
+	// Helper components (an updater) are left out of "Not used", its count
+	// and the reclaim list, and counted apart; a real app (Figma) stays.
+	send(protocol.TypeInventory, protocol.Inventory{OS: protocol.OSInfo{Family: "linux"}, Software: []protocol.Software{
+		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Contacts", Source: "apple"},
+		{Name: "Adobe Update Helper", Source: "identified_developer"}, {Name: "Figma", Source: "identified_developer"},
+	}})
+	poll("/api/usage?group=app&days=1&unused=true", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].App == "Figma"
+	})
+	var comp struct {
+		Totals struct {
+			UnusedApps       int `json:"unused_apps"`
+			UnusedComponents int `json:"unused_components"`
+		}
+	}
+	a.do("GET", "/api/usage/summary?days=1", nil, 200, &comp)
+	if comp.Totals.UnusedApps != 1 || comp.Totals.UnusedComponents != 1 {
+		t.Fatalf("summary with a helper component = %+v", comp.Totals)
+	}
+	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv?days=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = csv.NewReader(resp.Body).ReadAll()
+	resp.Body.Close()
+	if err != nil || len(rows) != 2 || rows[1][0] != "Figma" {
+		t.Fatalf("reclaim csv with a helper component = %v, err = %v", rows, err)
+	}
 }
 
 func TestPolicyAnnouncesServerURL(t *testing.T) {

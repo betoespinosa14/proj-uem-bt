@@ -81,16 +81,24 @@ func (s *Server) exportDeviceUsage(w http.ResponseWriter, r *http.Request) {
 	cw.Flush()
 }
 
-// thirdParty keeps only third-party apps: built-in OS components aren't
-// licensed products, so they don't belong in an "unused" report.
-func thirdParty[T any](list []T, sw func(T) store.Software) []T {
-	out := list[:0]
+// reviewable keeps the apps a license review is about: third-party apps
+// (built-in OS components aren't licensed products), minus helper components
+// such as updaters, crash reporters and runtimes, which no one opens. hidden
+// counts the third-party helpers left out.
+func reviewable[T any](list []T, sw func(T) store.Software) (out []T, hidden int) {
+	out = list[:0]
 	for _, u := range list {
-		if compliance.Category(sw(u)) == compliance.CategoryThirdParty {
-			out = append(out, u)
+		x := sw(u)
+		if compliance.Category(x) != compliance.CategoryThirdParty {
+			continue
 		}
+		if compliance.IsComponent(x) {
+			hidden++
+			continue
+		}
+		out = append(out, u)
 	}
-	return out
+	return out, hidden
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -140,7 +148,7 @@ func (s *Server) thirdPartyApps(r *http.Request, names []string) (map[string]boo
 // third-party only already.
 func markThirdParty[T any](s *Server, r *http.Request, f store.FleetUsageFilter, list []T, row func(*T) (store.Software, *bool)) ([]T, error) {
 	if f.Unused {
-		list = thirdParty(list, func(u T) store.Software { sw, _ := row(&u); return sw })
+		list, _ = reviewable(list, func(u T) store.Software { sw, _ := row(&u); return sw })
 		for i := range list {
 			_, flag := row(&list[i])
 			*flag = true
@@ -218,16 +226,17 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Same rule as the table's "Not used" view: installed third-party apps
-	// with no active use in the period.
+	// with no active use in the period, not counting helper components.
 	f.Unused = true
 	unused, err := s.store.FleetUsageByApp(r.Context(), orgOf(r), f)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	sum.Totals.UnusedApps = len(thirdParty(unused, func(u store.FleetAppRow) store.Software {
+	unused, sum.Totals.UnusedComponents = reviewable(unused, func(u store.FleetAppRow) store.Software {
 		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
-	}))
+	})
+	sum.Totals.UnusedApps = len(unused)
 	// Same split for the idle ranking, so Terminal or System Settings left
 	// open don't head a license audit. Like the background card, an app is
 	// third-party if any install of it is (Edge: built into Windows, installed
@@ -392,7 +401,7 @@ func (s *Server) exportReclaim(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	list = thirdParty(list, func(x store.ReclaimRow) store.Software {
+	list, _ = reviewable(list, func(x store.ReclaimRow) store.Software {
 		return store.Software{Name: x.App, Publisher: x.Publisher, Source: x.Source}
 	})
 	s.record(r, "usage.export", "org", orgOf(r), map[string]any{"kind": "reclaim", "days": days, "app": f.App, "group_id": f.GroupID, "device_id": f.DeviceID, "count": len(list)})

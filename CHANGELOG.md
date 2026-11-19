@@ -7,6 +7,20 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.47 (2026-11-19): Helper components out of "Not used"
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **"Not used" lists apps, not their helpers.** Updaters, notifiers, crash reporters, installers and uninstallers,
+  runtimes and redistributables, licensing helpers and background services or agents (Adobe's AAM, ACR and AASI
+  items, Acrobat Update Helper, GoogleUpdater, Microsoft AutoUpdate and the like) can never be used with keyboard
+  or mouse, so they sat in the list for good. They're now left out of the list, the "Not used" card and the reclaim
+  export. A note above the list says how many are hidden. Real apps such as Acrobat, Creative Cloud and 7-Zip stay.
+- **"Third-party only" reads as on while "Not used" is shown:** full colour instead of faded, with "always on for
+  Not used" next to it. Your own choice comes back when "Not used" is turned off.
+- More space between the Active and Open columns on phones.
+
 ## 2026.11.46 (2026-11-19): The Table counts real use
 
 Server and console; agents stay on 2026.11.29. The server adds a column to app usage on start-up.

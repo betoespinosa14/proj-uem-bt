@@ -280,6 +280,7 @@ type UsageTotals struct {
 	BackgroundApps       int `json:"background_apps"`
 	BackgroundThirdParty int `json:"background_third_party"` // third-party rows in Background; set by the caller
 	UnusedApps           int `json:"unused_apps"`            // set by the caller (third-party apps only)
+	UnusedComponents     int `json:"unused_components"`      // third-party helper components left out of UnusedApps
 }
 
 type UsageDay struct {

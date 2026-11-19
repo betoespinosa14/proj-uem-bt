@@ -177,7 +177,7 @@ export function UsageExplorer({
             tone: totals.unused_apps > 0 ? "warning" : "default",
             onClick: showUnused,
             cta: "Review list",
-            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
+            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Helper components such as updaters and crash reporters aren't counted. Click to see the list.`,
           },
         ]
       : undefined;
@@ -260,11 +260,13 @@ export function UsageExplorer({
         )}
         {view === "table" && (
           <label
-            className={cn("flex items-center gap-2 text-sm", unused && "text-muted-foreground")}
+            className="flex items-center gap-2 text-sm"
             title={unused ? "The “Not used” list is third-party apps only" : "Hide apps that come with the operating system and hardware drivers"}
           >
-            <Switch checked={thirdOnly || unused} disabled={unused} onCheckedChange={setThirdOnly} aria-label="Third-party apps only" />
+            {/* Locked on (full colour, not faded) while the Not used list is shown; the earlier choice returns after. */}
+            <Switch checked={thirdOnly || unused} disabled={unused} onCheckedChange={setThirdOnly} aria-label="Third-party apps only" className="disabled:opacity-100" />
             Third-party only
+            {unused && <span className="text-xs text-muted-foreground">always on for Not used</span>}
           </label>
         )}
       </div>
@@ -318,6 +320,12 @@ export function UsageExplorer({
             />
           ) : (
             <>
+              {unused && (summary.data?.totals.unused_components ?? 0) > 0 && (
+                <p className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
+                  Hiding {summary.data!.totals.unused_components} helper {summary.data!.totals.unused_components === 1 ? "component" : "components"} (updaters,
+                  crash reporters, runtimes) that no one opens. They aren&apos;t in the count or the reclaim export either.
+                </p>
+              )}
               {group === "app" ? (
                 <ByAppTable items={byApp.data?.items ?? []} infra={infraSet} scoped={scoped} noActive={noActive} />
               ) : (
@@ -454,7 +462,7 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
           <TH className="text-right" title={ACTIVE_HINT}>
             {head("Active", "active")}
           </TH>
-          <TH className="text-right" title={OPEN_HINT}>
+          <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
             {head("Open", "open")}
           </TH>
           <TH className="text-right" title={USERS_HINT}>
@@ -475,7 +483,7 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
           <TR key={u.app}>
             <AppCell app={u.app} infra={infra} />
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
-            <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
+            <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
             <TD className="text-right tabular">{u.users}</TD>
             {scoped ? (
               <TD className={u.installed_on ? "" : "text-muted-foreground"}>{u.installed_on ? "Yes" : "No"}</TD>
@@ -542,7 +550,7 @@ function ByUserTable({
           <TH className="text-right" title={ACTIVE_HINT}>
             {head("Active", "active")}
           </TH>
-          <TH className="text-right" title={OPEN_HINT}>
+          <TH className="text-right max-sm:pl-6" title={OPEN_HINT}>
             {head("Open", "open")}
           </TH>
           <TH className="text-right" title="Days with keyboard or mouse use in this period">
@@ -564,7 +572,7 @@ function ByUserTable({
             )}
             <TD className={cn("whitespace-nowrap", !u.user && "text-muted-foreground")}>{u.user || "—"}</TD>
             <ActiveCell seconds={u.active_seconds} used={!!u.user} noActive={noActive} />
-            <TD className="whitespace-nowrap text-right tabular text-muted-foreground">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
+            <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.user ? formatHours(u.minutes * 60) : "—"}</TD>
             <TD className="whitespace-nowrap text-right tabular">{u.user ? `${u.days_used} / ${days}` : "—"}</TD>
             <LastUsed ts={u.last_used} />
           </TR>

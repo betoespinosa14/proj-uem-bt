@@ -592,7 +592,9 @@ func TestUsageTracking(t *testing.T) {
 	}})
 	type stat struct {
 		DeviceNames                   []string `json:"device_names"`
+		Groups                        []string
 		App, User, Employee           string
+		ThirdParty                    bool `json:"third_party"`
 		ActiveSeconds                 int `json:"active_seconds"`
 		Minutes, Users, Apps, Devices int
 	}
@@ -643,6 +645,9 @@ func TestUsageTracking(t *testing.T) {
 		len(sum.Background) != 2 || sum.Background[0].App != "Dropbox" || sum.Background[0].User != "carl" || sum.Background[0].Minutes != 60 ||
 		!sum.Background[0].ThirdParty || sum.Background[1].App != "Contacts" || sum.Background[1].ThirdParty {
 		t.Fatalf("summary = %+v", sum)
+	}
+	if !sum.IdleApps[0].ThirdParty || len(sum.TopUsers[0].Groups) != 0 {
+		t.Fatalf("idle third_party / top user groups = %+v / %+v", sum.IdleApps, sum.TopUsers)
 	}
 	if sum.TopUsers[0].Employee != "" {
 		t.Fatalf("employee before one is set = %q", sum.TopUsers[0].Employee)
@@ -786,6 +791,25 @@ func TestUsageTracking(t *testing.T) {
 	a.do("PATCH", "/api/org", map[string]any{"idle_threshold_sec": 300}, 200, &org2)
 	if org2.IdleThresholdSec != 300 {
 		t.Fatalf("idle_threshold_sec = %d", org2.IdleThresholdSec)
+	}
+	// A macOS built-in left open after a few seconds of use is ranked with
+	// third_party false, so the console can hide it; top users carry the
+	// group of their device.
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: today, App: "Contacts", User: "dan", Minutes: 300, ActiveSeconds: 5, LastSeen: time.Now()},
+	}})
+	var sales idResp
+	a.do("POST", "/api/groups", map[string]any{"name": "Sales"}, 201, &sales)
+	a.do("PATCH", "/api/devices/"+dev.DeviceID, map[string]any{"group_id": sales.ID}, 200, nil)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary", nil, 200, &sum)
+		if len(sum.IdleApps) == 2 {
+			break
+		}
+	}
+	if len(sum.IdleApps) != 2 || sum.IdleApps[0].App != "Contacts" || sum.IdleApps[0].ThirdParty || !sum.IdleApps[1].ThirdParty ||
+		len(sum.TopUsers) == 0 || len(sum.TopUsers[0].Groups) != 1 || sum.TopUsers[0].Groups[0] != "Sales" {
+		t.Fatalf("summary with a system app and a group = %+v / %+v", sum.IdleApps, sum.TopUsers)
 	}
 }
 

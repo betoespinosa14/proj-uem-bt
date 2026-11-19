@@ -157,6 +157,26 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 	sum.Totals.UnusedApps = len(thirdParty(unused, func(u store.FleetAppRow) store.Software {
 		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
 	}))
+	// Same split for the idle ranking, so Terminal or System Settings left
+	// open don't head a license audit. An app missing from the inventory
+	// counts as third-party, like a background row without a match.
+	names := make([]string, len(sum.IdleApps))
+	for i, a := range sum.IdleApps {
+		names[i] = a.App
+	}
+	info, err := s.store.SoftwareInfo(r.Context(), orgOf(r), names)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	for i := range sum.IdleApps {
+		a := &sum.IdleApps[i]
+		sw, ok := info[strings.ToLower(a.App)]
+		if !ok {
+			sw = store.Software{Name: a.App}
+		}
+		a.ThirdParty = compliance.Category(sw) == compliance.CategoryThirdParty
+	}
 	// System processes (bash, systemd, OS built-ins) vs vendor software, by
 	// the same rule the "Not used" list uses.
 	for i := range sum.Background {

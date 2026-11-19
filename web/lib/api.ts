@@ -265,7 +265,8 @@ export type FleetAppRow = {
 export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean; group_id?: string; device_id?: string };
 type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "group_id" | "device_id">;
 
-export type UsageAppStat = { app: string; active_seconds: number; minutes: number; users: number; devices: number };
+/** third_party is set on idle_apps only: false for OS built-ins (Terminal, System Settings). */
+export type UsageAppStat = { app: string; active_seconds: number; minutes: number; users: number; devices: number; third_party?: boolean };
 /**
  * The App usage dashboard. Use is split per (device, app, user): foreground if
  * someone was active in it at least once in the period, background-only
@@ -287,9 +288,23 @@ export type UsageSummary = {
   /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
   daily: { day: string; active_seconds: number; minutes: number; devices: number; apps: number }[];
   top_apps: UsageAppStat[];
+  /** The most idle apps (up to 40, so system ones can be hidden and ten still shown). */
   idle_apps: UsageAppStat[];
-  /** employee: the employee name of the device the account was most active on ("" if none), shown in place of the account. */
-  top_users: { user: string; employee: string; active_seconds: number; open_minutes: number; apps: number; devices: number; device_names: string[] }[];
+  /**
+   * employee: the employee name of the device the account was most active on ("" if none), shown in place of the account.
+   * groups: the group names of the devices used (sorted; empty when none are in a group).
+   */
+  top_users: {
+    user: string;
+    employee: string;
+    active_seconds: number;
+    open_minutes: number;
+    apps: number;
+    devices: number;
+    device_names: string[];
+    groups: string[];
+  }[];
+  /** Every background entry (one app on one device for one account), up to 500. */
   background: { app: string; device_id: string; device_name: string; user: string; minutes: number; third_party: boolean }[];
   /** Apps marked as infrastructure: open by design, left out of open totals and idle ranking. */
   infrastructure: UsageAppStat[];

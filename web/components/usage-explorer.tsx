@@ -134,13 +134,13 @@ export function UsageExplorer({
           { label: "Apps used", value: totals.apps_used, icon: AppWindow },
           { label: scoped ? "Users" : "Active users", value: totals.active_users, icon: Users },
           {
-            label: "Installed, not used",
+            label: period === "1" ? "Not used today" : `Not used in ${PERIODS[period]}`,
             value: totals.unused_apps,
             icon: PackageX,
             tone: totals.unused_apps > 0 ? "warning" : "default",
             onClick: showUnused,
             cta: "Review list",
-            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used in this period. Click to see the list.`,
+            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not opened ${period === "1" ? "today" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
           },
         ]
       : undefined;

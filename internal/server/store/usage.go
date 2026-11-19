@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -269,6 +270,9 @@ type UsageAppStat struct {
 	Minutes       int    `json:"minutes"`
 	Users         int    `json:"users"`
 	Devices       int    `json:"devices"`
+	// ThirdParty is set on idle_apps by the caller (from SoftwareInfo), so
+	// OS built-ins like Terminal can be hidden from the idle ranking.
+	ThirdParty bool `json:"third_party"`
 }
 
 type UsageUser struct {
@@ -278,6 +282,7 @@ type UsageUser struct {
 	Apps          int      `json:"apps"`
 	Devices       int      `json:"devices"`
 	DeviceNames   []string `json:"device_names"` // sorted
+	Groups        []string `json:"groups"`       // sorted group names of those devices
 	// Employee is the employee name of the device where this account was
 	// most active ("" if that device has none), for display in place of the account.
 	Employee string `json:"employee"`
@@ -300,8 +305,9 @@ type UsageBackground struct {
 // an admin marked the app as infrastructure.
 const usageRows = `
 	WITH scoped AS (
-		SELECT u.*, d.name AS device_name, d.employee_name
+		SELECT u.*, d.name AS device_name, d.employee_name, g.name AS group_name
 		FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
+		LEFT JOIN device_groups g ON g.id = d.group_id
 		WHERE u.org_id = $1 AND u.day >= $2 AND ($3 = '' OR lower(u.app) LIKE '%' || lower($3) || '%')
 	), u AS (
 		SELECT s.*, sum(s.active_seconds) OVER (PARTITION BY s.device_id, lower(s.app), s.username) > 0 AS fg,
@@ -310,7 +316,12 @@ const usageRows = `
 	)`
 
 const usageTopN = 10
-const usageBackgroundN = 40
+
+// usageIdleN leaves room for the console to hide system apps and still show
+// ten; usageBackgroundN returns every background entry, so the card's counts
+// add up to what it lists.
+const usageIdleN = 40
+const usageBackgroundN = 500
 
 // UsageSummary totals usage for the dashboard view.
 func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilter) (UsageSummary, error) {
@@ -355,7 +366,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	// Most idle first: open the longest while not being used. Infrastructure
 	// apps are open by design, so they are listed on their own instead.
 	idle := "greatest(sum(minutes) * 60 - sum(active_seconds), 0) DESC"
-	if out.IdleApps, err = apps("fg AND NOT infra", idle, usageTopN); err != nil {
+	if out.IdleApps, err = apps("fg AND NOT infra", idle, usageIdleN); err != nil {
 		return out, err
 	}
 	if out.Infrastructure, err = apps("infra", "sum(minutes) DESC", 100); err != nil {
@@ -365,11 +376,12 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	rows, err = s.Pool.Query(ctx, usageRows+`
 		SELECT username, sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE NOT infra), 0), count(DISTINCT lower(app)), count(DISTINCT device_id),
 			array_agg(DISTINCT device_name ORDER BY device_name),
+			array_remove(array_agg(DISTINCT group_name ORDER BY group_name), NULL),
 			COALESCE((array_agg(employee_name ORDER BY active_seconds DESC) FILTER (WHERE employee_name <> ''))[1], '')
 		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $6`, orgID, since, app, group, dev, usageTopN)
 	if out.TopUsers, err = collect(rows, err, func(r pgx.Rows) (UsageUser, error) {
 		var u UsageUser
-		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames, &u.Employee)
+		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames, &u.Groups, &u.Employee)
 	}); err != nil {
 		return out, err
 	}
@@ -390,6 +402,27 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 		var b UsageBackground
 		return b, r.Scan(&b.App, &b.DeviceID, &b.DeviceName, &b.User, &b.Minutes, &b.Publisher, &b.Source)
 	})
+	return out, err
+}
+
+// SoftwareInfo returns the publisher and source each named app is installed
+// with on any device in the org, keyed by lowercased name.
+func (s *Store) SoftwareInfo(ctx context.Context, orgID string, names []string) (map[string]Software, error) {
+	out := map[string]Software{}
+	if len(names) == 0 {
+		return out, nil
+	}
+	rows, err := s.Pool.Query(ctx, `
+		SELECT DISTINCT ON (lower(name)) name, COALESCE(publisher, ''), COALESCE(source, '')
+		FROM device_software WHERE org_id = $1 AND lower(name) IN (SELECT lower(x) FROM unnest($2::text[]) x)
+		ORDER BY lower(name), name`, orgID, names)
+	list, err := collect(rows, err, func(r pgx.Rows) (Software, error) {
+		var sw Software
+		return sw, r.Scan(&sw.Name, &sw.Publisher, &sw.Source)
+	})
+	for _, sw := range list {
+		out[strings.ToLower(sw.Name)] = sw
+	}
 	return out, err
 }
 

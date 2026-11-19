@@ -7,6 +7,22 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.38 (2026-11-19): App usage
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Active vs open has a "Third-party only" switch,** on by default, like the background card. OS built-ins left
+  open (Terminal, System Settings) are hidden from the idle ranking, with a "Hiding N system apps" note; switch it
+  off to see them. Tiny shares read "<0.1% active" instead of "0.0%".
+- **Top users** shows the device's group after the app count ("6 apps · Admin") instead of the device name, which
+  repeated the employee name. Device names are still in the hover text.
+- **Running in the background, never used** lists every entry, and its counts add up: "49 apps (38 third-party,
+  11 system)", "Hiding the 11 system apps", "Show all 54 rows" (an app has one row per device).
+- **The "not used" card names the period:** "Not used today", "Not used in 7 days", and so on.
+- **Phones:** in Top apps, Top users and Active vs open, the bar sits under the app name, so names aren't cut
+  off. Background rows show the device and account on a line under the app.
+
 ## 2026.11.37 (2026-11-15): Groups on phones
 
 Console only; agents stay on 2026.11.29.

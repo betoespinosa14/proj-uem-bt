@@ -41,6 +41,11 @@ export function UsageDashboard({
   // average needs several weeks.
   const showTrend = days > 1;
   const showWeekdays = device && days >= 30;
+  // Third-party only by default, like the background card: OS built-ins left
+  // open (Terminal, System Settings) aren't licenses worth auditing.
+  const [idleThirdOnly, setIdleThirdOnly] = useState(true);
+  const idleSystem = data.idle_apps.filter((a) => a.minutes > 0 && a.third_party === false);
+  const idleApps = (idleThirdOnly ? data.idle_apps.filter((a) => a.third_party !== false) : data.idle_apps).slice(0, IDLE_SHOWN);
   return (
     <div className="space-y-5">
       {showTrend && (
@@ -97,9 +102,7 @@ export function UsageDashboard({
                   key: u.user,
                   label: userLabel(u, data.top_users),
                   value: u.active_seconds,
-                  note: device
-                    ? `${u.apps} ${u.apps === 1 ? "app" : "apps"}`
-                    : `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${u.devices > 2 ? `${u.devices} devices` : u.device_names.join(", ")}`,
+                  note: `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${userWhere(u)}`,
                   hint: `Signed in as ${u.user} on ${u.device_names.join(", ")}`,
                 }))}
               />
@@ -109,7 +112,7 @@ export function UsageDashboard({
       </div>
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
+        <CardHeader className="flex-row items-start justify-between gap-4 pb-2 max-sm:flex-col max-sm:gap-3">
           <div className="space-y-1">
             <CardTitle>Active vs open</CardTitle>
             <CardDescription>
@@ -117,13 +120,33 @@ export function UsageDashboard({
               listed separately below.
             </CardDescription>
           </div>
-          <span className="flex shrink-0 items-center gap-3 pt-0.5 text-xs text-muted-foreground">
-            <Swatch className="bg-primary" label="Active" />
-            <Swatch className="bg-muted-foreground/35" label="Idle" />
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2 pt-0.5 max-sm:w-full max-sm:flex-row max-sm:items-center max-sm:justify-between">
+            {idleSystem.length > 0 && (
+              <label className="flex items-center gap-2 text-xs font-medium">
+                <Switch checked={idleThirdOnly} onCheckedChange={setIdleThirdOnly} aria-label="Show third-party apps only" />
+                Third-party only
+              </label>
+            )}
+            <span className="flex items-center gap-3 text-xs text-muted-foreground">
+              <Swatch className="bg-primary" label="Active" />
+              <Swatch className="bg-muted-foreground/35" label="Idle" />
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
-          <ActiveVsOpen apps={data.idle_apps} onPickApp={onPickApp} onInfrastructure={onInfrastructure} device={device} />
+          <ActiveVsOpen
+            apps={idleApps}
+            onPickApp={onPickApp}
+            onInfrastructure={onInfrastructure}
+            device={device}
+            empty={idleThirdOnly && idleSystem.length > 0 ? "Only system apps were left open. Turn off “Third-party only” to see them." : undefined}
+          />
+          {idleThirdOnly && idleSystem.length > 0 && (
+            <p className="mt-2 px-2 text-xs text-muted-foreground">
+              Hiding {idleSystem.length} system {idleSystem.length === 1 ? "app" : "apps"} ({idleSystem.slice(0, 3).map((a) => a.app).join(", ")}
+              {idleSystem.length > 3 ? "…" : ""}).
+            </p>
+          )}
           <InfrastructureFooter apps={data.infrastructure} onInfrastructure={onInfrastructure} />
         </CardContent>
       </Card>
@@ -131,7 +154,7 @@ export function UsageDashboard({
       {data.background.length > 0 && (
         <Background
           rows={data.background}
-          apps={data.totals.background_apps}
+          totalApps={data.totals.background_apps}
           minutes={data.totals.background_minutes}
           onInfrastructure={onInfrastructure}
           device={device}
@@ -154,21 +177,24 @@ function Swatch({ className, label }: { className: string; label: string }) {
 function share(activeSeconds: number, openMinutes: number) {
   if (openMinutes <= 0) return "—";
   const pct = Math.min(100, (activeSeconds / (openMinutes * 60)) * 100);
+  if (pct > 0 && pct < 0.1) return "<0.1%";
   return pct > 0 && pct < 1 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
 }
+
+const IDLE_SHOWN = 10;
 
 const BACKGROUND_COLLAPSED = 5;
 
 /** Processes that ran but nobody ever used in the period: helpers, daemons, remote-access hosts, service accounts. */
 function Background({
   rows: allRows,
-  apps,
+  totalApps,
   minutes,
   onInfrastructure,
   device,
 }: {
   rows: UsageSummary["background"];
-  apps: number;
+  totalApps: number;
   minutes: number;
   onInfrastructure?: InfraAction;
   device: boolean;
@@ -177,17 +203,23 @@ function Background({
   // Third-party only by default: vendor software (remote access, helpers, paid
   // apps) is what's worth reviewing; OS processes like bash or systemd aren't.
   const [thirdOnly, setThirdOnly] = useState(true);
-  const system = allRows.filter((b) => !b.third_party);
   const rows = thirdOnly ? allRows.filter((b) => b.third_party) : allRows;
+  // Counts are of apps, not rows: an app running on three devices is one app
+  // and three rows. An app counts as third-party if any of its rows is.
+  const third = new Set(allRows.filter((b) => b.third_party).map((b) => b.app.toLowerCase()));
+  const systemApps = [...new Set(allRows.filter((b) => !third.has(b.app.toLowerCase())).map((b) => b.app))];
+  const apps = third.size + systemApps.length;
+  // The server returns every row up to a cap; past it, its totals are the full count.
+  const complete = apps === totalApps;
   const shown = all ? rows : rows.slice(0, BACKGROUND_COLLAPSED);
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-4 pb-2">
+      <CardHeader className="flex-row items-start justify-between gap-4 pb-2 max-sm:flex-col max-sm:gap-3">
         <div className="space-y-1">
           <CardTitle>Running in the background, never used</CardTitle>
           <CardDescription>
-            {apps} {apps === 1 ? "app" : "apps"} ran for {formatHours(minutes * 60)} with no one using them: system processes, helpers, and apps left
-            running under another account. They aren&apos;t counted as use above. Worth a look when it&apos;s remote-access software or a paid app.
+            {complete ? apps : totalApps} {(complete ? apps : totalApps) === 1 ? "app" : "apps"} ran for {formatHours(minutes * 60)} with no one using them
+            {complete && ` (${third.size} third-party, ${systemApps.length} system)`}: system processes, helpers, and apps left running under another account. They aren&apos;t counted as use above. Worth a look when it&apos;s remote-access software or a paid app.
           </CardDescription>
         </div>
         <label className="flex shrink-0 items-center gap-2 pt-0.5 text-xs font-medium">
@@ -200,34 +232,46 @@ function Background({
           {shown.map((b) => (
             <li
               key={`${b.device_id}-${b.app}-${b.user}`}
-              className={`group grid ${device ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_5.5rem_2rem]" : "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_5.5rem_2rem]"} items-center gap-3 px-5 py-2 text-sm`}
+              className={`group grid ${device ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_5.5rem_2rem]" : "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_5.5rem_2rem]"} items-center gap-3 px-5 py-2 text-sm max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-y-0.5`}
             >
               <span className="truncate font-medium" title={b.app}>
                 {b.app}
               </span>
               {!device && (
-                <Link href={`/devices/${b.device_id}`} className="truncate text-muted-foreground hover:underline" title={b.device_name}>
+                <Link href={`/devices/${b.device_id}`} className="truncate text-muted-foreground hover:underline max-sm:hidden" title={b.device_name}>
                   {b.device_name}
                 </Link>
               )}
-              <span className="truncate text-muted-foreground" title={b.user}>
+              <span className="truncate text-muted-foreground max-sm:hidden" title={b.user}>
                 {b.user}
               </span>
               <span className="text-right text-xs text-muted-foreground tabular">{formatHours(b.minutes * 60)} open</span>
-              <span>{onInfrastructure && <MarkInfra app={b.app} onInfrastructure={onInfrastructure} device={device} />}</span>
+              {/* Phones: device and account on one muted line under the app. */}
+              <span className="col-span-full truncate text-xs text-muted-foreground sm:hidden">
+                {!device && (
+                  <>
+                    <Link href={`/devices/${b.device_id}`} className="hover:underline">
+                      {b.device_name}
+                    </Link>
+                    {" · "}
+                  </>
+                )}
+                {b.user}
+              </span>
+              <span className="max-sm:hidden">{onInfrastructure && <MarkInfra app={b.app} onInfrastructure={onInfrastructure} device={device} />}</span>
             </li>
           ))}
         </ul>
         {rows.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">Only system processes ran in the background.</p>}
-        {thirdOnly && system.length > 0 && (
+        {thirdOnly && systemApps.length > 0 && (
           <p className="px-5 pt-2 text-xs text-muted-foreground">
-            Hiding {system.length} system {system.length === 1 ? "process" : "processes"} ({system.slice(0, 3).map((b) => b.app).join(", ")}
-            {system.length > 3 ? "…" : ""}).
+            Hiding the {systemApps.length} system {systemApps.length === 1 ? "app" : "apps"} ({systemApps.slice(0, 3).join(", ")}
+            {systemApps.length > 3 ? "…" : ""}).
           </p>
         )}
         {rows.length > BACKGROUND_COLLAPSED && (
           <button type="button" onClick={() => setAll(!all)} className="mx-5 mt-2 text-xs font-semibold text-primary hover:underline">
-            {all ? "Show fewer" : `Show all ${rows.length}`}
+            {all ? "Show fewer" : `Show all ${rows.length} rows`}
           </button>
         )}
       </CardContent>
@@ -522,6 +566,17 @@ function userLabel(u: UsageSummary["top_users"][number], all: UsageSummary["top_
   return shared ? `${u.employee} (${u.user.split("\\").pop()})` : u.employee;
 }
 
+/**
+ * Where a top user worked, for the note after their app count: the group of
+ * their device ("Admin"), not the device name, which repeats the employee name
+ * shown as the label. Device names stay in the hover hint.
+ */
+function userWhere(u: UsageSummary["top_users"][number]) {
+  if (u.devices > 2) return `${u.devices} devices`;
+  if (u.groups.length > 0 && u.groups.length <= 2) return u.groups.join(", ");
+  return u.device_names.join(", ");
+}
+
 type RankedRow = { key: string; label: string; value: number; note: string; hint?: string; onClick?: () => void };
 
 /** Horizontal bars scaled to the top row, with the value as text. */
@@ -536,7 +591,7 @@ export function Ranked({ rows }: { rows: RankedRow[] }) {
             <span className="truncate font-medium" title={r.label}>
               {r.label}
             </span>
-            <span className="flex h-2 overflow-hidden rounded-full bg-muted">
+            <span className="flex h-2 overflow-hidden rounded-full bg-muted max-sm:order-last max-sm:col-span-full">
               <span className="h-full rounded-full bg-primary" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%` }} />
             </span>
             <span className="text-right text-xs text-muted-foreground tabular" title={r.hint}>
@@ -551,13 +606,13 @@ export function Ranked({ rows }: { rows: RankedRow[] }) {
               <button
                 type="button"
                 onClick={r.onClick}
-                className={`${cls} group/row w-full grid-cols-[minmax(0,9rem)_1fr_10.5rem_1rem] text-left transition-colors hover:bg-muted/60`}
+                className={`${cls} group/row w-full grid-cols-[minmax(0,9rem)_1fr_10.5rem_1rem] text-left max-sm:grid-cols-[minmax(0,1fr)_auto_1rem] max-sm:gap-y-1.5 transition-colors hover:bg-muted/60`}
               >
                 {body}
                 <RowChevron />
               </button>
             ) : (
-              <div className={`${cls} grid-cols-[minmax(0,9rem)_1fr_10.5rem]`}>{body}</div>
+              <div className={`${cls} grid-cols-[minmax(0,9rem)_1fr_10.5rem] max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:gap-y-1.5`}>{body}</div>
             )}
           </li>
         );
@@ -572,14 +627,17 @@ function ActiveVsOpen({
   onPickApp,
   onInfrastructure,
   device,
+  empty,
 }: {
   apps: UsageAppStat[];
   onPickApp: (app: string) => void;
   onInfrastructure?: InfraAction;
   device: boolean;
+  /** Message when nothing is left after filtering. */
+  empty?: string;
 }) {
   const rows = apps.filter((a) => a.minutes > 0);
-  if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">No open-time data in this period</p>;
+  if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">{empty ?? "No open-time data in this period"}</p>;
   const maxOpen = Math.max(...rows.map((a) => a.minutes * 60));
   return (
     <ul className="space-y-0.5">
@@ -594,10 +652,10 @@ function ActiveVsOpen({
               type="button"
               onClick={() => onPickApp(a.app)}
               title={`${a.app}: ${formatHours(open - active)} idle — ${formatHours(active)} active of ${formatHours(open)} open`}
-              className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,9rem)_1fr_12rem_1rem] items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
+              className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,9rem)_1fr_12rem_1rem] items-center gap-3 rounded-lg max-sm:grid-cols-[minmax(0,1fr)_auto_1rem] max-sm:gap-y-1.5 px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
             >
               <span className="truncate font-medium">{a.app}</span>
-              <span className="flex h-2.5" style={{ width: `${Math.max(width, 2)}%` }}>
+              <span className="flex h-2.5 max-sm:order-last max-sm:col-span-full" style={{ width: `${Math.max(width, 2)}%` }}>
                 {active > 0 && <span className={`h-full rounded-l-full bg-primary ${pct >= 100 ? "rounded-r-full" : ""}`} style={{ width: `${pct}%` }} />}
                 {pct < 100 && (
                   <span

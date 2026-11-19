@@ -516,7 +516,9 @@ func TestUsageTracking(t *testing.T) {
 		Installed     bool
 		Users         int
 		Devices       int
-		InstalledOn   int `json:"installed_on"`
+		InstalledOn   int        `json:"installed_on"`
+		LastUsed      *time.Time `json:"last_used"`
+		ThirdParty    bool       `json:"third_party"`
 	}
 	var usage struct{ Items []row }
 	poll := func(path string, want func() bool) {
@@ -736,7 +738,8 @@ func TestUsageTracking(t *testing.T) {
 		t.Fatalf("summary for the test device = %+v", sum)
 	}
 	a.do("GET", "/api/usage?group=app&device_id="+dev.DeviceID, nil, 200, &usage)
-	if len(usage.Items) != 3 || usage.Items[0].App != "Slack" {
+	// Dropbox and Contacts only ran in the background, so they aren't "used".
+	if len(usage.Items) != 1 || usage.Items[0].App != "Slack" {
 		t.Fatalf("usage by app for the test device = %+v", usage.Items)
 	}
 	other := "?device_id=00000000-0000-4000-8000-000000000000"
@@ -896,6 +899,66 @@ func TestUsageTracking(t *testing.T) {
 	if ysum.Compare != nil {
 		t.Fatalf("summary?days=7 compare = %+v", ysum.Compare)
 	}
+
+	// The table counts active use only, like the dashboard: fay had Slack
+	// open without using it, so Slack keeps 2 users today; Zoom only ran in
+	// the background, so it is still "not used", with no last active time.
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: today, App: "Slack", User: "fay", Minutes: 45, LastSeen: time.Now()},
+		{Date: today, App: "Zoom", User: "fay", Minutes: 45, LastSeen: time.Now()},
+	}})
+	hasFay := func() bool {
+		for _, b := range sum.Background {
+			if b.User == "fay" {
+				return true
+			}
+		}
+		return false
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !hasFay(); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary?days=1", nil, 200, &sum)
+	}
+	if !hasFay() || sum.Totals.UnusedApps != 1 {
+		t.Fatalf("summary with background-only use = %+v", sum)
+	}
+	a.do("GET", "/api/usage?group=app&days=1", nil, 200, &usage)
+	byName := map[string]row{}
+	for _, u := range usage.Items {
+		byName[u.App] = u
+	}
+	if sl, ok := byName["Slack"]; !ok || sl.Users != 2 || sl.LastUsed == nil || !sl.ThirdParty {
+		t.Fatalf("Slack by app = %+v", usage.Items)
+	}
+	if _, ok := byName["Zoom"]; ok {
+		t.Fatalf("background-only Zoom counted as used: %+v", usage.Items)
+	}
+	if c, ok := byName["Contacts"]; !ok || c.ThirdParty {
+		t.Fatalf("Contacts by app = %+v", usage.Items)
+	}
+	a.do("GET", "/api/usage?group=app&days=1&third_party=true", nil, 200, &usage)
+	for _, u := range usage.Items {
+		if !u.ThirdParty || u.App == "Contacts" {
+			t.Fatalf("third_party=true = %+v", usage.Items)
+		}
+	}
+	a.do("GET", "/api/usage?group=app&days=1&unused=true", nil, 200, &usage)
+	if len(usage.Items) != 1 || usage.Items[0].App != "Zoom" || usage.Items[0].LastUsed != nil || !usage.Items[0].ThirdParty {
+		t.Fatalf("unused with background-only Zoom = %+v", usage.Items)
+	}
+	a.do("GET", "/api/usage?days=1", nil, 200, &usage)
+	for _, u := range usage.Items {
+		if u.User == "fay" {
+			t.Fatalf("fay's open-only rows in the per-user table = %+v", usage.Items)
+		}
+	}
+
+	// Linux reports no keyboard or mouse activity, so open time counts as use there.
+	send(protocol.TypeInventory, protocol.Inventory{OS: protocol.OSInfo{Family: "linux"}, Software: []protocol.Software{
+		{Name: "Slack", Source: "mac_app_store"}, {Name: "Zoom", Source: "identified_developer"}, {Name: "Contacts", Source: "apple"},
+	}})
+	poll("/api/usage?group=app&days=1&app=zoom", func() bool {
+		return len(usage.Items) == 1 && usage.Items[0].Users == 1 && usage.Items[0].LastUsed != nil
+	})
 }
 
 func TestPolicyAnnouncesServerURL(t *testing.T) {

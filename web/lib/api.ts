@@ -239,31 +239,43 @@ export type FleetUsageRow = {
   device_id: string;
   device_name: string;
   app: string;
-  /** Empty for an installed app with no use in the period. */
+  /** Empty for an installed app with no active use in the period. */
   user: string;
   installed: boolean;
-  /** For unused rows, the most recent use ever recorded (null if never). */
+  /** Last active use (keyboard or mouse); for unused rows, ever (null if never). On Linux, last seen open. */
   last_used: string | null;
   days_used: number;
   minutes: number;
   active_seconds: number;
+  third_party: boolean;
 };
 
 export type FleetAppRow = {
   app: string;
   users: number;
-  /** Devices it was used on in the period. */
+  /** People and devices with active use in the period (any open time on Linux). */
   devices: number;
   /** Devices it is installed on now. */
   installed_on: number;
+  /** Last active use (keyboard or mouse); for unused apps, ever (null if never). */
   last_used: string | null;
   minutes: number;
   active_seconds: number;
+  third_party: boolean;
 };
 
 /** device_id narrows everything to one device (the device page's Usage tab). */
 /** yesterday: that day only (days is then 1). */
-export type FleetUsageFilters = { app?: string; days?: UsagePeriod; yesterday?: boolean; unused?: boolean; group_id?: string; device_id?: string };
+/** third_party: third-party apps only (the unused list always is). */
+export type FleetUsageFilters = {
+  app?: string;
+  days?: UsagePeriod;
+  yesterday?: boolean;
+  unused?: boolean;
+  third_party?: boolean;
+  group_id?: string;
+  device_id?: string;
+};
 type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "yesterday" | "group_id" | "device_id">;
 
 /** third_party is set on idle_apps only: false for OS built-ins (Terminal, System Settings). */

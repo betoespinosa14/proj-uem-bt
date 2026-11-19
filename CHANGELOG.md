@@ -7,6 +7,27 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.46 (2026-11-19): The Table counts real use
+
+Server and console; agents stay on 2026.11.29. The server adds a column to app usage on start-up.
+
+### Changed
+- **"Used" means used with keyboard or mouse, in the Table as on the dashboard.** Users, "Used on" and
+  "Days used" count only people and devices with active time. An app that only ran in the background no longer
+  fills the Table with 0m rows; it stays on the dashboard's Background card. On Linux, which reports no keyboard
+  or mouse activity, open time still counts as use.
+- **"Not used" includes apps that only ran in the background.** It lists installed third-party apps with no active
+  use in the period, so every third-party app is either used or not used. The dashboard's "Not used" card and the
+  reclaim export follow the same rule.
+- **"Last used" is now "Last active":** when someone last used the app with keyboard or mouse, accurate to about
+  5 minutes. Before, it moved whenever the app was seen running. Earlier days take their best available estimate.
+
+### Added
+- **"Third-party only" switch in the Table** (off by default): hides apps that come with the operating system and
+  hardware drivers. The export follows it. The "Not used" list is always third-party only.
+- Hover note on "—" in "Used on / installed on": the app isn't in the installed software list (built into the
+  OS, or a helper process).
+
 ## 2026.11.45 (2026-11-19): Where the working day ended
 
 Console only; agents stay on 2026.11.29.

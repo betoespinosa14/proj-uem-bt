@@ -111,18 +111,75 @@ func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
 	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Until: until, Unused: q.Get("unused") == "true", GroupID: group, DeviceID: device}, nil
 }
 
+// thirdPartyApps tells, per lower-cased app name, whether an app is
+// third-party: any install of it is (Edge: built into Windows, installed by
+// hand on Macs), or it is missing from the inventory. Same rule as the
+// dashboard's idle ranking.
+func (s *Server) thirdPartyApps(r *http.Request, names []string) (map[string]bool, error) {
+	info, err := s.store.SoftwareInfo(r.Context(), orgOf(r), names)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		k := strings.ToLower(n)
+		installs := info[k]
+		third := len(installs) == 0
+		for _, sw := range installs {
+			if compliance.Category(sw) == compliance.CategoryThirdParty {
+				third = true
+			}
+		}
+		out[k] = third
+	}
+	return out, nil
+}
+
+// markThirdParty sets each row's third-party flag and, with
+// ?third_party=true, keeps third-party rows only. The "Not used" list is
+// third-party only already.
+func markThirdParty[T any](s *Server, r *http.Request, f store.FleetUsageFilter, list []T, row func(*T) (store.Software, *bool)) ([]T, error) {
+	if f.Unused {
+		list = thirdParty(list, func(u T) store.Software { sw, _ := row(&u); return sw })
+		for i := range list {
+			_, flag := row(&list[i])
+			*flag = true
+		}
+		return list, nil
+	}
+	names := make([]string, 0, len(list))
+	for i := range list {
+		sw, _ := row(&list[i])
+		names = append(names, sw.Name)
+	}
+	third, err := s.thirdPartyApps(r, names)
+	if err != nil {
+		return nil, err
+	}
+	only := r.URL.Query().Get("third_party") == "true"
+	out := list[:0]
+	for i := range list {
+		sw, flag := row(&list[i])
+		*flag = third[strings.ToLower(sw.Name)]
+		if !only || *flag {
+			out = append(out, list[i])
+		}
+	}
+	return out, nil
+}
+
 func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
 	_, f, err := fleetFilter(r)
 	if err != nil {
 		return nil, err
 	}
 	list, err := s.store.FleetUsage(r.Context(), orgOf(r), f)
-	if err != nil || !f.Unused {
-		return list, err
+	if err != nil {
+		return nil, err
 	}
-	return thirdParty(list, func(u store.FleetUsageRow) store.Software {
-		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
-	}), nil
+	return markThirdParty(s, r, f, list, func(u *store.FleetUsageRow) (store.Software, *bool) {
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}, &u.ThirdParty
+	})
 }
 
 func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
@@ -131,12 +188,12 @@ func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
 		return nil, err
 	}
 	list, err := s.store.FleetUsageByApp(r.Context(), orgOf(r), f)
-	if err != nil || !f.Unused {
-		return list, err
+	if err != nil {
+		return nil, err
 	}
-	return thirdParty(list, func(u store.FleetAppRow) store.Software {
-		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}
-	}), nil
+	return markThirdParty(s, r, f, list, func(u *store.FleetAppRow) (store.Software, *bool) {
+		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source}, &u.ThirdParty
+	})
 }
 
 // usageSummary serves the App usage dashboard: the same period and app
@@ -161,7 +218,7 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Same rule as the table's "Not used" view: installed third-party apps
-	// with no use in the period.
+	// with no active use in the period.
 	f.Unused = true
 	unused, err := s.store.FleetUsageByApp(r.Context(), orgOf(r), f)
 	if err != nil {
@@ -179,20 +236,13 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 	for i, a := range sum.IdleApps {
 		names[i] = a.App
 	}
-	info, err := s.store.SoftwareInfo(r.Context(), orgOf(r), names)
+	third, err := s.thirdPartyApps(r, names)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	for i := range sum.IdleApps {
-		a := &sum.IdleApps[i]
-		installs := info[strings.ToLower(a.App)]
-		a.ThirdParty = len(installs) == 0
-		for _, sw := range installs {
-			if compliance.Category(sw) == compliance.CategoryThirdParty {
-				a.ThirdParty = true
-			}
-		}
+		sum.IdleApps[i].ThirdParty = third[strings.ToLower(sum.IdleApps[i].App)]
 	}
 	// System processes (bash, systemd, OS built-ins) vs vendor software, by
 	// the same rule the "Not used" list uses.

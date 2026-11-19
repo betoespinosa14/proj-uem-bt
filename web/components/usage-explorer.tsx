@@ -43,6 +43,8 @@ type View = "dashboard" | "table";
 
 const ACTIVE_HINT = "In front while the user was typing or using the mouse";
 const OPEN_HINT = "Running, whether or not it was being used";
+const LAST_HINT = "When someone last used it with keyboard or mouse; “Never” if no one has since tracking began";
+const USERS_HINT = "People who used it with keyboard or mouse in this period. Apps that only ran in the background don't count.";
 
 /**
  * The App usage dashboard and tables. Fleet-wide by default; with deviceId,
@@ -65,6 +67,7 @@ export function UsageExplorer({
   const [period, setPeriod] = useState<Period>("1"); // opens on Today
   const [group, setGroup] = useState<UsageGroup>("app");
   const [unused, setUnused] = useState(false);
+  const [thirdOnly, setThirdOnly] = useState(false);
   const [groupId, setGroupId] = useState("");
   const groups = useQuery({ queryKey: qk.groups, queryFn: api.groups.list, enabled: !scoped });
   // Dashboard first; remember the last choice in this browser (read after
@@ -88,6 +91,7 @@ export function UsageExplorer({
     days,
     yesterday: yesterday || undefined,
     unused: unused || undefined,
+    third_party: (thirdOnly && !unused) || undefined,
     group_id: scoped ? undefined : groupId || undefined,
     device_id: deviceId,
   };
@@ -173,7 +177,7 @@ export function UsageExplorer({
             tone: totals.unused_apps > 0 ? "warning" : "default",
             onClick: showUnused,
             cta: "Review list",
-            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not opened ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
+            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
           },
         ]
       : undefined;
@@ -254,6 +258,15 @@ export function UsageExplorer({
             {notUsedLabel(period)}
           </label>
         )}
+        {view === "table" && (
+          <label
+            className={cn("flex items-center gap-2 text-sm", unused && "text-muted-foreground")}
+            title={unused ? "The “Not used” list is third-party apps only" : "Hide apps that come with the operating system and hardware drivers"}
+          >
+            <Switch checked={thirdOnly || unused} disabled={unused} onCheckedChange={setThirdOnly} aria-label="Third-party apps only" />
+            Third-party only
+          </label>
+        )}
       </div>
       {view === "dashboard" ? (
         summary.error ? (
@@ -293,7 +306,15 @@ export function UsageExplorer({
           ) : count === 0 ? (
             <EmptyState
               icon={AppWindow}
-              title={unused ? "Every installed third-party app was used in this period" : q ? "No matching apps" : "No app usage recorded in this period"}
+              title={
+                unused
+                  ? "Every installed third-party app was used in this period"
+                  : q
+                    ? "No matching apps"
+                    : thirdOnly
+                      ? "No third-party app was used in this period"
+                      : "No app usage recorded in this period"
+              }
             />
           ) : (
             <>
@@ -436,15 +457,17 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
           <TH className="text-right" title={OPEN_HINT}>
             {head("Open", "open")}
           </TH>
-          <TH className="text-right">{head("Users", "users")}</TH>
+          <TH className="text-right" title={USERS_HINT}>
+            {head("Users", "users")}
+          </TH>
           {scoped ? (
             <TH title="Whether the app is in this device's installed software list">{head("Installed", "installed")}</TH>
           ) : (
-            <TH className="text-right" title="Devices it was used on in this period, of the devices it is installed on">
+            <TH className="text-right" title="Devices where someone used it with keyboard or mouse in this period, of the devices it is installed on">
               {head("Used on / installed on", "installed")}
             </TH>
           )}
-          <TH>{head("Last used", "last")}</TH>
+          <TH title={LAST_HINT}>{head("Last active", "last")}</TH>
         </TR>
       </THead>
       <TBody>
@@ -457,8 +480,8 @@ function ByAppTable({ items, infra, scoped, noActive }: { items: FleetAppRow[]; 
             {scoped ? (
               <TD className={u.installed_on ? "" : "text-muted-foreground"}>{u.installed_on ? "Yes" : "No"}</TD>
             ) : (
-              <TD className="text-right tabular">
-                {u.devices} / {u.installed_on || "—"}
+              <TD className="text-right tabular" title={u.installed_on ? undefined : "Not in the installed software list (built into the OS, or a helper process)"}>
+                {u.devices} / {u.installed_on || <span className="text-muted-foreground">—</span>}
               </TD>
             )}
             <LastUsed ts={u.last_used} />
@@ -522,8 +545,10 @@ function ByUserTable({
           <TH className="text-right" title={OPEN_HINT}>
             {head("Open", "open")}
           </TH>
-          <TH className="text-right">{head("Days used", "days")}</TH>
-          <TH>{head("Last used", "last")}</TH>
+          <TH className="text-right" title="Days with keyboard or mouse use in this period">
+            {head("Days used", "days")}
+          </TH>
+          <TH title={LAST_HINT}>{head("Last active", "last")}</TH>
         </TR>
       </THead>
       <TBody>

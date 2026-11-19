@@ -737,8 +737,8 @@ function ActiveVsOpen({
               title={`${a.app}: ${formatHours(open - active)} idle — ${formatHours(active)} active of ${formatHours(open)} open`}
               className="group/row grid min-w-0 flex-1 grid-cols-[minmax(0,9rem)_1fr_12rem_1rem] items-center gap-3 rounded-lg max-sm:grid-cols-[minmax(0,1fr)_auto_1rem] max-sm:gap-y-1.5 px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
             >
-              <span className="truncate font-medium">{a.app}</span>
-              <span className="flex h-2.5 max-sm:order-last max-sm:col-span-full" style={{ width: `${Math.max(width, 2)}%` }}>
+              <span className="truncate font-medium max-sm:col-span-2">{a.app}</span>
+              <span className="flex h-2.5 max-sm:row-start-2" style={{ width: `${Math.max(width, 2)}%` }}>
                 {active > 0 && <span className={`h-full rounded-l-full bg-primary ${pct >= 100 ? "rounded-r-full" : ""}`} style={{ width: `${pct}%` }} />}
                 {pct < 100 && (
                   <span
@@ -747,10 +747,10 @@ function ActiveVsOpen({
                   />
                 )}
               </span>
-              <span className="text-right text-xs text-muted-foreground tabular">
+              <span className="text-right text-xs text-muted-foreground tabular max-sm:col-span-2 max-sm:row-start-2">
                 <span className="font-semibold text-foreground">{formatHours(open - active)} idle</span> · {share(active, a.minutes)} active
               </span>
-              <RowChevron />
+              <RowChevron className="max-sm:col-start-3 max-sm:row-start-1" />
             </button>
             {onInfrastructure && <MarkInfra app={a.app} onInfrastructure={onInfrastructure} device={device} />}
           </li>
@@ -761,10 +761,13 @@ function ActiveVsOpen({
 }
 
 /** A faint "›" on rows that open the detailed table; stronger on hover. */
-function RowChevron() {
+function RowChevron({ className }: { className?: string }) {
   return (
     <ChevronRight
-      className="h-4 w-4 justify-self-end text-muted-foreground opacity-40 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+      className={cn(
+        "h-4 w-4 justify-self-end text-muted-foreground opacity-40 transition-opacity group-hover/row:opacity-100 group-focus-visible/row:opacity-100",
+        className,
+      )}
       aria-hidden
     />
   );

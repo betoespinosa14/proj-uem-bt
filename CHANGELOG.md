@@ -7,6 +7,14 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.41 (2026-11-19): Active vs open on phones
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Active vs open on phones:** the app name gets its own line, with the bar and "334h 5m idle · 1% active" under
+  it, so names like "Visual Studio Code" are no longer cut off.
+
 ## 2026.11.40 (2026-11-19): App usage, hours per person
 
 Server and console; agents stay on 2026.11.29.

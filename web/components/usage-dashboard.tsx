@@ -690,6 +690,12 @@ type RankedRow = {
   prevNone?: string;
 };
 
+/** "Wed" from a YYYY-MM-DD day. */
+function weekday(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short" });
+}
+
 /** Legend for Today's bars against the last working day. */
 function CompareLegend({ before }: { before: string }) {
   return (
@@ -700,10 +706,16 @@ function CompareLegend({ before }: { before: string }) {
       </span>
       <span
         className="inline-flex items-center gap-1.5"
-        title="The last working day before today, in full (at least 30 minutes of use in total, so weekends and holidays are skipped). Today fills toward it as the day goes on."
+        title="The last day before today with at least 30 minutes of use in total. Days nobody worked, usually weekends and holidays, are skipped; a holiday when people did work counts. Today fills toward it as the day goes on."
       >
         <span className="h-2 w-3 rounded-sm bg-primary/35" />
         {dayLabel(before)}, full day
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="relative h-2 w-4 rounded-sm bg-primary">
+          <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-card" />
+        </span>
+        where {weekday(before)} ended
       </span>
     </p>
   );
@@ -733,6 +745,16 @@ export function Ranked({ rows }: { rows: RankedRow[] }) {
                 )}
                 {r.value > 0 && (
                   <span className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%` }} />
+                )}
+                {/* Where the reference day ended: a notch in the card's color, visible even once today passes it.
+                    Left out when it would sit at the very start of the bar, where it reads as a stray sliver;
+                    the text still gives the figure. */}
+                {r.prev / max >= 0.04 && (
+                  <span
+                    className="absolute inset-y-0 w-[2px] bg-card"
+                    style={{ left: `calc(${Math.max((r.prev / max) * 100, 1.5)}% - 1px)` }}
+                    title={`${r.prevDay} ended here`}
+                  />
                 )}
               </span>
             )}

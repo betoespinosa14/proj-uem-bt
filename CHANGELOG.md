@@ -7,6 +7,18 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.45 (2026-11-19): Where the working day ended
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Today's bars mark where the last working day ended:** a thin notch at that point, so it stays visible once
+  today passes it. The legend shows it as "where Wed ended". It's left out when it would sit at the very start
+  of the bar; the text still gives the figure.
+- **Clearer rule for the last working day:** the last day before today with at least 30 minutes of use in total.
+  Days nobody worked (usually weekends and holidays) are skipped, but a holiday when people did work counts.
+  There is no holiday calendar. This corrects "weekends and holidays are skipped" in 2026.11.44.
+
 ## 2026.11.44 (2026-11-19): Today against the last working day
 
 Server and console; agents stay on 2026.11.29.

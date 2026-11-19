@@ -244,8 +244,8 @@ type UsageSummary struct {
 	// Apps marked as infrastructure: their active time still counts, but
 	// their open time is left out of open totals, idle_apps and background.
 	Infrastructure []UsageAppStat `json:"infrastructure"`
-	// Compare is the previous working day, set by the caller for one-day
-	// past periods (Yesterday); nil otherwise.
+	// Compare is the last working day before the period, set by the caller
+	// for Today; nil otherwise.
 	Compare *UsageCompare `json:"compare,omitempty"`
 }
 

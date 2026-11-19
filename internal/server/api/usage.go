@@ -142,7 +142,7 @@ func (s *Server) fleetUsageByApp(r *http.Request) ([]store.FleetAppRow, error) {
 // usageSummary serves the App usage dashboard: the same period and app
 // search as the table, totalled.
 func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
-	_, f, err := fleetFilter(r)
+	days, f, err := fleetFilter(r)
 	if err != nil {
 		fail(w, err)
 		return
@@ -152,8 +152,9 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	// A single past day (Yesterday) is compared with the working day before it.
-	if f.Until != nil {
+	// Today is shown against the last working day in full, as a reference for
+	// a normal day (Yesterday stands alone).
+	if days == 1 && f.Until == nil {
 		if sum.Compare, err = s.store.PreviousWorkday(r.Context(), orgOf(r), f); err != nil {
 			fail(w, err)
 			return

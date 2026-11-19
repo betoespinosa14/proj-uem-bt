@@ -846,9 +846,10 @@ func TestUsageTracking(t *testing.T) {
 		t.Fatalf("Realtek driver in idle apps = %+v", sum.IdleApps)
 	}
 
-	// Yesterday: that day only (not today), compared with the last earlier
-	// working day (30+ minutes of combined use): two days ago (2 minutes) and
-	// three days ago (dora, 15 minutes) are skipped; four days ago (40) counts.
+	// Yesterday: that day only (not today), with no comparison. Today carries
+	// the last working day before it (30+ minutes of combined use): yesterday
+	// (10 minutes), two days ago (2) and three days ago (dora, 15) are
+	// skipped; four days ago (40) counts.
 	yesterday := time.Now().AddDate(0, 0, -1)
 	twoDaysAgo, fourDaysAgo := time.Now().AddDate(0, 0, -2), time.Now().AddDate(0, 0, -4)
 	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
@@ -876,13 +877,14 @@ func TestUsageTracking(t *testing.T) {
 		}
 	}
 	if ysum.Totals.ActiveSeconds != 600 || len(ysum.Daily) != 1 || ysum.Daily[0].Day != yesterday.Format(time.DateOnly) ||
-		len(ysum.TopApps) != 1 || ysum.TopApps[0].ActiveSeconds != 600 {
+		len(ysum.TopApps) != 1 || ysum.TopApps[0].ActiveSeconds != 600 || ysum.Compare != nil {
 		t.Fatalf("summary?yesterday = %+v", ysum)
 	}
+	a.do("GET", "/api/usage/summary?days=1", nil, 200, &ysum)
 	prev := ysum.Compare
 	if prev == nil || prev.Day != fourDaysAgo.Format(time.DateOnly) || prev.ActiveSeconds != 2400 || prev.ActiveUsers != 1 ||
 		prev.Apps["slack"] != 2400 || prev.Users["hal"] != 2400 {
-		t.Fatalf("summary?yesterday compare = %+v", prev)
+		t.Fatalf("summary?days=1 compare = %+v", prev)
 	}
 	a.do("GET", "/api/usage?group=app&yesterday=true", nil, 200, &usage)
 	if len(usage.Items) != 1 || usage.Items[0].App != "Slack" || usage.Items[0].ActiveSeconds != 600 {

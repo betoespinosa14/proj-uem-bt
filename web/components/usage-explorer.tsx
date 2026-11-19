@@ -36,11 +36,7 @@ function shortDay(day: string) {
   return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-/** "▲ 4h 05m vs Thu 12 Nov", "no change vs …". */
-function change(now: number, before: number, vs: string, fmt: (n: number) => string) {
-  if (now === before) return `no change vs ${vs}`;
-  return `${now > before ? "▲" : "▼"} ${fmt(Math.abs(now - before))} vs ${vs}`;
-}
+
 const GROUPS = { app: "By app", app_user: "By app and user" } as const;
 
 type View = "dashboard" | "table";
@@ -142,18 +138,20 @@ export function UsageExplorer({
     onError: (e) => toast.error("Couldn't update infrastructure apps", e),
   });
   const totals = summary.data?.totals;
-  // Yesterday: each figure against the working day before it.
+  // Today: each figure so far, with the last working day's full-day figure as
+  // a reference (not an up/down change: a day in progress would always look down).
   const cmp = summary.data?.compare;
   const vs = cmp ? shortDay(cmp.day) : "";
+  const soFar = period === "1" ? " so far" : "";
   const stats: HeadlineStat[] | undefined =
     totals
       ? [
           {
-            label: "Active",
+            label: `Active${soFar}`,
             value: formatHours(totals.active_seconds),
             icon: Activity,
             tone: "brand",
-            note: cmp && change(totals.active_seconds, cmp.active_seconds, vs, formatHours),
+            note: cmp && `${vs}, full day: ${formatHours(cmp.active_seconds)}`,
           },
           {
             label: "of open time active",
@@ -161,12 +159,12 @@ export function UsageExplorer({
             icon: Clock,
             hint: `Share of the time apps were open that they were also in use: ${formatHours(totals.active_seconds)} active of ${formatHours(totals.open_minutes * 60)} open. Each app counts separately, so open time can add up to more than a day. Background-only processes are not counted.`,
           },
-          { label: "Apps used", value: totals.apps_used, icon: AppWindow, note: cmp && change(totals.apps_used, cmp.apps_used, vs, String) },
+          { label: `Apps used${soFar}`, value: totals.apps_used, icon: AppWindow, note: cmp && `${vs}: ${cmp.apps_used} ${cmp.apps_used === 1 ? "app" : "apps"}` },
           {
-            label: scoped ? "Users" : "Active users",
+            label: `${scoped ? "Users" : "Active users"}${soFar}`,
             value: totals.active_users,
             icon: Users,
-            note: cmp && change(totals.active_users, cmp.active_users, vs, String),
+            note: cmp && `${vs}: ${cmp.active_users} ${cmp.active_users === 1 ? "person" : "people"}`,
           },
           {
             label: notUsedLabel(period),

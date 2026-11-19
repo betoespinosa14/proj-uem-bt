@@ -311,8 +311,9 @@ export type UsageSummary = {
   /** Apps marked as infrastructure: open by design, left out of open totals and idle ranking. */
   infrastructure: UsageAppStat[];
   /**
-   * Yesterday only: the last earlier day anyone worked (skipping weekends and
-   * holidays), to compare with. apps is keyed by lowercased app name, users by account.
+   * Today only: the last working day before it (30+ minutes of combined use, so
+   * weekends and holidays are skipped), in full, as a reference for a normal day.
+   * apps is keyed by lowercased app name, users by account.
    */
   compare?: {
     day: string;

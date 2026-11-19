@@ -7,6 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.44 (2026-11-19): Today against the last working day
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Today is shown against the last working day, in full; Yesterday stands alone.** The working day is the last
+  day before today with at least 30 minutes of combined use, so Monday is compared with Friday:
+  - **Headline figures** read "so far", with the reference under them: "Active so far 1h 52m · Wed 18 Nov, full
+    day: 4h 50m".
+  - **Top apps and Top users** draw one track per row: the working day's full total in light teal, today so far
+    drawn over it in solid teal. The text reads "Wed 18 Nov: 1h 17m", "not used Wed 18 Nov" or "didn't work
+    Wed 18 Nov".
+  - **No up/down arrows**, since a day in progress would look like a drop every morning.
+  - **Yesterday** shows only that calendar day, with no comparison.
+
 ## 2026.11.43 (2026-11-19): App usage, Yesterday
 
 Server and console; agents stay on 2026.11.29.

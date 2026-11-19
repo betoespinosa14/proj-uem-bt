@@ -429,8 +429,13 @@ export function Trend({
   const barLeft = (i: number) => i * band + (band - barW) / 2;
   const fmt = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const axis = durationAxis(Math.max(0, ...points.map((p) => p.active ?? 0)));
-  // The stub is a sliver (1.5% of the axis), stacked under the (zero) active bar.
-  const data = points.map((p) => ({ ...p, stubV: p.stub ? axis.top * 0.015 : 0 }));
+  // Bars are sized in pixels at the low end, so quiet days stay visible at any
+  // period (a 90-day bar is ~8px wide): a "reported, no one used it" day gets a
+  // fixed 3px gray stub, and a day with a few minutes of use (3m on a 30h axis
+  // is under a pixel) gets at least a 2px teal sliver.
+  const data = points.map((p) => ({ ...p, stubV: 0 }));
+  const stubSize = (_: unknown, i: number) => (points[i]?.stub ? 3 : 0);
+  const activeSize = (_: unknown, i: number) => ((points[i]?.active ?? 0) > 0 ? 2 : 0);
   // Runs of reported / not reported days for the strip under the chart.
   const runs: { from: number; to: number; on: boolean }[] = [];
   points.forEach((p, i) => {
@@ -513,8 +518,8 @@ export function Trend({
                 );
               }}
             />
-            <Bar dataKey="stubV" stackId="day" fill="hsl(var(--muted-foreground))" fillOpacity={0.4} isAnimationActive={false} maxBarSize={MAX_BAR} minPointSize={0} legendType="none" />
-            <Bar dataKey="active" stackId="day" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={MAX_BAR}>
+            <Bar dataKey="stubV" stackId="day" fill="hsl(var(--muted-foreground))" fillOpacity={0.6} isAnimationActive={false} maxBarSize={MAX_BAR} minPointSize={stubSize} legendType="none" />
+            <Bar dataKey="active" stackId="day" radius={[3, 3, 0, 0]} isAnimationActive={false} maxBarSize={MAX_BAR} minPointSize={activeSize}>
               {points.map((p) => (
                 <Cell key={p.t} fill={p.today ? "url(#usage-today)" : "hsl(var(--primary))"} fillOpacity={p.today ? 1 : 0.85} />
               ))}
@@ -556,7 +561,7 @@ export function Trend({
             )}
             {hasIdleDays && (
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-0.5 w-3 bg-muted-foreground/40" /> Reported, no one used it
+                <span className="h-[3px] w-3 bg-muted-foreground/60" /> Reported, no one used it
               </span>
             )}
           </p>

@@ -7,6 +7,17 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.42 (2026-11-19): Quiet days on long charts
+
+Console only; agents stay on 2026.11.29.
+
+### Changed
+- **Active hours per day keeps quiet days visible at any period** (bars are only ~8px wide at 90 days):
+  - **Days nobody used:** "reported, no one used it" days get a fixed 3px gray mark, slightly darker; the legend
+    glyph matches.
+  - **Days with a few minutes of use:** they get at least a 2px teal bar (3 minutes on a 30-hour scale used to draw
+    under a pixel).
+
 ## 2026.11.41 (2026-11-19): Active vs open on phones
 
 Console only; agents stay on 2026.11.29.

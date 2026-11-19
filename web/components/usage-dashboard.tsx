@@ -41,6 +41,9 @@ export function UsageDashboard({
   // average needs several weeks.
   const showTrend = days > 1;
   const showWeekdays = device && days >= 30;
+  // Yesterday: the working day before, as a lighter bar on each row.
+  const cmp = data.compare;
+  const shownDay = data.daily[0]?.day;
   // Third-party only by default, like the background card: OS built-ins left
   // open (Terminal, System Settings) aren't licenses worth auditing.
   const [idleThirdOnly, setIdleThirdOnly] = useState(true);
@@ -69,6 +72,7 @@ export function UsageDashboard({
           <CardHeader className="pb-2">
             <CardTitle>Top apps</CardTitle>
             <CardDescription>By active time. Click an app to see who used it.</CardDescription>
+            {cmp && shownDay && <CompareLegend day={shownDay} before={cmp.day} />}
           </CardHeader>
           <CardContent>
             <Ranked
@@ -77,6 +81,8 @@ export function UsageDashboard({
                 label: a.app,
                 value: a.active_seconds,
                 note: `${a.users} ${a.users === 1 ? "user" : "users"}`,
+                prev: cmp ? (cmp.apps[a.app.toLowerCase()] ?? 0) : undefined,
+                prevNone: "not used",
                 onClick: () => onPickApp(a.app),
               }))}
             />
@@ -99,6 +105,7 @@ export function UsageDashboard({
             <CardHeader className="pb-2">
               <CardTitle>Top users</CardTitle>
               <CardDescription>By active time: how long they were actually typing or using the mouse.</CardDescription>
+              {cmp && shownDay && <CompareLegend day={shownDay} before={cmp.day} />}
             </CardHeader>
             <CardContent>
               <Ranked
@@ -106,6 +113,8 @@ export function UsageDashboard({
                   key: u.user,
                   label: userLabel(u, data.top_users),
                   value: u.active_seconds,
+                  prev: cmp ? (cmp.users[u.user] ?? 0) : undefined,
+                  prevNone: "didn’t work",
                   note: `${u.apps} ${u.apps === 1 ? "app" : "apps"} · ${userWhere(u)}`,
                   hint: `Signed in as ${u.user} on ${u.device_names.join(", ")}`,
                 }))}
@@ -665,12 +674,39 @@ function userWhere(u: UsageSummary["top_users"][number]) {
   return u.device_names.join(", ");
 }
 
-type RankedRow = { key: string; label: string; value: number; note: string; hint?: string; onClick?: () => void };
+type RankedRow = {
+  key: string;
+  label: string;
+  value: number;
+  note: string;
+  hint?: string;
+  onClick?: () => void;
+  /** The same figure on an earlier day, drawn as a lighter bar under the main one. */
+  prev?: number;
+  /** Wording when prev is 0, e.g. "not used". */
+  prevNone?: string;
+};
+
+/** Legend for the two bars on a Yesterday comparison. */
+function CompareLegend({ day, before }: { day: string; before: string }) {
+  return (
+    <p className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-3 rounded-sm bg-primary" />
+        {dayLabel(day)}
+      </span>
+      <span className="inline-flex items-center gap-1.5" title="The last earlier day anyone worked, so weekends and holidays are skipped">
+        <span className="h-1.5 w-3 rounded-sm bg-primary/35" />
+        {dayLabel(before)}, the working day before
+      </span>
+    </p>
+  );
+}
 
 /** Horizontal bars scaled to the top row, with the value as text. */
 export function Ranked({ rows }: { rows: RankedRow[] }) {
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">No use in this period</p>;
-  const max = Math.max(...rows.map((r) => r.value), 1);
+  const max = Math.max(...rows.map((r) => Math.max(r.value, r.prev ?? 0)), 1);
   return (
     <ul className="space-y-0.5">
       {rows.map((r) => {
@@ -679,11 +715,28 @@ export function Ranked({ rows }: { rows: RankedRow[] }) {
             <span className="truncate font-medium" title={r.label}>
               {r.label}
             </span>
-            <span className="flex h-2 overflow-hidden rounded-full bg-muted max-sm:order-last max-sm:col-span-full">
-              <span className="h-full rounded-full bg-primary" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%` }} />
-            </span>
+            {r.prev === undefined ? (
+              <span className="flex h-2 overflow-hidden rounded-full bg-muted max-sm:order-last max-sm:col-span-full">
+                <span className="h-full rounded-full bg-primary" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%` }} />
+              </span>
+            ) : (
+              <span className="grid gap-[3px] max-sm:order-last max-sm:col-span-full">
+                <span className="flex h-2 overflow-hidden rounded-full bg-muted">
+                  <span className="h-full rounded-full bg-primary" style={{ width: `${Math.max((r.value / max) * 100, 1.5)}%` }} />
+                </span>
+                <span className="flex h-1.5 overflow-hidden rounded-full bg-muted">
+                  {r.prev > 0 && <span className="h-full rounded-full bg-primary/35" style={{ width: `${Math.max((r.prev / max) * 100, 1.5)}%` }} />}
+                </span>
+              </span>
+            )}
             <span className="text-right text-xs text-muted-foreground tabular" title={r.hint}>
               <span className="font-semibold text-foreground">{formatHours(r.value)}</span> · {r.note}
+              {r.prev !== undefined && (
+                <span className="block text-[11px]">
+                  {r.prev > 0 ? `was ${formatHours(r.prev)}` : (r.prevNone ?? "none")}
+                  {r.prev > 0 && r.prev !== r.value && <span aria-hidden> {r.value > r.prev ? "▲" : "▼"}</span>}
+                </span>
+              )}
             </span>
           </>
         );

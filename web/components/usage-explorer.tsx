@@ -20,8 +20,27 @@ import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/tab
 import { EmptyState, ErrorState, ExportLink, type HeadlineStat } from "@/components/common";
 import { UsageDashboard } from "@/components/usage-dashboard";
 
-// Numeric keys, so Object.entries lists them shortest first.
-const PERIODS = { "1": "Today", "7": "7 days", "30": "30 days", "90": "90 days", "365": "1 year" } as const;
+const PERIODS = { yesterday: "Yesterday", "1": "Today", "7": "7 days", "30": "30 days", "90": "90 days", "365": "1 year" } as const;
+type Period = keyof typeof PERIODS;
+// In this order on the bar (object keys that look like numbers would sort first).
+const PERIOD_ORDER: Period[] = ["yesterday", "1", "7", "30", "90", "365"];
+
+/** "Not used today", "Not used yesterday", "Not used in 7 days". */
+function notUsedLabel(p: Period) {
+  return p === "1" ? "Not used today" : p === "yesterday" ? "Not used yesterday" : `Not used in ${PERIODS[p]}`;
+}
+
+/** "Thu 12 Nov" from a YYYY-MM-DD day. */
+function shortDay(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+/** "▲ 4h 05m vs Thu 12 Nov", "no change vs …". */
+function change(now: number, before: number, vs: string, fmt: (n: number) => string) {
+  if (now === before) return `no change vs ${vs}`;
+  return `${now > before ? "▲" : "▼"} ${fmt(Math.abs(now - before))} vs ${vs}`;
+}
 const GROUPS = { app: "By app", app_user: "By app and user" } as const;
 
 type View = "dashboard" | "table";
@@ -47,7 +66,7 @@ export function UsageExplorer({
   const viewKey = scoped ? "device-usage-view" : "usage-view";
   const { data: me } = useMe();
   const [q, setQ] = useState("");
-  const [period, setPeriod] = useState<keyof typeof PERIODS>("1"); // opens on Today
+  const [period, setPeriod] = useState<Period>("1"); // opens on Today
   const [group, setGroup] = useState<UsageGroup>("app");
   const [unused, setUnused] = useState(false);
   const [groupId, setGroupId] = useState("");
@@ -66,10 +85,12 @@ export function UsageExplorer({
       localStorage.setItem(viewKey, v);
     } catch {}
   };
-  const days = Number(period) as UsagePeriod;
+  const yesterday = period === "yesterday";
+  const days = (yesterday ? 1 : Number(period)) as UsagePeriod;
   const filters: FleetUsageFilters = {
     app: useDebounced(q.trim()),
     days,
+    yesterday: yesterday || undefined,
     unused: unused || undefined,
     group_id: scoped ? undefined : groupId || undefined,
     device_id: deviceId,
@@ -86,7 +107,7 @@ export function UsageExplorer({
     placeholderData: (p) => p,
     enabled: view === "table" && group === "app_user",
   });
-  const summaryFilters = { app: filters.app, days, group_id: filters.group_id, device_id: deviceId };
+  const summaryFilters = { app: filters.app, days, yesterday: filters.yesterday, group_id: filters.group_id, device_id: deviceId };
   const summary = useQuery({
     queryKey: qk.usageSummary(summaryFilters),
     queryFn: () => api.usage.summary(summaryFilters),
@@ -121,26 +142,40 @@ export function UsageExplorer({
     onError: (e) => toast.error("Couldn't update infrastructure apps", e),
   });
   const totals = summary.data?.totals;
+  // Yesterday: each figure against the working day before it.
+  const cmp = summary.data?.compare;
+  const vs = cmp ? shortDay(cmp.day) : "";
   const stats: HeadlineStat[] | undefined =
     totals
       ? [
-          { label: "Active", value: formatHours(totals.active_seconds), icon: Activity, tone: "brand" },
+          {
+            label: "Active",
+            value: formatHours(totals.active_seconds),
+            icon: Activity,
+            tone: "brand",
+            note: cmp && change(totals.active_seconds, cmp.active_seconds, vs, formatHours),
+          },
           {
             label: "of open time active",
             value: totals.open_minutes > 0 ? formatShare(totals.active_seconds / (totals.open_minutes * 60)) : "—",
             icon: Clock,
             hint: `Share of the time apps were open that they were also in use: ${formatHours(totals.active_seconds)} active of ${formatHours(totals.open_minutes * 60)} open. Each app counts separately, so open time can add up to more than a day. Background-only processes are not counted.`,
           },
-          { label: "Apps used", value: totals.apps_used, icon: AppWindow },
-          { label: scoped ? "Users" : "Active users", value: totals.active_users, icon: Users },
+          { label: "Apps used", value: totals.apps_used, icon: AppWindow, note: cmp && change(totals.apps_used, cmp.apps_used, vs, String) },
           {
-            label: period === "1" ? "Not used today" : `Not used in ${PERIODS[period]}`,
+            label: scoped ? "Users" : "Active users",
+            value: totals.active_users,
+            icon: Users,
+            note: cmp && change(totals.active_users, cmp.active_users, vs, String),
+          },
+          {
+            label: notUsedLabel(period),
             value: totals.unused_apps,
             icon: PackageX,
             tone: totals.unused_apps > 0 ? "warning" : "default",
             onClick: showUnused,
             cta: "Review list",
-            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not opened ${period === "1" ? "today" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
+            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not opened ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Click to see the list.`,
           },
         ]
       : undefined;
@@ -198,7 +233,13 @@ export function UsageExplorer({
         {view === "table" && (
           <Segmented value={group} onChange={setGroup} options={Object.entries(GROUPS).map(([v, l]) => ({ value: v as UsageGroup, label: l }))} />
         )}
-        <Segmented value={period} onChange={setPeriod} options={Object.entries(PERIODS).map(([v, l]) => ({ value: v as keyof typeof PERIODS, label: l }))} />
+        {/* Six periods: tighter buttons on phones so the bar stays on one line. */}
+        <Segmented
+          value={period}
+          onChange={setPeriod}
+          options={PERIOD_ORDER.map((v) => ({ value: v, label: PERIODS[v] }))}
+          className="max-sm:[&>button]:px-2"
+        />
         {!scoped && (
           <Select
             aria-label="Group"
@@ -212,7 +253,7 @@ export function UsageExplorer({
         {view === "table" && (
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={unused} onCheckedChange={setUnused} aria-label="Only installed apps not used in this period" />
-            {period === "1" ? "Not used today" : `Not used in ${PERIODS[period]}`}
+            {notUsedLabel(period)}
           </label>
         )}
       </div>

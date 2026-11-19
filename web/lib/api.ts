@@ -262,8 +262,9 @@ export type FleetAppRow = {
 };
 
 /** device_id narrows everything to one device (the device page's Usage tab). */
-export type FleetUsageFilters = { app?: string; days?: UsagePeriod; unused?: boolean; group_id?: string; device_id?: string };
-type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "group_id" | "device_id">;
+/** yesterday: that day only (days is then 1). */
+export type FleetUsageFilters = { app?: string; days?: UsagePeriod; yesterday?: boolean; unused?: boolean; group_id?: string; device_id?: string };
+type SummaryFilters = Pick<FleetUsageFilters, "app" | "days" | "yesterday" | "group_id" | "device_id">;
 
 /** third_party is set on idle_apps only: false for OS built-ins (Terminal, System Settings). */
 export type UsageAppStat = { app: string; active_seconds: number; minutes: number; users: number; devices: number; third_party?: boolean };
@@ -309,6 +310,18 @@ export type UsageSummary = {
   background: { app: string; device_id: string; device_name: string; user: string; minutes: number; third_party: boolean }[];
   /** Apps marked as infrastructure: open by design, left out of open totals and idle ranking. */
   infrastructure: UsageAppStat[];
+  /**
+   * Yesterday only: the last earlier day anyone worked (skipping weekends and
+   * holidays), to compare with. apps is keyed by lowercased app name, users by account.
+   */
+  compare?: {
+    day: string;
+    active_seconds: number;
+    active_users: number;
+    apps_used: number;
+    apps: Record<string, number>;
+    users: Record<string, number>;
+  };
 };
 
 export type TelemetryPoint = {

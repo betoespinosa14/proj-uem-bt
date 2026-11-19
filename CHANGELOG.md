@@ -7,6 +7,23 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.43 (2026-11-19): App usage, Yesterday
+
+Server and console; agents stay on 2026.11.29.
+
+### Added
+- **Yesterday** in App usage's period bar, before Today: one full day, with every card (Top apps, Top users,
+  Active vs open, background, "Not used yesterday") and the table, exports and review list. Today is still the
+  view App usage opens on.
+- **Comparison with the working day before.** Yesterday's figures are compared with the last earlier working day
+  (at least 30 minutes of combined use, so weekends and holidays are skipped):
+  - **Headline figures:** a change line, e.g. "▲ 2h 15m vs Sun 15 Nov".
+  - **Top apps and Top users:** a lighter second bar for that day, with "was 17m ▲", "not used" or "didn't work".
+  - **API:** the summary takes `?yesterday=true` and returns `compare`.
+
+### Changed
+- Period and view buttons never wrap their label; the period bar uses tighter buttons on phones so all six fit.
+
 ## 2026.11.42 (2026-11-19): Quiet days on long charts
 
 Console only; agents stay on 2026.11.29.

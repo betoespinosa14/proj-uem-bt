@@ -69,6 +69,8 @@ export type HeadlineStat = {
   /** Label for a small action pill under the figure, e.g. "Review list"; needs onClick. */
   cta?: string;
   hint?: string;
+  /** A small line under the label, e.g. a change against an earlier day. */
+  note?: React.ReactNode;
 };
 
 const headlineTone = {
@@ -145,6 +147,7 @@ export function HeadlineStats({ stats, className }: { stats: HeadlineStat[]; cla
                 {s.value}
               </dd>
               <dt className="text-xs text-muted-foreground">{s.label}</dt>
+              {s.note && <p className="mt-0.5 text-[11px] text-muted-foreground tabular">{s.note}</p>}
               {s.cta && (
                 <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   {s.cta} <ChevronRight className="h-3 w-3" />

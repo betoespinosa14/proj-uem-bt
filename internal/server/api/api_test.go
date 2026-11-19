@@ -772,7 +772,9 @@ func TestUsageTracking(t *testing.T) {
 		}
 		return false
 	}
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !hasDora(); time.Sleep(50 * time.Millisecond) {
+	// Usage is stored asynchronously and the summary reads it in several
+	// queries, so wait until every part of one response includes it.
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !(hasDora() && len(sum.Daily) == 2); time.Sleep(50 * time.Millisecond) {
 		a.do("GET", "/api/usage/summary?days=7", nil, 200, &sum)
 	}
 	if !hasDora() || len(sum.Daily) != 2 {
@@ -842,6 +844,55 @@ func TestUsageTracking(t *testing.T) {
 	}
 	if third, ok := idle["Realtek Audio Driver"]; !ok || third {
 		t.Fatalf("Realtek driver in idle apps = %+v", sum.IdleApps)
+	}
+
+	// Yesterday: that day only (not today), compared with the last earlier
+	// working day (30+ minutes of combined use): two days ago (2 minutes) and
+	// three days ago (dora, 15 minutes) are skipped; four days ago (40) counts.
+	yesterday := time.Now().AddDate(0, 0, -1)
+	twoDaysAgo, fourDaysAgo := time.Now().AddDate(0, 0, -2), time.Now().AddDate(0, 0, -4)
+	send(protocol.TypeUsage, protocol.Usage{Entries: []protocol.UsageEntry{
+		{Date: yesterday.Format(time.DateOnly), App: "Slack", User: "eve", Minutes: 20, ActiveSeconds: 600, LastSeen: yesterday},
+		{Date: twoDaysAgo.Format(time.DateOnly), App: "Slack", User: "gus", Minutes: 5, ActiveSeconds: 120, LastSeen: twoDaysAgo},
+		{Date: fourDaysAgo.Format(time.DateOnly), App: "Slack", User: "hal", Minutes: 60, ActiveSeconds: 2400, LastSeen: fourDaysAgo},
+	}})
+	var ysum struct {
+		Totals struct {
+			ActiveSeconds int `json:"active_seconds"`
+		}
+		Daily   []struct{ Day string }
+		TopApps []stat `json:"top_apps"`
+		Compare *struct {
+			Day           string
+			ActiveSeconds int `json:"active_seconds"`
+			ActiveUsers   int `json:"active_users"`
+			Apps, Users   map[string]int
+		}
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		a.do("GET", "/api/usage/summary?days=1&yesterday=true", nil, 200, &ysum)
+		if ysum.Totals.ActiveSeconds > 0 {
+			break
+		}
+	}
+	if ysum.Totals.ActiveSeconds != 600 || len(ysum.Daily) != 1 || ysum.Daily[0].Day != yesterday.Format(time.DateOnly) ||
+		len(ysum.TopApps) != 1 || ysum.TopApps[0].ActiveSeconds != 600 {
+		t.Fatalf("summary?yesterday = %+v", ysum)
+	}
+	prev := ysum.Compare
+	if prev == nil || prev.Day != fourDaysAgo.Format(time.DateOnly) || prev.ActiveSeconds != 2400 || prev.ActiveUsers != 1 ||
+		prev.Apps["slack"] != 2400 || prev.Users["hal"] != 2400 {
+		t.Fatalf("summary?yesterday compare = %+v", prev)
+	}
+	a.do("GET", "/api/usage?group=app&yesterday=true", nil, 200, &usage)
+	if len(usage.Items) != 1 || usage.Items[0].App != "Slack" || usage.Items[0].ActiveSeconds != 600 {
+		t.Fatalf("usage?yesterday = %+v", usage.Items)
+	}
+	// Other periods carry no comparison.
+	ysum.Compare = nil
+	a.do("GET", "/api/usage/summary?days=7", nil, 200, &ysum)
+	if ysum.Compare != nil {
+		t.Fatalf("summary?days=7 compare = %+v", ysum.Compare)
 	}
 }
 

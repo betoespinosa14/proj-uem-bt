@@ -71,17 +71,18 @@ type UsageRow struct {
 	ActiveSeconds int       `json:"active_seconds"`
 }
 
-// DeviceUsage returns totals for a device since a day, per (app, user) or,
-// with byApp, per app across all users. Most active first.
-func (s *Store) DeviceUsage(ctx context.Context, orgID, deviceID string, since time.Time, byApp bool) ([]UsageRow, error) {
+// DeviceUsage returns totals for a device from since to until (nil: to
+// today), per (app, user) or, with byApp, per app across all users. Most
+// active first.
+func (s *Store) DeviceUsage(ctx context.Context, orgID, deviceID string, since time.Time, until *time.Time, byApp bool) ([]UsageRow, error) {
 	user := "username"
 	if byApp {
 		user = "''"
 	}
 	rows, err := s.Pool.Query(ctx, `
 		SELECT app, `+user+`, count(DISTINCT username), max(last_used), count(DISTINCT day), sum(minutes), sum(active_seconds)
-		FROM app_usage WHERE org_id = $1 AND device_id = $2 AND day >= $3
-		GROUP BY app, 2 ORDER BY sum(active_seconds) DESC, max(last_used) DESC`, orgID, deviceID, since)
+		FROM app_usage WHERE org_id = $1 AND device_id = $2 AND day >= $3 AND ($4::date IS NULL OR day <= $4)
+		GROUP BY app, 2 ORDER BY sum(active_seconds) DESC, max(last_used) DESC`, orgID, deviceID, since, until)
 	return collect(rows, err, func(r pgx.Rows) (UsageRow, error) {
 		var u UsageRow
 		return u, r.Scan(&u.App, &u.User, &u.Users, &u.LastUsed, &u.DaysUsed, &u.Minutes, &u.ActiveSeconds)
@@ -90,11 +91,12 @@ func (s *Store) DeviceUsage(ctx context.Context, orgID, deviceID string, since t
 
 // FleetUsageFilter narrows the fleet usage report.
 type FleetUsageFilter struct {
-	App      string    // substring match on the app name
-	Since    time.Time // start of the period
-	Unused   bool      // only installed apps with no use in the period
-	GroupID  string    // only devices in this group ("" for all)
-	DeviceID string    // only this device ("" for all)
+	App      string     // substring match on the app name
+	Since    time.Time  // start of the period
+	Until    *time.Time // last day of the period (nil: today), e.g. yesterday only
+	Unused   bool       // only installed apps with no use in the period
+	GroupID  string     // only devices in this group ("" for all)
+	DeviceID string     // only this device ("" for all)
 }
 
 // FleetUsageRow is one (device, app, user) line of the fleet report. For an
@@ -121,7 +123,7 @@ func (s *Store) FleetUsage(ctx context.Context, orgID string, f FleetUsageFilter
 		WITH used AS (
 			SELECT device_id, app, username, max(last_used) AS last_used,
 				count(DISTINCT day) AS days, sum(minutes) AS minutes, sum(active_seconds) AS active
-			FROM app_usage WHERE org_id = $1 AND day >= $2
+			FROM app_usage WHERE org_id = $1 AND day >= $2 AND ($7::date IS NULL OR day <= $7)
 			GROUP BY device_id, app, username
 		), ever AS (
 			SELECT device_id, lower(app) AS app, max(last_used) AS last_used
@@ -140,7 +142,7 @@ func (s *Store) FleetUsage(ctx context.Context, orgID string, f FleetUsageFilter
 		WHERE ($3 = '' OR lower(COALESCE(u.app, i.name)) LIKE '%' || lower($3) || '%')
 			AND (CASE WHEN $4 THEN u.app IS NULL ELSE u.app IS NOT NULL OR $3 <> '' END)
 		ORDER BY lower(COALESCE(u.app, i.name)), COALESCE(u.active, 0) DESC, d.name, u.username
-		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID)
+		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (FleetUsageRow, error) {
 		var u FleetUsageRow
 		return u, r.Scan(&u.DeviceID, &u.DeviceName, &u.App, &u.User, &u.Installed,
@@ -171,7 +173,7 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 				count(DISTINCT u.device_id) AS devices, max(u.last_used) AS last_used,
 				sum(u.minutes) AS minutes, sum(u.active_seconds) AS active
 			FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($5 = '' OR d.group_id::text = $5) AND ($6 = '' OR d.id::text = $6)
-			WHERE u.org_id = $1 AND u.day >= $2
+			WHERE u.org_id = $1 AND u.day >= $2 AND ($7::date IS NULL OR u.day <= $7)
 			GROUP BY lower(u.app)
 		), installed AS (
 			SELECT lower(s.name) AS k, min(s.name) AS app, count(DISTINCT s.device_id) AS installed_on,
@@ -191,7 +193,7 @@ func (s *Store) FleetUsageByApp(ctx context.Context, orgID string, f FleetUsageF
 		WHERE ($3 = '' OR COALESCE(u.k, i.k) LIKE '%' || lower($3) || '%')
 			AND (CASE WHEN $4 THEN u.k IS NULL ELSE u.k IS NOT NULL OR $3 <> '' END)
 		ORDER BY COALESCE(u.active, 0) DESC, COALESCE(u.minutes, 0) DESC, COALESCE(u.k, i.k)
-		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID)
+		LIMIT 10000`, orgID, f.Since, f.App, f.Unused, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (FleetAppRow, error) {
 		var u FleetAppRow
 		return u, r.Scan(&u.App, &u.Users, &u.Devices, &u.InstalledOn, &u.LastUsed, &u.Minutes, &u.ActiveSeconds, &u.Publisher, &u.Source)
@@ -242,6 +244,9 @@ type UsageSummary struct {
 	// Apps marked as infrastructure: their active time still counts, but
 	// their open time is left out of open totals, idle_apps and background.
 	Infrastructure []UsageAppStat `json:"infrastructure"`
+	// Compare is the previous working day, set by the caller for one-day
+	// past periods (Yesterday); nil otherwise.
+	Compare *UsageCompare `json:"compare,omitempty"`
 }
 
 type UsageTotals struct {
@@ -300,7 +305,7 @@ type UsageBackground struct {
 	Source     string `json:"-"`
 }
 
-// usageRows is the org's usage since $2 on devices that aren't retired,
+// usageRows is the org's usage from $2 to $6 (NULL: today) on devices that aren't retired,
 // optionally only apps whose name contains $3, devices in group $4 and device $5, with each row marked fg when
 // its (device, app, user) had any active time in the period, and infra when
 // an admin marked the app as infrastructure.
@@ -309,7 +314,7 @@ const usageRows = `
 		SELECT u.*, d.name AS device_name, d.employee_name, g.name AS group_name
 		FROM app_usage u JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		LEFT JOIN device_groups g ON g.id = d.group_id
-		WHERE u.org_id = $1 AND u.day >= $2 AND ($3 = '' OR lower(u.app) LIKE '%' || lower($3) || '%')
+		WHERE u.org_id = $1 AND u.day >= $2 AND ($6::date IS NULL OR u.day <= $6) AND ($3 = '' OR lower(u.app) LIKE '%' || lower($3) || '%')
 	), u AS (
 		SELECT s.*, sum(s.active_seconds) OVER (PARTITION BY s.device_id, lower(s.app), s.username) > 0 AS fg,
 			lower(s.app) IN (SELECT lower(app) FROM usage_infrastructure_apps WHERE org_id = $1) AS infra
@@ -326,7 +331,7 @@ const usageBackgroundN = 500
 
 // UsageSummary totals usage for the dashboard view.
 func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilter) (UsageSummary, error) {
-	since, app, group, dev := f.Since, f.App, f.GroupID, f.DeviceID
+	since, app, group, dev, until := f.Since, f.App, f.GroupID, f.DeviceID, f.Until
 	var out UsageSummary
 	t := &out.Totals
 	err := s.Pool.QueryRow(ctx, usageRows+`
@@ -334,7 +339,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 			count(DISTINCT lower(app)) FILTER (WHERE fg), count(DISTINCT username) FILTER (WHERE fg),
 			count(DISTINCT device_id), COALESCE(sum(minutes) FILTER (WHERE NOT fg AND NOT infra), 0),
 			count(DISTINCT lower(app)) FILTER (WHERE NOT fg AND NOT infra)
-		FROM u`, orgID, since, app, group, dev).
+		FROM u`, orgID, since, app, group, dev, until).
 		Scan(&t.ActiveSeconds, &t.OpenMinutes, &t.AppsUsed, &t.ActiveUsers, &t.Devices, &t.BackgroundMinutes, &t.BackgroundApps)
 	if err != nil {
 		return out, err
@@ -343,7 +348,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	rows, err := s.Pool.Query(ctx, usageRows+`
 		SELECT to_char(day, 'YYYY-MM-DD'), sum(active_seconds), COALESCE(sum(minutes) FILTER (WHERE fg AND NOT infra), 0), count(DISTINCT device_id),
 			count(DISTINCT lower(app)) FILTER (WHERE fg), count(DISTINCT username) FILTER (WHERE active_seconds > 0)
-		FROM u GROUP BY day ORDER BY day`, orgID, since, app, group, dev)
+		FROM u GROUP BY day ORDER BY day`, orgID, since, app, group, dev, until)
 	if out.Daily, err = collect(rows, err, func(r pgx.Rows) (UsageDay, error) {
 		var d UsageDay
 		return d, r.Scan(&d.Day, &d.ActiveSeconds, &d.Minutes, &d.Devices, &d.Apps, &d.Users)
@@ -355,7 +360,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 	apps := func(where, order string, limit int) ([]UsageAppStat, error) {
 		rows, err := s.Pool.Query(ctx, usageRows+`
 			SELECT min(app), sum(active_seconds), sum(minutes), count(DISTINCT username), count(DISTINCT device_id)
-			FROM u WHERE `+where+` GROUP BY lower(app) ORDER BY `+order+`, min(app) LIMIT $6`, orgID, since, app, group, dev, limit)
+			FROM u WHERE `+where+` GROUP BY lower(app) ORDER BY `+order+`, min(app) LIMIT $7`, orgID, since, app, group, dev, until, limit)
 		return collect(rows, err, func(r pgx.Rows) (UsageAppStat, error) {
 			var a UsageAppStat
 			return a, r.Scan(&a.App, &a.ActiveSeconds, &a.Minutes, &a.Users, &a.Devices)
@@ -379,7 +384,7 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 			array_agg(DISTINCT device_name ORDER BY device_name),
 			array_remove(array_agg(DISTINCT group_name ORDER BY group_name), NULL),
 			COALESCE((array_agg(employee_name ORDER BY active_seconds DESC) FILTER (WHERE employee_name <> ''))[1], '')
-		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $6`, orgID, since, app, group, dev, usageTopN)
+		FROM u WHERE fg GROUP BY username ORDER BY sum(active_seconds) DESC, username LIMIT $7`, orgID, since, app, group, dev, until, usageTopN)
 	if out.TopUsers, err = collect(rows, err, func(r pgx.Rows) (UsageUser, error) {
 		var u UsageUser
 		return u, r.Scan(&u.User, &u.ActiveSeconds, &u.OpenMinutes, &u.Apps, &u.Devices, &u.DeviceNames, &u.Groups, &u.Employee)
@@ -391,19 +396,85 @@ func (s *Store) UsageSummary(ctx context.Context, orgID string, f FleetUsageFilt
 		, bg AS (
 			SELECT min(app) AS app, device_id, min(device_name) AS device_name, username, sum(minutes) AS minutes
 			FROM u WHERE NOT fg AND NOT infra GROUP BY device_id, lower(app), username
-			ORDER BY sum(minutes) DESC, min(app) LIMIT $6
+			ORDER BY sum(minutes) DESC, min(app) LIMIT $7
 		)
 		SELECT bg.app, bg.device_id, bg.device_name, bg.username, bg.minutes, COALESCE(sw.publisher, ''), COALESCE(sw.source, '')
 		FROM bg LEFT JOIN LATERAL (
 			SELECT publisher, source FROM device_software
 			WHERE device_id = bg.device_id AND lower(name) = lower(bg.app) LIMIT 1
 		) sw ON true
-		ORDER BY bg.minutes DESC, bg.app`, orgID, since, app, group, dev, usageBackgroundN)
+		ORDER BY bg.minutes DESC, bg.app`, orgID, since, app, group, dev, until, usageBackgroundN)
 	out.Background, err = collect(rows, err, func(r pgx.Rows) (UsageBackground, error) {
 		var b UsageBackground
 		return b, r.Scan(&b.App, &b.DeviceID, &b.DeviceName, &b.User, &b.Minutes, &b.Publisher, &b.Source)
 	})
 	return out, err
+}
+
+// UsageCompare is one earlier day's active use, to compare a day against:
+// totals, plus active seconds per app (lowercased name) and per account.
+type UsageCompare struct {
+	Day           string         `json:"day"` // YYYY-MM-DD
+	ActiveSeconds int            `json:"active_seconds"`
+	ActiveUsers   int            `json:"active_users"`
+	AppsUsed      int            `json:"apps_used"`
+	Apps          map[string]int `json:"apps"`
+	Users         map[string]int `json:"users"`
+}
+
+// workdayMinActive is how much combined active time makes a day a working
+// day to compare against: a holiday where someone checked in for 3 minutes
+// isn't one.
+const workdayMinActive = 30 * 60
+
+// PreviousWorkday returns the last day before f.Since that was a working day
+// for the devices in scope (at least workdayMinActive of combined active time,
+// whatever app is searched; weekends and holidays are skipped), and that
+// day's active use, narrowed by the app search like the rest of the summary.
+// nil if there is none.
+func (s *Store) PreviousWorkday(ctx context.Context, orgID string, f FleetUsageFilter) (*UsageCompare, error) {
+	var day *time.Time
+	err := s.Pool.QueryRow(ctx, `
+		SELECT max(day) FROM (
+			SELECT u.day FROM app_usage u
+			JOIN devices d ON d.id = u.device_id AND d.retired_at IS NULL AND ($3 = '' OR d.group_id::text = $3) AND ($4 = '' OR d.id::text = $4)
+			WHERE u.org_id = $1 AND u.day < $2
+			GROUP BY u.day HAVING sum(u.active_seconds) >= $5
+		) w`, orgID, f.Since, f.GroupID, f.DeviceID, workdayMinActive).Scan(&day)
+	if err != nil || day == nil {
+		return nil, err
+	}
+	out := &UsageCompare{Day: day.Format(time.DateOnly), Apps: map[string]int{}, Users: map[string]int{}}
+	args := []any{orgID, *day, f.App, f.GroupID, f.DeviceID, *day}
+	if err := s.Pool.QueryRow(ctx, usageRows+`
+		SELECT COALESCE(sum(active_seconds), 0), count(DISTINCT username) FILTER (WHERE active_seconds > 0),
+			count(DISTINCT lower(app)) FILTER (WHERE fg)
+		FROM u`, args...).Scan(&out.ActiveSeconds, &out.ActiveUsers, &out.AppsUsed); err != nil {
+		return nil, err
+	}
+	for _, q := range []struct {
+		key string
+		m   map[string]int
+	}{{"lower(app)", out.Apps}, {"username", out.Users}} {
+		rows, err := s.Pool.Query(ctx, usageRows+`
+			SELECT `+q.key+`, sum(active_seconds) FROM u WHERE active_seconds > 0 GROUP BY 1`, args...)
+		list, err := collect(rows, err, func(r pgx.Rows) (keyCount, error) {
+			var x keyCount
+			return x, r.Scan(&x.Key, &x.N)
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range list {
+			q.m[x.Key] = x.N
+		}
+	}
+	return out, nil
+}
+
+type keyCount struct {
+	Key string
+	N   int
 }
 
 // SoftwareInfo returns every publisher and source each named app is
@@ -480,9 +551,9 @@ func (s *Store) ReclaimList(ctx context.Context, orgID string, f FleetUsageFilte
 			(SELECT max(last_used) FROM app_usage e WHERE e.device_id = d.id AND lower(e.app) = lower(sw.name))
 		FROM device_software sw JOIN devices d ON d.id = sw.device_id AND d.retired_at IS NULL AND ($4 = '' OR d.group_id::text = $4) AND ($5 = '' OR d.id::text = $5)
 		WHERE sw.org_id = $1 AND ($3 = '' OR lower(sw.name) LIKE '%' || lower($3) || '%')
-			AND NOT EXISTS (SELECT 1 FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name) AND u.day >= $2)
+			AND NOT EXISTS (SELECT 1 FROM app_usage u WHERE u.device_id = d.id AND lower(u.app) = lower(sw.name) AND u.day >= $2 AND ($6::date IS NULL OR u.day <= $6))
 		ORDER BY lower(sw.name), d.name, d.id
-		LIMIT 50000`, orgID, f.Since, f.App, f.GroupID, f.DeviceID)
+		LIMIT 50000`, orgID, f.Since, f.App, f.GroupID, f.DeviceID, f.Until)
 	return collect(rows, err, func(r pgx.Rows) (ReclaimRow, error) {
 		var x ReclaimRow
 		return x, r.Scan(&x.App, &x.Publisher, &x.Version, &x.Source, &x.InstallDate, &x.DeviceName, &x.DeviceUser, &x.DeviceSeen, &x.LastUsed)

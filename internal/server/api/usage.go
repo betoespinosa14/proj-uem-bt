@@ -16,9 +16,16 @@ import (
 )
 
 // usagePeriod parses ?days= (1, 7, 30, 90 or 365; default 30) and returns the
-// number of days and the first day of the period. Days are the server's local
-// dates, like the dates agents report usage under, so 1 means today.
-func usagePeriod(r *http.Request) (int, time.Time) {
+// number of days and the first and last day of the period (last nil: up to
+// today). Days are the server's local dates, like the dates agents report
+// usage under, so 1 means today. ?yesterday=true means yesterday only.
+func usagePeriod(r *http.Request) (int, time.Time, *time.Time) {
+	y, m, d := time.Now().Date()
+	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	if r.URL.Query().Get("yesterday") == "true" {
+		day := today.AddDate(0, 0, -1)
+		return 1, day, &day
+	}
 	days := 30
 	switch r.URL.Query().Get("days") {
 	case "1":
@@ -30,8 +37,7 @@ func usagePeriod(r *http.Request) (int, time.Time) {
 	case "365":
 		days = 365
 	}
-	y, m, d := time.Now().Date()
-	return days, time.Date(y, m, d, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -(days - 1))
+	return days, today.AddDate(0, 0, -(days - 1)), nil
 }
 
 // byApp reports whether ?group=app asks for totals per app across users
@@ -39,8 +45,8 @@ func usagePeriod(r *http.Request) (int, time.Time) {
 func byApp(r *http.Request) bool { return r.URL.Query().Get("group") == "app" }
 
 func (s *Server) deviceUsage(w http.ResponseWriter, r *http.Request) {
-	_, since := usagePeriod(r)
-	list, err := s.store.DeviceUsage(r.Context(), orgOf(r), chi.URLParam(r, "id"), since, byApp(r))
+	_, since, until := usagePeriod(r)
+	list, err := s.store.DeviceUsage(r.Context(), orgOf(r), chi.URLParam(r, "id"), since, until, byApp(r))
 	items(w, list, err)
 }
 
@@ -50,9 +56,9 @@ func (s *Server) exportDeviceUsage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	days, since := usagePeriod(r)
+	days, since, until := usagePeriod(r)
 	grouped := byApp(r)
-	list, err := s.store.DeviceUsage(r.Context(), orgOf(r), dev.ID, since, grouped)
+	list, err := s.store.DeviceUsage(r.Context(), orgOf(r), dev.ID, since, until, grouped)
 	if err != nil {
 		fail(w, err)
 		return
@@ -92,7 +98,7 @@ var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 // fleetFilter parses the App usage filters: ?days=, ?app=, ?unused=true and
 // ?group_id= (only devices in that group) and ?device_id= (only that device).
 func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
-	days, since := usagePeriod(r)
+	days, since, until := usagePeriod(r)
 	q := r.URL.Query()
 	group := strings.TrimSpace(q.Get("group_id"))
 	if group != "" && !uuidRe.MatchString(group) {
@@ -102,7 +108,7 @@ func fleetFilter(r *http.Request) (int, store.FleetUsageFilter, error) {
 	if device != "" && !uuidRe.MatchString(device) {
 		return days, store.FleetUsageFilter{}, badRequest("device_id must be a device ID")
 	}
-	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Unused: q.Get("unused") == "true", GroupID: group, DeviceID: device}, nil
+	return days, store.FleetUsageFilter{App: strings.TrimSpace(q.Get("app")), Since: since, Until: until, Unused: q.Get("unused") == "true", GroupID: group, DeviceID: device}, nil
 }
 
 func (s *Server) fleetUsage(r *http.Request) ([]store.FleetUsageRow, error) {
@@ -145,6 +151,13 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	// A single past day (Yesterday) is compared with the working day before it.
+	if f.Until != nil {
+		if sum.Compare, err = s.store.PreviousWorkday(r.Context(), orgOf(r), f); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	// Same rule as the table's "Not used" view: installed third-party apps
 	// with no use in the period.

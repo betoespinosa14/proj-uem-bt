@@ -286,7 +286,8 @@ export type UsageSummary = {
     unused_apps: number;
   };
   /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
-  daily: { day: string; active_seconds: number; minutes: number; devices: number; apps: number }[];
+  /** users: accounts with any active time that day (people who worked). */
+  daily: { day: string; active_seconds: number; minutes: number; devices: number; apps: number; users: number }[];
   top_apps: UsageAppStat[];
   /** The most idle apps (up to 40, so system ones can be hidden and ten still shown). */
   idle_apps: UsageAppStat[];

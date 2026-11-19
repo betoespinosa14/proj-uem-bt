@@ -52,8 +52,11 @@ export function UsageDashboard({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle>Active hours per day</CardTitle>
-            <CardDescription>Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.</CardDescription>
-            <TrendSummary daily={data.daily} />
+            <CardDescription>
+              Time an app was in front while someone was typing or using the mouse, {device ? "on this device" : "across all devices"}.
+              {!device && " Bars add up everyone's time, so a busy day can pass 24 hours."}
+            </CardDescription>
+            <TrendSummary daily={data.daily} device={device} />
           </CardHeader>
           <CardContent>
             <Trend daily={data.daily} days={days} device={device} />
@@ -280,19 +283,52 @@ function Background({
   );
 }
 
+function dayLabel(day: string) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+
 /**
- * "Average 6h 14m a day · Busiest: Fri, Nov 13 (27h 15m)", over full days that
- * reported: today is still in progress, and days before an agent was installed
- * would pull the average down.
+ * The chart's takeaway, over full days (today is still in progress).
+ *
+ * Fleet: in hours per person, never summed hours, so no day reads as more than
+ * 24 hours. "On days people worked: about 2h each · Busiest: Fri 13 Nov (6
+ * people, about 4h 32m each)". The average is total active time over
+ * person-days (one account active on one day), so a day with one person
+ * active for 3 minutes weighs as one person-day, and days nobody worked
+ * (weekends, holidays) don't pull it down.
+ *
+ * Device: "Average 2h 10m a day · Busiest: ...", over days the device reported.
  */
-function TrendSummary({ daily }: { daily: UsageSummary["daily"] }) {
+function TrendSummary({ daily, device }: { daily: UsageSummary["daily"]; device: boolean }) {
   const today = localDay(new Date());
+  if (!device) {
+    const worked = daily.filter((d) => d.day < today && d.users > 0 && d.active_seconds > 0);
+    if (!worked.length) return null;
+    const total = worked.reduce((n, d) => n + d.active_seconds, 0);
+    const personDays = worked.reduce((n, d) => n + d.users, 0);
+    const busiest = worked.reduce((a, b) => (b.active_seconds > a.active_seconds ? b : a));
+    const first = dayLabel(worked[0]!.day);
+    const last = dayLabel(worked[worked.length - 1]!.day);
+    return (
+      <p
+        className="text-xs text-muted-foreground"
+        title={`Each person's active time, averaged over the days they used their computer: ${formatHours(total)} across ${personDays} person-days, ${first === last ? first : `${first} – ${last}`}. Today is left out until it ends.`}
+      >
+        On days people worked: about <span className="font-semibold text-foreground tabular">{formatHours(total / personDays)}</span> each · Busiest:{" "}
+        {dayLabel(busiest.day)} ({people(busiest.users)}, {busiest.users === 1 ? "" : "about "}
+        <span className="tabular">{formatHours(busiest.active_seconds / busiest.users)}</span>
+        {busiest.users === 1 ? "" : " each"})
+      </p>
+    );
+  }
   const full = daily.filter((d) => d.day < today);
   if (!full.length) return null;
   const avg = full.reduce((n, d) => n + d.active_seconds, 0) / full.length;
   const busiest = full.reduce((a, b) => (b.active_seconds > a.active_seconds ? b : a));
-  const [y, m, d] = busiest.day.split("-").map(Number);
-  const label = new Date(y!, m! - 1, d!).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const label = dayLabel(busiest.day);
   return (
     <p
       className="text-xs text-muted-foreground"
@@ -368,6 +404,7 @@ export function Trend({
       stub: row && row.active_seconds === 0 ? 1 : 0,
       apps: row?.apps ?? 0,
       devices: row?.devices ?? 0,
+      users: row?.users ?? 0,
       today: i === days - 1,
     };
   });
@@ -448,14 +485,29 @@ export function Trend({
                         </p>
                       </>
                     ) : (
-                      <>
-                        <p>
-                          <span className="text-muted-foreground">Active</span> <span className="font-semibold tabular">{formatHours(p.active * 3600)}</span>
-                        </p>
-                        <p className="text-muted-foreground">
-                          {device ? `${p.apps} ${p.apps === 1 ? "app" : "apps"} used` : `${p.devices} ${p.devices === 1 ? "device" : "devices"} reported`}
-                        </p>
-                      </>
+                      device || p.users === 0 ? (
+                        <>
+                          <p>
+                            <span className="text-muted-foreground">Active</span> <span className="font-semibold tabular">{formatHours(p.active * 3600)}</span>
+                          </p>
+                          <p className="text-muted-foreground">
+                            {device ? `${p.apps} ${p.apps === 1 ? "app" : "apps"} used` : `${p.devices} ${p.devices === 1 ? "device" : "devices"} reported`}
+                          </p>
+                        </>
+                      ) : (
+                        // Per person first: the bar sums everyone's time and can pass 24h.
+                        <>
+                          <p>
+                            <span className="font-semibold">{people(p.users)}</span>
+                            <span className="text-muted-foreground"> · {p.users === 1 ? "" : "about "}</span>
+                            <span className="font-semibold tabular">{formatHours((p.active * 3600) / p.users)}</span>
+                            <span className="text-muted-foreground">{p.users === 1 ? "" : " each"}</span>
+                          </p>
+                          <p className="text-muted-foreground">
+                            <span className="tabular">{formatHours(p.active * 3600)}</span> combined · {p.devices} {p.devices === 1 ? "device" : "devices"} reported
+                          </p>
+                        </>
+                      )
                     )}
                   </div>
                 );

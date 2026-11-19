@@ -7,6 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.40 (2026-11-19): App usage, hours per person
+
+Server and console; agents stay on 2026.11.29.
+
+### Changed
+- **Active hours per day talks in hours per person,** so no figure reads as a day longer than 24 hours:
+  - **Header:** "On days people worked: about 1h 59m each · Busiest: Fri 13 Nov (6 people, about 4h 32m each)".
+    The average is total active time over person-days (one person active on one day), so days nobody worked
+    (weekends, holidays) and short days don't skew it.
+  - **Bar tooltip:** "6 people · about 4h 32m each", with "27h 14m combined" underneath, so the bars still add up
+    to the Active total at the top.
+  - **Subtitle:** "Bars add up everyone's time, so a busy day can pass 24 hours."
+  - **Device page:** unchanged ("Average … a day"); a single device can't pass 24 hours.
+- The usage summary reports `users` per day: accounts with any active time that day.
+
 ## 2026.11.39 (2026-11-19): App usage, 7 days
 
 Server and console; agents stay on 2026.11.29.

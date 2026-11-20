@@ -220,6 +220,8 @@ func TestCategory(t *testing.T) {
 		{store.Software{Name: "HP Support Assistant", Publisher: "HP Inc.", Source: "registry"}, CategoryThirdParty},
 		{store.Software{Name: "procps", Publisher: "Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>", Source: "dpkg"}, CategorySystem},
 		{store.Software{Name: "zabbix-agent", Publisher: "Zabbix Packager <info@zabbix.com>", Source: "dpkg"}, CategoryThirdParty},
+		{store.Software{Name: "Windows Setup Remediations (x64) (KB4023057)", Source: "registry"}, CategorySystem},
+		{store.Software{Name: "Update for Windows 10 for x64-based Systems (KB5001716)", Publisher: "", Source: "registry"}, CategorySystem},
 		{store.Software{Name: "NewApp", Source: "unknown"}, CategoryThirdParty},
 		{store.Software{Name: "Calculator", Version: "Windows 11", Source: "unknown"}, CategorySystem}, // Parallels shortcut
 		{store.Software{Name: "Docs", Version: "", Source: "unknown"}, CategoryThirdParty},
@@ -250,6 +252,7 @@ func TestIsComponent(t *testing.T) {
 		"Creative Cloud Uninstaller", "GoogleUpdater", "Microsoft AutoUpdate", "Mozilla Maintenance Service",
 		"Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.44.35211", "Microsoft Windows Desktop Runtime - 8.0.33 (x64)",
 		"Microsoft Edge WebView2 Runtime", "Freshservice Discovery Agent", "Lenovo Vantage Service", "Microsoft Intune Agent",
+		"adobe_licensing_helper", "WebKitPluginHost",
 	}
 	for _, n := range helpers {
 		if !IsComponent(store.Software{Name: n}) {
@@ -260,6 +263,7 @@ func TestIsComponent(t *testing.T) {
 		"Adobe Acrobat", "Adobe Acrobat (64-bit)", "Adobe Creative Cloud", "Adobe Photoshop 2026", "Adobe Premiere Pro 2025",
 		"7-Zip 24.09 (x64 edition)", "Acrobat Distiller", "Microsoft Teams", "AnyDesk", "TeamViewer 12", "Disk Utility",
 		"Lenovo Vantage", "Agent Ransack", "Customer Service Desk", "Grammarly for Windows", "Zoom Workplace",
+		"zabbix-server-mysql", "zabbix-frontend-php", "Adobe_Photoshop",
 	}
 	for _, n := range apps {
 		if IsComponent(store.Software{Name: n}) {

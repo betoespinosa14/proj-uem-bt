@@ -72,7 +72,7 @@ A Mac running Windows in Parallels lists shortcuts to the Windows apps (Calculat
 
 ### What are infrastructure apps?
 
-Apps that are meant to stay open with nobody using them, such as remote-access hosts. Mark one with the button next to it on the dashboard (needs `devices.write`). For marked apps:
+Apps that are meant to stay open with nobody using them, such as remote-access hosts, or that are needed even though nobody opens them, such as a monitoring agent or server packages (Zabbix). Mark one with the button next to it on the dashboard, or, for an app nobody opens, on its row in the **Not used** table (By app); both need `devices.write`. The same place has **Unmark**. For marked apps:
 
 - active time still counts;
 - open time is left out of open totals, the idle ranking and the background list;

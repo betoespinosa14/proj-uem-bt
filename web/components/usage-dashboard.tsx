@@ -13,7 +13,7 @@ import { ChevronRight, ServerCog } from "lucide-react";
 // bright teal on dark). Idle time is a neutral remainder, never a hue, and
 // every bar carries a text label, so color is never the only cue.
 
-type InfraAction = (app: string, mark: boolean) => void;
+export type InfraAction = (app: string, mark: boolean) => void;
 
 /** "device" when the dashboard covers one device (the device page's Usage tab). */
 export type UsageScope = "fleet" | "device";
@@ -860,14 +860,25 @@ function RowChevron({ className }: { className?: string }) {
 }
 
 /** Icon button, shown on row hover or keyboard focus. */
-function MarkInfra({ app, onInfrastructure, device }: { app: string; onInfrastructure: InfraAction; device: boolean }) {
+export function MarkInfra({
+  app,
+  onInfrastructure,
+  device,
+  why = "open by design (e.g. remote access), so its open time isn't counted as idle",
+}: {
+  app: string;
+  onInfrastructure: InfraAction;
+  device: boolean;
+  /** What marking means where the button is shown. */
+  why?: string;
+}) {
   return (
     <button
       type="button"
       onClick={() => onInfrastructure(app, true)}
-      title={`Mark ${app} as infrastructure: open by design (e.g. remote access), so its open time isn't counted as idle${device ? " (applies to all devices)" : ""}`}
+      title={`Mark ${app} as infrastructure: ${why}${device ? " (applies to all devices)" : ""}`}
       aria-label={`Mark ${app} as infrastructure`}
-      className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+      className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
     >
       <ServerCog className="h-4 w-4" />
     </button>

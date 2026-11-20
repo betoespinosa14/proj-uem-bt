@@ -7,6 +7,26 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.52 (2026-11-21): Review list clean-up; mark infrastructure from Not used
+
+Server and console; agents stay on 2026.11.51.
+
+### Fixed
+- **Three more non-apps left "Not used":** helper names written with underscores (`adobe_licensing_helper`),
+  WebKit's plug-in host (`WebKitPluginHost`), and Windows update packages listed as software
+  ("Windows Setup Remediations (x64) (KB4023057)"). Helpers join the hidden-helpers count; Windows updates are
+  system software.
+
+### Added
+- **Mark as infrastructure from the Not used list.** Apps nobody opens (a monitoring agent, server packages) never
+  reach the dashboard's idle ranking, so they couldn't be marked. In Not used (By app), owners and admins now
+  have the mark button on each row, and **Unmark** on marked ones. Marked apps keep the Infrastructure badge and
+  are `yes` in the reclaim export's infrastructure column.
+
+### Changed
+- **The Not used card shows when its list is open:** the pill reads "Showing list" with a tick instead of
+  "Review list".
+
 ## 2026.11.51 (2026-11-21): Safari listed on Macs; App usage switches kept together
 
 Server, console and **agents** (2026.11.51). After installing, click **Update agents** on the Devices page.

@@ -68,6 +68,8 @@ export type HeadlineStat = {
   onClick?: () => void;
   /** Label for a small action pill under the figure, e.g. "Review list"; needs onClick. */
   cta?: string;
+  /** The list behind the figure is the one on screen: the pill shows a tick and the figure is marked current. */
+  active?: boolean;
   hint?: string;
   /** A small line under the label, e.g. a change against an earlier day. */
   note?: React.ReactNode;
@@ -148,11 +150,16 @@ export function HeadlineStats({ stats, className }: { stats: HeadlineStat[]; cla
               </dd>
               <dt className="text-xs text-muted-foreground">{s.label}</dt>
               {s.note && <p className="mt-0.5 text-[11px] text-muted-foreground tabular">{s.note}</p>}
-              {s.cta && (
-                <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                  {s.cta} <ChevronRight className="h-3 w-3" />
-                </span>
-              )}
+              {s.cta &&
+                (s.active ? (
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                    <Check className="h-3 w-3" aria-hidden /> {s.cta}
+                  </span>
+                ) : (
+                  <span className="mt-1 inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                    {s.cta} <ChevronRight className="h-3 w-3" />
+                  </span>
+                ))}
             </div>
           </>
         );
@@ -170,7 +177,11 @@ export function HeadlineStats({ stats, className }: { stats: HeadlineStat[]; cla
               }
             }}
             title={s.hint}
-            className="-m-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl p-1.5 outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-current={s.active ? "true" : undefined}
+            className={cn(
+              "-m-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl p-1.5 outline-none transition-colors hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring/50",
+              s.active && "bg-muted/60",
+            )}
           >
             {body}
           </div>

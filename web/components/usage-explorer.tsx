@@ -18,7 +18,7 @@ import { Skeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/tabs";
 import { SortButton, Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { EmptyState, ErrorState, ExportLink, type HeadlineStat } from "@/components/common";
-import { UsageDashboard } from "@/components/usage-dashboard";
+import { MarkInfra, UsageDashboard, type InfraAction } from "@/components/usage-dashboard";
 
 const PERIODS = { yesterday: "Yesterday", "1": "Today", "7": "7 days", "30": "30 days", "90": "90 days", "365": "1 year" } as const;
 type Period = keyof typeof PERIODS;
@@ -134,9 +134,14 @@ export function UsageExplorer({
     onSuccess: (_, { app, mark }) => {
       void qc.invalidateQueries({ queryKey: ["usage", "summary"] });
       void qc.invalidateQueries({ queryKey: qk.usageInfrastructure });
+      // From the Not used list the mark means "keep, don't reclaim"; from the dashboard, "open by design".
       toast.success(
-        mark ? `${app} marked as infrastructure` : `${app} is ranked again`,
-        mark ? `Its open time no longer counts as idle${scoped ? ", on every device" : ""}.` : undefined,
+        mark ? `${app} marked as infrastructure` : unused ? `${app} is no longer marked as infrastructure` : `${app} is ranked again`,
+        mark
+          ? unused
+            ? `It stays in this list with a badge, and the reclaim export marks it as infrastructure${scoped ? ", on every device" : ""}.`
+            : `Its open time no longer counts as idle${scoped ? ", on every device" : ""}.`
+          : undefined,
       );
     },
     onError: (e) => toast.error("Couldn't update infrastructure apps", e),
@@ -176,7 +181,8 @@ export function UsageExplorer({
             icon: PackageX,
             tone: totals.unused_apps > 0 ? "warning" : "default",
             onClick: showUnused,
-            cta: "Review list",
+            cta: view === "table" && unused ? "Showing list" : "Review list",
+            active: view === "table" && unused,
             hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Helper components such as updaters and crash reporters aren't counted. Click to see the list.`,
           },
         ]
@@ -330,7 +336,16 @@ export function UsageExplorer({
               )}
               {group === "app" ? (
                 // Remount on "Not used" so each list starts on its own sort.
-                <ByAppTable key={String(unused)} items={byApp.data?.items ?? []} infra={infraSet} scoped={scoped} noActive={noActive} unused={unused} />
+                <ByAppTable
+                  key={String(unused)}
+                  items={byApp.data?.items ?? []}
+                  infra={infraSet}
+                  scoped={scoped}
+                  noActive={noActive}
+                  unused={unused}
+                  // Apps nobody opens never reach the dashboard's idle ranking, so this is where they can be marked.
+                  onInfrastructure={unused && can("devices.write") ? (app, mark) => infra.mutate({ app, mark }) : undefined}
+                />
               ) : (
                 <ByUserTable
                   key={String(unused)}
@@ -408,10 +423,24 @@ function LastUsed({ ts }: { ts: string | null }) {
 }
 
 /** The app name and its badges on one line; a long name is cut with "…" (full name on hover) so the badges never wrap. */
-function AppCell({ app, infra, notInstalled }: { app: string; infra: Set<string>; notInstalled?: boolean }) {
+function AppCell({
+  app,
+  infra,
+  notInstalled,
+  onInfrastructure,
+  scoped,
+}: {
+  app: string;
+  infra: Set<string>;
+  notInstalled?: boolean;
+  /** Set in the Not used list for owners and admins: mark or unmark the app as infrastructure. */
+  onInfrastructure?: InfraAction;
+  scoped?: boolean;
+}) {
+  const marked = infra.has(app.toLowerCase());
   return (
     <TD className="font-medium">
-      <span className="flex max-w-[22rem] items-center gap-2">
+      <span className="flex max-w-[26rem] items-center gap-2">
         <span className="min-w-0 truncate" title={app}>
           {app}
         </span>
@@ -425,6 +454,24 @@ function AppCell({ app, infra, notInstalled }: { app: string; infra: Set<string>
             Not installed
           </Badge>
         )}
+        {onInfrastructure &&
+          (marked ? (
+            <button
+              type="button"
+              onClick={() => onInfrastructure(app, false)}
+              title={`Remove the infrastructure mark from ${app}`}
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+            >
+              Unmark
+            </button>
+          ) : (
+            <MarkInfra
+              app={app}
+              onInfrastructure={onInfrastructure}
+              device={!!scoped}
+              why="needed by design (e.g. a monitoring agent or server package), so it's kept, not reclaimed"
+            />
+          ))}
       </span>
     </TD>
   );
@@ -450,12 +497,14 @@ function ByAppTable({
   scoped,
   noActive,
   unused,
+  onInfrastructure,
 }: {
   items: FleetAppRow[];
   infra: Set<string>;
   scoped: boolean;
   noActive: boolean;
   unused: boolean;
+  onInfrastructure?: InfraAction;
 }) {
   const { sort, onSort } = useTableSort<AppSortKey>(APP_TEXT_KEYS, unused ? "last" : "active");
   const rows = useMemo(() => {
@@ -510,8 +559,8 @@ function ByAppTable({
       </THead>
       <TBody>
         {rows.map((u) => (
-          <TR key={u.app}>
-            <AppCell app={u.app} infra={infra} />
+          <TR key={u.app} className={onInfrastructure ? "group" : undefined}>
+            <AppCell app={u.app} infra={infra} onInfrastructure={onInfrastructure} scoped={scoped} />
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
             {!unused && (
               <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>

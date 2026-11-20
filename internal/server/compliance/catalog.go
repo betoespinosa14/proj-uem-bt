@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/uem/uem/internal/server/store"
 )
@@ -114,13 +115,22 @@ var component = regexp.MustCompile(`(?i)` +
 	`\bcrash ?(reporter|processor|handler|pad)\b|\bdiagnostics?\b|installer(agent)?\b|` +
 	`\bredistributables?\b|\bruntime\b|\bwebview2\b|` +
 	`\blicens(e|ing) ?helper\b|lic(app|helper|util)\b|\bgenuine service\b|clean ?up ?utility\b|` +
-	`\bmaintenance service\b|\bhelper\b|\b(service|agent)$|` +
-	`^(aam|acr_|aasi)`)
+	`\bmaintenance service\b|\bhelper\b|\b(service|agent)$|plugin ?host\b|` +
+	`^(aam|acr[_ ]|aasi)`)
 
 // IsComponent reports whether an installed app is a helper component rather
 // than an app someone would open: "not used" is meaningless for those, so
 // they're left out of license reviews.
-func IsComponent(s store.Software) bool { return component.MatchString(s.Name) }
+//
+// Underscores count as spaces, so "adobe_licensing_helper" reads as
+// "adobe licensing helper" (an underscore is otherwise part of a word).
+func IsComponent(s store.Software) bool {
+	return component.MatchString(strings.ReplaceAll(s.Name, "_", " "))
+}
+
+// winUpdate matches Windows update packages listed as installed software,
+// e.g. "Windows Setup Remediations (x64) (KB4023057)".
+var winUpdate = regexp.MustCompile(`\bKB\d{6,8}\b`)
 
 // Category splits apps into what ships with or comes from the OS vendor
 // (CategorySystem) and everything installed on top (CategoryThirdParty),
@@ -130,6 +140,9 @@ func Category(s store.Software) string {
 	case "apple": // Apple-signed (macOS built-ins)
 		return CategorySystem
 	case "registry", "msstore": // msstore: Microsoft Store apps (Windows)
+		if winUpdate.MatchString(s.Name) {
+			return CategorySystem // a Windows update, often listed without a publisher
+		}
 		if driver.MatchString(s.Name) || hardwareVendor.MatchString(s.Publisher) {
 			return CategorySystem
 		}

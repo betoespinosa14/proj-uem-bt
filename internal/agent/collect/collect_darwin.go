@@ -83,7 +83,7 @@ func software(ctx context.Context) []protocol.Software {
 		}
 		out = append(out, sw)
 	}
-	return out
+	return addBundledApps(out, cryptexApps)
 }
 
 func security(ctx context.Context) protocol.Security {

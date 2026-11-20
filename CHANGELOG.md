@@ -7,6 +7,18 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.51 (2026-11-21): Safari listed on Macs; App usage switches kept together
+
+Server, console and **agents** (2026.11.51). After installing, click **Update agents** on the Devices page.
+
+### Fixed
+- **Safari no longer shows "Not installed" in App usage.** macOS 13 and later keep Safari in a separate system
+  folder that `system_profiler` doesn't list, so the Mac agent never reported it. Safari then looked not installed,
+  counted as a third-party app and showed "—" for installed on. The Mac agent now also reads that folder, so
+  Safari is listed as an Apple app (it appears after each Mac's next inventory, sent when the updated agent starts).
+- **App usage toolbar:** "Not used" and "Third-party only" now always sit together on their own row, instead of
+  splitting across two rows at some widths and squeezing the search box.
+
 ## 2026.11.50 (2026-11-20): Knowledge base
 
 Server and console; agents stay on 2026.11.29.

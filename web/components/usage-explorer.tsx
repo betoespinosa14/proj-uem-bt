@@ -253,21 +253,23 @@ export function UsageExplorer({
           />
         )}
         {view === "table" && (
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={unused} onCheckedChange={setUnused} aria-label="Only installed apps not used in this period" />
-            {notUsedLabel(period)}
-          </label>
-        )}
-        {view === "table" && (
-          <label
-            className="flex items-center gap-2 text-sm"
-            title={unused ? "The “Not used” list is third-party apps only" : "Hide apps that come with the operating system and hardware drivers"}
-          >
-            {/* Locked on (full colour, not faded) while the Not used list is shown; the earlier choice returns after. */}
-            <Switch checked={thirdOnly || unused} disabled={unused} onCheckedChange={setThirdOnly} aria-label="Third-party apps only" className="disabled:opacity-100" />
-            Third-party only
-            {unused && <span className="text-xs text-muted-foreground">always on for Not used</span>}
-          </label>
+          // The two switches work together ("Not used" locks "Third-party only" on), so they share their own row
+          // and never wrap apart, and the search box keeps row 1's room.
+          <div className="flex w-full flex-wrap items-center gap-x-5 gap-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={unused} onCheckedChange={setUnused} aria-label="Only installed apps not used in this period" />
+              {notUsedLabel(period)}
+            </label>
+            <label
+              className="flex items-center gap-2 text-sm"
+              title={unused ? "The “Not used” list is third-party apps only" : "Hide apps that come with the operating system and hardware drivers"}
+            >
+              {/* Locked on (full colour, not faded) while the Not used list is shown; the earlier choice returns after. */}
+              <Switch checked={thirdOnly || unused} disabled={unused} onCheckedChange={setThirdOnly} aria-label="Third-party apps only" className="disabled:opacity-100" />
+              Third-party only
+              {unused && <span className="text-xs text-muted-foreground">always on for Not used</span>}
+            </label>
+          </div>
         )}
       </div>
       {view === "dashboard" ? (

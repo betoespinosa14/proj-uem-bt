@@ -3,7 +3,7 @@ title: FAQ: App usage
 section: FAQ
 order: 60
 summary: What Active, Open, Users, Not used and Last active mean in App usage, how the agent measures them, and how the reclaim CSV works.
-reviewed: 2026-11-20
+reviewed: 2026-11-21
 ---
 
 ### What is App usage for?
@@ -59,6 +59,12 @@ The dashboard's unused count follows the same rule.
 ### What does the "Third-party only" switch do?
 
 It hides apps that come with the operating system and hardware drivers: Apple-signed macOS apps, Microsoft's own Windows apps (but not Office, Teams and other separately sold products), Linux distribution packages, and Realtek/driver software. An app counts as third-party if **any** install of it is (Edge is built into Windows but hand-installed on Macs), or if it isn't in the inventory at all. See [FAQ: Compliance](faq-compliance.md) for the full rule.
+
+### What does the "Not installed" badge mean?
+
+The app was used on that device but isn't in the device's installed software list. Usually it was uninstalled after use, runs without an installer (a portable app), or was installed only for one Windows user in a way the inventory doesn't see. It is also counted as third-party, since BEACON can't tell where it came from.
+
+Safari used to show this badge on every Mac: macOS 13 and later keep Safari in a separate system folder (`/System/Cryptexes/App/System/Applications`) that `system_profiler` doesn't list. From agent 2026.11.51 the Mac agent reads that folder too, so Safari is listed as an Apple app, has no badge and isn't third-party. Macs on older agents still show the badge until their agent is updated.
 
 ### Why don't Windows apps from Parallels show up on Macs?
 

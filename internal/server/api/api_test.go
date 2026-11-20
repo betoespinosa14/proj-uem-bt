@@ -182,7 +182,8 @@ func TestTenantIsolation(t *testing.T) {
 	// Org B can see none of it, and cannot act on it.
 	for _, p := range []string{
 		"/api/devices/" + dev.DeviceID, "/api/commands/" + cmd.ID, "/api/scripts/" + script.ID,
-		"/api/compliance/rules/" + rule.ID, "/api/enrollment-tokens/" + tok.ID + "/install",
+		"/api/compliance/rules/" + rule.ID, "/api/compliance/rules/" + rule.ID + "/violations",
+		"/api/enrollment-tokens/" + tok.ID + "/install",
 	} {
 		b.do("GET", p, nil, 404, nil)
 	}
@@ -286,6 +287,7 @@ func TestRBACAndCSRF(t *testing.T) {
 		}
 	}
 	hd.do("GET", "/api/devices", nil, 200, nil)
+	hd.do("GET", "/api/compliance/rules", nil, 200, nil)
 	hd.do("POST", "/api/scripts", map[string]any{"name": "S", "shell": "sh", "body": "id"}, 403, nil)
 	hd.do("GET", "/api/audit", nil, 403, nil)
 	hd.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "Parsec"}, 403, nil)
@@ -357,9 +359,10 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 		Security: protocol.Security{FirewallEnabled: &fw}, Software: []protocol.Software{{Name: "curl", Version: "8"}}})
 
 	// A rule that fails must flip the device to non_compliant and open an alert.
+	var fwRule idResp
 	a.do("POST", "/api/compliance/rules", map[string]any{"name": "FW", "severity": "high",
 		"conditions": []map[string]any{{"field": "security.firewall_enabled", "op": "is_true", "value": nil}},
-		"actions":    map[string]any{"alert": true, "webhook": false, "tag": nil, "command": nil}}, 201, nil)
+		"actions":    map[string]any{"alert": true, "webhook": false, "tag": nil, "command": nil}}, 201, &fwRule)
 	// Inventory is ingested asynchronously; poll until it lands and is evaluated.
 	var d struct {
 		ComplianceState string `json:"compliance_state"`
@@ -421,6 +424,18 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 		t.Fatalf("alerts = %+v", alerts.Items)
 	}
 
+	// The rule's violations list the failing device and why it fails.
+	type violation struct {
+		DeviceID string `json:"device_id"`
+		OSFamily string `json:"os_family"`
+		Details  string `json:"details"`
+	}
+	var viol struct{ Items []violation }
+	a.do("GET", "/api/compliance/rules/"+fwRule.ID+"/violations", nil, 200, &viol)
+	if len(viol.Items) != 1 || viol.Items[0].DeviceID != dev.DeviceID || viol.Items[0].OSFamily != "linux" || viol.Items[0].Details == "" {
+		t.Fatalf("violations = %+v", viol.Items)
+	}
+
 	var cmd idResp
 	a.do("POST", "/api/devices/"+dev.DeviceID+"/commands", map[string]any{"type": "run_script",
 		"payload": map[string]any{"shell": "sh", "script": "echo hi"}}, 201, &cmd)
@@ -464,6 +479,14 @@ func TestAgentCommandRoundTripAndAudit(t *testing.T) {
 	// The DB itself refuses to rewrite history.
 	if _, err := e.store.Pool.Exec(ctx, `UPDATE audit_log SET action = 'x' WHERE org_id = $1`, a.orgID); err == nil {
 		t.Fatal("audit_log update was not blocked")
+	}
+
+	// A retired device no longer counts as a violation, matching the rule's count.
+	a.do("DELETE", "/api/devices/"+dev.DeviceID, nil, 200, nil)
+	viol.Items = nil
+	a.do("GET", "/api/compliance/rules/"+fwRule.ID+"/violations", nil, 200, &viol)
+	if len(viol.Items) != 0 {
+		t.Fatalf("violations after retire = %+v", viol.Items)
 	}
 }
 

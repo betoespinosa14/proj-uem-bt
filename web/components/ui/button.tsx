@@ -39,6 +39,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
         variants[variant],
+        // A faded primary colour still looks live on a dark card, so an unavailable
+        // primary button turns grey instead (not while it's loading: that's in progress).
+        (variant === "default" || variant === "destructive") &&
+          disabled &&
+          !loading &&
+          "bg-muted text-muted-foreground opacity-100 shadow-none disabled:opacity-100",
         sizes[size],
         className,
       )}

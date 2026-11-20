@@ -103,6 +103,22 @@ func (s *Store) ListDeviceResults(ctx context.Context, orgID, deviceID string) (
 	})
 }
 
+// ListRuleViolations lists the devices failing a rule, matching the rule's
+// violating_devices count (retired devices are left out).
+func (s *Store) ListRuleViolations(ctx context.Context, orgID, ruleID string) ([]RuleViolation, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT d.id, COALESCE(NULLIF(d.name, ''), d.hostname),
+		       COALESCE(d.logged_in_user, ''),
+		       d.os_family, cr.details, cr.evaluated_at
+		FROM compliance_results cr JOIN devices d ON d.id = cr.device_id
+		WHERE cr.org_id = $1 AND cr.rule_id = $2 AND NOT cr.passed AND d.retired_at IS NULL
+		ORDER BY lower(COALESCE(NULLIF(d.name, ''), d.hostname))`, orgID, ruleID)
+	return collect(rows, err, func(r pgx.Rows) (RuleViolation, error) {
+		var v RuleViolation
+		return v, r.Scan(&v.DeviceID, &v.DeviceName, &v.User, &v.OSFamily, &v.Details, &v.EvaluatedAt)
+	})
+}
+
 // ---- Scheduled tasks ----
 
 const taskCols = `id, org_id, name, enabled, cron, target, action, last_run_at, created_at`

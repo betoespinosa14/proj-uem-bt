@@ -343,6 +343,16 @@ func (s *Server) getRule(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, x)
 }
 
+func (s *Server) ruleViolations(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := s.store.GetRule(r.Context(), orgOf(r), id); err != nil {
+		fail(w, err)
+		return
+	}
+	list, err := s.store.ListRuleViolations(r.Context(), orgOf(r), id)
+	items(w, list, err)
+}
+
 type ruleRequest struct {
 	Name        *string            `json:"name"`
 	Description *string            `json:"description"`

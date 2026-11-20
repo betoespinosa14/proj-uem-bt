@@ -141,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/compliance/fields", s.complianceFields)
 			r.Get("/compliance/rules", s.listRules)
 			r.Get("/compliance/rules/{id}", s.getRule)
+			r.Get("/compliance/rules/{id}/violations", s.ruleViolations)
 			r.With(s.perm(auth.PermComplianceWrite)).Post("/compliance/rules", s.createRule)
 			r.With(s.perm(auth.PermComplianceWrite)).Patch("/compliance/rules/{id}", s.updateRule)
 			r.With(s.perm(auth.PermComplianceWrite)).Delete("/compliance/rules/{id}", s.deleteRule)

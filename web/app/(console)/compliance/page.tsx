@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
+import { ChevronDown, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 import {
   api,
   qk,
@@ -16,7 +16,7 @@ import {
   type Severity,
 } from "@/lib/api";
 import { useCan } from "@/lib/session";
-import { osLabel, titleCase } from "@/lib/utils";
+import { cn, formatDateTime, osLabel, relativeTime, titleCase } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -48,6 +48,11 @@ const OP_LABELS: Record<string, string> = {
 };
 
 const NO_VALUE_OPS: string[] = ["is_true", "is_false", "none_found", "any_found"];
+
+const ALL_OS = ["windows", "macos", "linux"];
+
+/** True when a rule covers every operating system: none picked, or all of them. */
+const coversAllOS = (os: string[]) => os.length === 0 || ALL_OS.every((o) => os.includes(o));
 
 /** Ready-made rules for the most common baselines. */
 const TEMPLATES: { label: string; rule: Partial<RuleInput> }[] = [
@@ -87,6 +92,14 @@ export default function CompliancePage() {
   const fields = useQuery({ queryKey: qk.complianceFields, queryFn: api.compliance.fields, staleTime: Infinity });
   const [editing, setEditing] = useState<{ rule: Rule | null; template?: Partial<RuleInput> } | null>(null);
   const [deleting, setDeleting] = useState<Rule | null>(null);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   const evaluate = useMutation({
     mutationFn: api.compliance.evaluate,
@@ -167,55 +180,83 @@ export default function CompliancePage() {
                   <TH className="hidden lg:table-cell">Scope</TH>
                   <TH>Violations</TH>
                   <TH>Enabled</TH>
-                  <TH className="w-24" />
+                  <TH className="w-24">
+                    <span className="sr-only">Actions</span>
+                  </TH>
                 </TR>
               </THead>
               <TBody>
                 {data.items.map((r) => (
-                  <TR key={r.id}>
-                    <TD className="max-w-md">
-                      <p className="font-medium">{r.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {r.conditions.map(describe).join(r.match === "all" ? " AND " : " OR ")}
-                      </p>
-                    </TD>
-                    <TD>
-                      <SeverityBadge severity={r.severity} />
-                    </TD>
-                    <TD className="hidden text-sm text-muted-foreground lg:table-cell">
-                      {r.os_families.length ? r.os_families.map(osLabel).join(", ") : "All OS"}
-                      {r.group_id ? " · one group" : ""}
-                    </TD>
-                    <TD>
-                      {r.violating_devices > 0 ? (
-                        <Link href="/devices?compliance=non_compliant" className="hover:underline">
-                          <Badge variant="danger">{r.violating_devices} device{r.violating_devices === 1 ? "" : "s"}</Badge>
-                        </Link>
-                      ) : (
-                        <Badge variant="success">None</Badge>
-                      )}
-                    </TD>
-                    <TD>
-                      <Switch
-                        checked={r.enabled}
-                        disabled={!can("compliance.write") || toggle.isPending}
-                        onCheckedChange={() => toggle.mutate(r)}
-                        aria-label={`Enable ${r.name}`}
-                      />
-                    </TD>
-                    <TD>
-                      {can("compliance.write") && (
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon-sm" onClick={() => setEditing({ rule: r })} aria-label={`Edit ${r.name}`}>
-                            <Pencil />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" onClick={() => setDeleting(r)} aria-label={`Delete ${r.name}`}>
-                            <Trash2 />
-                          </Button>
-                        </div>
-                      )}
-                    </TD>
-                  </TR>
+                  <Fragment key={r.id}>
+                    <TR>
+                      <TD className="max-w-md">
+                        <p className="font-medium">{r.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.conditions.map(describe).join(r.match === "all" ? " AND " : " OR ")}
+                        </p>
+                      </TD>
+                      <TD>
+                        <SeverityBadge severity={r.severity} />
+                      </TD>
+                      <TD className="hidden text-sm text-muted-foreground lg:table-cell">
+                        {coversAllOS(r.os_families) ? "All OS" : r.os_families.map(osLabel).join(", ")}
+                        {r.group_id ? " · one group" : ""}
+                      </TD>
+                      <TD>
+                        {r.violating_devices > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleOpen(r.id)}
+                            aria-expanded={open.has(r.id)}
+                            aria-controls={`viol-${r.id}`}
+                            title={open.has(r.id) ? "Hide the failing devices" : "Show which devices fail, and why"}
+                            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                          >
+                            <Badge variant="danger" className="cursor-pointer gap-1 hover:brightness-110">
+                              {r.violating_devices} device{r.violating_devices === 1 ? "" : "s"}
+                              <ChevronDown className={cn("h-3 w-3 transition-transform", open.has(r.id) && "rotate-180")} aria-hidden />
+                            </Badge>
+                          </button>
+                        ) : (
+                          <Badge variant="success">None</Badge>
+                        )}
+                      </TD>
+                      <TD>
+                        <Switch
+                          checked={r.enabled}
+                          disabled={!can("compliance.write") || toggle.isPending}
+                          onCheckedChange={() => toggle.mutate(r)}
+                          aria-label={`Enable ${r.name}`}
+                        />
+                      </TD>
+                      <TD>
+                        {can("compliance.write") && (
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon-sm" onClick={() => setEditing({ rule: r })} aria-label={`Edit ${r.name}`} title="Edit rule">
+                              <Pencil />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setDeleting(r)}
+                              aria-label={`Delete ${r.name}`}
+                              title="Delete rule"
+                              className="hover:text-destructive"
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        )}
+                      </TD>
+                    </TR>
+                    {open.has(r.id) && r.violating_devices > 0 && (
+                      <TR className="hover:bg-transparent">
+                        <TD colSpan={6} id={`viol-${r.id}`} className="bg-muted/30 px-4 py-3">
+                          <Violations rule={r} />
+                        </TD>
+                      </TR>
+                    )}
+                  </Fragment>
                 ))}
               </TBody>
             </Table>
@@ -263,7 +304,8 @@ function RuleDialog({
   const [conditions, setConditions] = useState<Condition[]>(
     base?.conditions?.length ? base.conditions : [{ field: fields[0]!.field, op: fields[0]!.ops[0] as ConditionOp, value: null }],
   );
-  const [osFamilies, setOsFamilies] = useState<string[]>(base?.os_families ?? []);
+  // Nothing stored means every OS, so it opens with all three ticked.
+  const [osFamilies, setOsFamilies] = useState<string[]>(base?.os_families?.length ? base.os_families : ALL_OS);
   const [groupId, setGroupId] = useState(base?.group_id ?? "");
   const [alert, setAlert] = useState(base?.actions?.alert ?? true);
   const [webhook, setWebhook] = useState(base?.actions?.webhook ?? false);
@@ -289,7 +331,8 @@ function RuleDialog({
           if (NO_VALUE_OPS.includes(c.op)) return { ...c, value: null };
           return { ...c, value: f.type === "number" ? Number(c.value) : String(c.value ?? "") };
         }),
-        os_families: osFamilies,
+        // All three ticked is saved as "every OS", so new platforms are covered too.
+        os_families: coversAllOS(osFamilies) ? [] : ALL_OS.filter((o) => osFamilies.includes(o)),
         group_id: groupId || null,
         actions: {
           alert,
@@ -329,7 +372,7 @@ function RuleDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button loading={save.isPending} disabled={!name.trim() || (remediation === "run_script" && !scriptId)} onClick={() => save.mutate()}>
+          <Button loading={save.isPending} disabled={!name.trim() || osFamilies.length === 0 || (remediation === "run_script" && !scriptId)} onClick={() => save.mutate()}>
             Save rule
           </Button>
         </>
@@ -399,9 +442,12 @@ function RuleDialog({
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    // A rule needs at least one condition; the space stays so rows line up.
+                    className={cn(conditions.length === 1 && "invisible")}
                     disabled={conditions.length === 1}
                     onClick={() => setConditions((cs) => cs.filter((_, j) => j !== i))}
                     aria-label="Remove condition"
+                    title="Remove condition"
                   >
                     <X />
                   </Button>
@@ -424,7 +470,7 @@ function RuleDialog({
           <div>
             <Label>Applies to operating systems</Label>
             <div className="mt-2 flex flex-wrap gap-4">
-              {["windows", "macos", "linux"].map((o) => (
+              {ALL_OS.map((o) => (
                 <label key={o} className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={osFamilies.includes(o)}
@@ -434,7 +480,7 @@ function RuleDialog({
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">None selected = all.</p>
+            {osFamilies.length === 0 && <p className="mt-1 text-xs text-destructive">Pick at least one.</p>}
           </div>
           <Field label="Applies to group" htmlFor="rgroup">
             <Select
@@ -499,5 +545,48 @@ function RuleDialog({
         </label>
       </div>
     </Dialog>
+  );
+}
+
+/** The devices failing a rule, with the reason each one fails. */
+function Violations({ rule }: { rule: Rule }) {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: qk.ruleViolations(rule.id),
+    queryFn: () => api.compliance.violations(rule.id),
+  });
+  if (error) return <ErrorState error={error} onRetry={() => void refetch()} />;
+  if (isLoading) return <TableSkeleton rows={Math.min(rule.violating_devices, 4)} cols={4} />;
+  const list = data?.items ?? [];
+  if (list.length === 0) return <p className="text-sm text-muted-foreground">No device fails this rule any more.</p>;
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <Table>
+        <THead>
+          <TR>
+            <TH>Device</TH>
+            <TH className="hidden md:table-cell">Signed in</TH>
+            <TH>Why it fails</TH>
+            <TH className="hidden sm:table-cell">Checked</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {list.map((v) => (
+            <TR key={v.device_id}>
+              <TD className="whitespace-nowrap">
+                <Link href={`/devices/${v.device_id}`} className="font-medium text-primary underline-offset-2 hover:underline">
+                  {v.device_name}
+                </Link>
+                <p className="text-xs text-muted-foreground">{osLabel(v.os_family)}</p>
+              </TD>
+              <TD className="hidden text-sm text-muted-foreground md:table-cell">{v.user || "—"}</TD>
+              <TD className="text-sm">{v.details || <span className="text-muted-foreground">No detail recorded</span>}</TD>
+              <TD className="hidden whitespace-nowrap text-sm text-muted-foreground sm:table-cell" title={formatDateTime(v.evaluated_at)}>
+                {relativeTime(v.evaluated_at)}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+    </div>
   );
 }

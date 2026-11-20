@@ -7,7 +7,28 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
-## 2026.11.54 (2026-11-21): App search: click through to devices, unused installs, clear button
+## 2026.11.55 (2026-11-20): Compliance: see which devices fail a rule, and why
+
+Server and console; agents stay on 2026.11.51.
+
+### Added
+- **Click a rule's Violations count to see the failing devices.** A row opens under the rule with each device, the
+  account signed in, why it fails (for example `Games: found "Candy Crush Saga"`) and when it was last checked.
+  Before, the count opened the Devices list filtered to every non-compliant device, not just this rule's.
+  New endpoint `GET /api/compliance/rules/{id}/violations`.
+
+### Changed
+- **Unavailable primary buttons are grey.** A faded teal still looked clickable in dark mode (for example Save rule
+  with no name).
+- **A rule's operating systems start with all three ticked.** All three ticked is saved as "every OS" and the table
+  shows "All OS"; with none ticked, Save is disabled.
+- The remove (×) button is hidden while a rule has only one condition.
+- Edit and Delete in the rules table have hover labels and a little more space between them.
+
+### Fixed
+- Releases 2026.11.51 to .54 were dated 2026-11-21 in this file; they were made on 2026-11-20.
+
+## 2026.11.54 (2026-11-20): App search: click through to devices, unused installs, clear button
 
 Server and console; agents stay on 2026.11.51.
 
@@ -23,7 +44,7 @@ Server and console; agents stay on 2026.11.51.
 - **At 0 the Not used card is no longer a link**, so it can't open an empty list.
 - The User column explains that on a Not used row it shows the account signed in on the device.
 
-## 2026.11.53 (2026-11-21): Mark as infrastructure is visible at rest
+## 2026.11.53 (2026-11-20): Mark as infrastructure is visible at rest
 
 Console only; agents stay on 2026.11.51.
 
@@ -32,7 +53,7 @@ Console only; agents stay on 2026.11.51.
   on hover, and the note above the table says what the icon does (owners and admins). The dashboard's idle
   ranking keeps its hover-only button.
 
-## 2026.11.52 (2026-11-21): Review list clean-up; mark infrastructure from Not used
+## 2026.11.52 (2026-11-20): Review list clean-up; mark infrastructure from Not used
 
 Server and console; agents stay on 2026.11.51.
 
@@ -52,7 +73,7 @@ Server and console; agents stay on 2026.11.51.
 - **The Not used card shows when its list is open:** the pill reads "Showing list" with a tick instead of
   "Review list".
 
-## 2026.11.51 (2026-11-21): Safari listed on Macs; App usage switches kept together
+## 2026.11.51 (2026-11-20): Safari listed on Macs; App usage switches kept together
 
 Server, console and **agents** (2026.11.51). After installing, click **Update agents** on the Devices page.
 

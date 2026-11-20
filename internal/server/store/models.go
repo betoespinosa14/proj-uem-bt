@@ -195,6 +195,16 @@ type ComplianceResult struct {
 	EvaluatedAt time.Time `json:"evaluated_at"`
 }
 
+// RuleViolation is one device failing a compliance rule, and why.
+type RuleViolation struct {
+	DeviceID    string    `json:"device_id"`
+	DeviceName  string    `json:"device_name"`
+	User        string    `json:"user"`
+	OSFamily    string    `json:"os_family"`
+	Details     string    `json:"details"`
+	EvaluatedAt time.Time `json:"evaluated_at"`
+}
+
 type TaskTarget struct {
 	GroupID   *string  `json:"group_id"`
 	DeviceIDs []string `json:"device_ids"`

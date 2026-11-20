@@ -37,7 +37,7 @@ The condition **fails**. BEACON doesn't assume a device is compliant when it can
 
 ### Which devices does a rule apply to?
 
-Enabled rules apply to every device, narrowed by the rule's operating systems (none ticked = all) and its group (blank = all groups). A disabled rule is ignored and its old results are removed at the next check.
+Enabled rules apply to every device, narrowed by the rule's operating systems (all three ticked = every OS, including any added later) and its group (blank = all groups). A disabled rule is ignored and its old results are removed at the next check.
 
 ### When are devices checked?
 
@@ -50,6 +50,10 @@ Enabled rules apply to every device, narrowed by the rule's operating systems (n
 ### Why does "Checked in within 24 h" not fail for a laptop that's been away for days?
 
 An offline device sends no inventory, so nothing triggers a check. Add a scheduled task that runs **Re-evaluate compliance** every night, so time-based rules are rechecked even for offline devices. See [FAQ: Scheduled tasks](faq-tasks.md).
+
+### How do I see which devices fail a rule, and why?
+
+On **Compliance**, click the red count in a rule's **Violations** column (for example "2 devices"). A row opens under the rule listing each failing device, the account signed in on it, why it fails (for example `Games: found "Candy Crush Saga"`), and when it was last checked. Click a device name to open it; click the count again to close the row. Retired devices aren't listed or counted. API: `GET /api/compliance/rules/{id}/violations`.
 
 ### What does a device's overall state mean?
 

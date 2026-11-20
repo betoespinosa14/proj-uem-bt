@@ -132,6 +132,8 @@ type Field = { field: string; label: string; type: "bool"|"number"|"string"|"ver
 ```
 - `GET /api/compliance/fields` → `{items: Field[]}`
 - `GET/POST /api/compliance/rules`, `GET/PATCH/DELETE /api/compliance/rules/{id}` (compliance.write)
+- `GET /api/compliance/rules/{id}/violations` → `{items: RuleViolation[]}`: devices failing the rule (retired devices left out, same as `violating_devices`), sorted by name.
+  `RuleViolation = { device_id; device_name; user: string /* signed-in account, "" if unknown */; os_family; details: string; evaluated_at }`
 - `POST /api/compliance/evaluate` → `{evaluated: number}`. This re-evaluates every device (compliance.write).
 
 ## Scheduled tasks

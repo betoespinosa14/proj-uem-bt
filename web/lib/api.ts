@@ -536,6 +536,17 @@ export type ComplianceResult = {
 export type FieldType = "bool" | "number" | "string" | "version" | "list";
 export type ComplianceField = { field: string; label: string; type: FieldType; ops: string[]; unit?: string };
 
+/** A device failing a compliance rule, and why. */
+export type RuleViolation = {
+  device_id: string;
+  device_name: string;
+  /** The account signed in on the device, if known. */
+  user: string;
+  os_family: string;
+  details: string;
+  evaluated_at: string;
+};
+
 export type TaskActionType = CommandType | "compliance_check";
 export type TaskTarget = { group_id: string | null; device_ids: string[]; all: boolean };
 export type Task = {
@@ -841,6 +852,7 @@ export const api = {
     fields: () => get<Items<ComplianceField>>("/api/compliance/fields"),
     rules: () => get<Items<Rule>>("/api/compliance/rules"),
     rule: (id: string) => get<Rule>(`/api/compliance/rules/${enc(id)}`),
+    violations: (id: string) => get<Items<RuleViolation>>(`/api/compliance/rules/${enc(id)}/violations`),
     create: (b: RuleInput) => post<Rule>("/api/compliance/rules", b),
     update: (id: string, b: Partial<RuleInput>) => patch<Rule>(`/api/compliance/rules/${enc(id)}`, b),
     remove: (id: string) => del<Ok>(`/api/compliance/rules/${enc(id)}`),
@@ -939,6 +951,7 @@ export const qk = {
   scripts: ["scripts"] as const,
   complianceFields: ["compliance", "fields"] as const,
   complianceRules: ["compliance", "rules"] as const,
+  ruleViolations: (id: string) => ["compliance", "rules", id, "violations"] as const,
   tasks: ["tasks"] as const,
   alerts: (status?: string) => (status ? (["alerts", status] as const) : (["alerts"] as const)),
   audit: (f?: Omit<AuditFilters, "before_id">) => (f ? (["audit", f] as const) : (["audit"] as const)),

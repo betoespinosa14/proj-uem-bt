@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AppWindow, Clock, LayoutDashboard, PackageX, Search, Table2, Users } from "lucide-react";
+import { Activity, AppWindow, Clock, LayoutDashboard, PackageX, Search, ServerCog, Table2, Users } from "lucide-react";
 import { api, qk, type FleetAppRow, type FleetUsageFilters, type FleetUsageRow, type UsageGroup, type UsagePeriod } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan, useMe } from "@/lib/session";
@@ -328,10 +328,20 @@ export function UsageExplorer({
             />
           ) : (
             <>
-              {unused && (summary.data?.totals.unused_components ?? 0) > 0 && (
+              {unused && ((summary.data?.totals.unused_components ?? 0) > 0 || (group === "app" && can("devices.write"))) && (
                 <p className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
-                  Hiding {summary.data!.totals.unused_components} helper {summary.data!.totals.unused_components === 1 ? "component" : "components"} (updaters,
-                  crash reporters, runtimes) that no one opens. They aren&apos;t in the count or the reclaim export either.
+                  {(summary.data?.totals.unused_components ?? 0) > 0 && (
+                    <>
+                      Hiding {summary.data!.totals.unused_components} helper {summary.data!.totals.unused_components === 1 ? "component" : "components"} (updaters,
+                      crash reporters, runtimes) that no one opens. They aren&apos;t in the count or the reclaim export either.{" "}
+                    </>
+                  )}
+                  {group === "app" && can("devices.write") && (
+                    <span>
+                      Use <ServerCog className="inline h-3.5 w-3.5 -translate-y-px" aria-label="the server icon" /> on a row to mark an app as
+                      infrastructure: kept, not reclaimed.
+                    </span>
+                  )}
                 </p>
               )}
               {group === "app" ? (
@@ -460,7 +470,7 @@ function AppCell({
               type="button"
               onClick={() => onInfrastructure(app, false)}
               title={`Remove the infrastructure mark from ${app}`}
-              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground opacity-40 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
             >
               Unmark
             </button>
@@ -470,6 +480,7 @@ function AppCell({
               onInfrastructure={onInfrastructure}
               device={!!scoped}
               why="needed by design (e.g. a monitoring agent or server package), so it's kept, not reclaimed"
+              resting
             />
           ))}
       </span>

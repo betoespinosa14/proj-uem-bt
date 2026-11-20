@@ -865,12 +865,15 @@ export function MarkInfra({
   onInfrastructure,
   device,
   why = "open by design (e.g. remote access), so its open time isn't counted as idle",
+  resting = false,
 }: {
   app: string;
   onInfrastructure: InfraAction;
   device: boolean;
   /** What marking means where the button is shown. */
   why?: string;
+  /** Show it muted at rest instead of only on hover, so a long list shows the action exists. */
+  resting?: boolean;
 }) {
   return (
     <button
@@ -878,7 +881,10 @@ export function MarkInfra({
       onClick={() => onInfrastructure(app, true)}
       title={`Mark ${app} as infrastructure: ${why}${device ? " (applies to all devices)" : ""}`}
       aria-label={`Mark ${app} as infrastructure`}
-      className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+      className={cn(
+        "shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100",
+        resting ? "opacity-40" : "opacity-0",
+      )}
     >
       <ServerCog className="h-4 w-4" />
     </button>

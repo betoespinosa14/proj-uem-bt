@@ -7,6 +7,15 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.53 (2026-11-21): Mark as infrastructure is visible at rest
+
+Console only; agents stay on 2026.11.51.
+
+### Changed
+- **In the Not used list, the "mark as infrastructure" icon and Unmark show muted on every row** instead of only
+  on hover, and the note above the table says what the icon does (owners and admins). The dashboard's idle
+  ranking keeps its hover-only button.
+
 ## 2026.11.52 (2026-11-21): Review list clean-up; mark infrastructure from Not used
 
 Server and console; agents stay on 2026.11.51.

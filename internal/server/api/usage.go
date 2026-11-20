@@ -237,6 +237,20 @@ func (s *Server) usageSummary(w http.ResponseWriter, r *http.Request) {
 		return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source, Version: u.Version}
 	})
 	sum.Totals.UnusedApps = len(unused)
+	// While searching one app, "apps nobody used" is usually 0 even though
+	// some devices have it unused; count those installs too, by the same
+	// rule as the per-device Not used rows.
+	if f.App != "" {
+		installs, err := s.store.FleetUsage(r.Context(), orgOf(r), f)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		installs, _ = reviewable(installs, func(u store.FleetUsageRow) store.Software {
+			return store.Software{Name: u.App, Publisher: u.Publisher, Source: u.Source, Version: u.Version}
+		})
+		sum.Totals.UnusedInstalls = len(installs)
+	}
 	// Same split for the idle ranking, so Terminal or System Settings left
 	// open don't head a license audit. Like the background card, an app is
 	// third-party if any install of it is (Edge: built into Windows, installed

@@ -995,6 +995,26 @@ func TestUsageTracking(t *testing.T) {
 	if comp.Totals.UnusedApps != 1 || comp.Totals.UnusedComponents != 1 {
 		t.Fatalf("summary with a helper component = %+v", comp.Totals)
 	}
+	// While searching, the summary also counts unused installs (per device),
+	// by the same rule; without a search it leaves them at 0.
+	var inst struct {
+		Totals struct {
+			UnusedApps     int `json:"unused_apps"`
+			UnusedInstalls int `json:"unused_installs"`
+		}
+	}
+	a.do("GET", "/api/usage/summary?days=1", nil, 200, &inst)
+	if inst.Totals.UnusedInstalls != 0 {
+		t.Fatalf("unused installs without a search = %+v", inst.Totals)
+	}
+	a.do("GET", "/api/usage/summary?days=1&app=figma", nil, 200, &inst)
+	if inst.Totals.UnusedApps != 1 || inst.Totals.UnusedInstalls != 1 {
+		t.Fatalf("unused installs for figma = %+v", inst.Totals)
+	}
+	a.do("GET", "/api/usage/summary?days=1&app=update+helper", nil, 200, &inst)
+	if inst.Totals.UnusedInstalls != 0 {
+		t.Fatalf("a helper component isn't an unused install: %+v", inst.Totals)
+	}
 	resp, err = a.http.Get(a.base + "/api/usage/reclaim.csv?days=1")
 	if err != nil {
 		t.Fatal(err)

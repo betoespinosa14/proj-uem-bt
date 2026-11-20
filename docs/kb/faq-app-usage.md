@@ -104,6 +104,10 @@ With **Not used** on, **Export reclaim list** downloads `license-reclaim-<time>.
 
 Helper components are left out, as on screen. Each export is audit-logged as `usage.export` with kind `reclaim`.
 
+### How do I see every device that has one app?
+
+Type its name in the search box, or click the app's name in the Table (By app) or its bar on the dashboard. "By app and user" then lists every device with that app: the ones where someone used it, then the ones where it sat unused, each with the account signed in there. While a search is on, the orange card counts **installs not used** (one per device), and its link opens just those devices. Clear the search with the × in the box or Esc.
+
 ### What other exports are there?
 
 The normal export button downloads what the Table shows: **By app** (`app, users, devices_used_on, installed_on, active_hours, open_hours, last_used, period_days`) or **By app and user** (`app, device, user, installed, active_hours, open_hours, days_used, last_used, period_days`). A device page shows the same App usage view for that one device, with the same exports.

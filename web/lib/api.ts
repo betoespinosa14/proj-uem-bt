@@ -302,6 +302,8 @@ export type UsageSummary = {
     unused_apps: number;
     /** Third-party helper components (updaters, crash reporters, runtimes) left out of unused_apps. */
     unused_components: number;
+    /** While searching: installs of the matched apps on devices with no active use in the period (0 otherwise). */
+    unused_installs: number;
   };
   /** Days with any report, oldest first (device-local YYYY-MM-DD). Missing days had no data. */
   /** users: accounts with any active time that day (people who worked). */

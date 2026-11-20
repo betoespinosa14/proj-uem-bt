@@ -7,6 +7,22 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.54 (2026-11-21): App search: click through to devices, unused installs, clear button
+
+Server and console; agents stay on 2026.11.51.
+
+### Added
+- **Click an app in the Table (By app) to see its devices.** The name opens "By app and user" for that app: every
+  device with it, used or not (from the Not used list, the devices where it sat unused).
+- **A clear button (×) in the App usage search box**; Esc clears it too.
+
+### Changed
+- **While searching, the Not used card counts unused installs.** "Not used" counts apps nobody used, so for an app
+  used on some devices it read 0 above rows marked Unused. During a search the card now reads e.g.
+  "3 Installs not used today" and opens those devices. Without a search it still counts apps.
+- **At 0 the Not used card is no longer a link**, so it can't open an empty list.
+- The User column explains that on a Not used row it shows the account signed in on the device.
+
 ## 2026.11.53 (2026-11-21): Mark as infrastructure is visible at rest
 
 Console only; agents stay on 2026.11.51.

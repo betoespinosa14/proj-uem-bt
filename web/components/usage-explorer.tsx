@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AppWindow, Clock, LayoutDashboard, PackageX, Search, ServerCog, Table2, Users } from "lucide-react";
+import { Activity, AppWindow, ChevronRight, Clock, LayoutDashboard, PackageX, Search, ServerCog, Table2, Users, X } from "lucide-react";
 import { api, qk, type FleetAppRow, type FleetUsageFilters, type FleetUsageRow, type UsageGroup, type UsagePeriod } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { useCan, useMe } from "@/lib/session";
@@ -28,6 +28,11 @@ const PERIOD_ORDER: Period[] = ["yesterday", "1", "7", "30", "90", "365"];
 /** "Not used today", "Not used yesterday", "Not used in 7 days". */
 function notUsedLabel(p: Period) {
   return p === "1" ? "Not used today" : p === "yesterday" ? "Not used yesterday" : `Not used in ${PERIODS[p]}`;
+}
+
+/** "Installs not used today", for the card while searching one app. */
+function installsNotUsedLabel(p: Period) {
+  return `Installs ${notUsedLabel(p).charAt(0).toLowerCase()}${notUsedLabel(p).slice(1)}`;
 }
 
 /** "Thu 12 Nov" from a YYYY-MM-DD day. */
@@ -113,17 +118,22 @@ export function UsageExplorer({
     queryFn: () => api.usage.summary(summaryFilters),
     placeholderData: (p) => p,
   });
-  // From the dashboard: the license-reclamation list.
+  // While searching, the Not used card counts unused installs (per device): an
+  // app used on some devices is never "an app nobody used", yet sits unused elsewhere.
+  const searching = !!filters.app;
+  // The license-reclamation list: apps nobody used, or while searching, the
+  // devices where the matched apps sit unused.
   const showUnused = () => {
-    setGroup("app");
+    setGroup(searching ? "app_user" : "app");
     setUnused(true);
     setView("table");
   };
-  // From the dashboard: show who used one app, in the detailed table.
-  const pickApp = (app: string) => {
+  // From a dashboard bar or a By app row: every device with that app, in the
+  // detailed table. From the Not used list it stays on the unused devices.
+  const pickApp = (app: string, keepUnused = false) => {
     setQ(app);
     setGroup("app_user");
-    setUnused(false);
+    setUnused(keepUnused && unused);
     setView("table");
   };
   // Infrastructure apps (open by design, e.g. remote-access hosts). Org-wide, even from a device.
@@ -175,16 +185,24 @@ export function UsageExplorer({
             icon: Users,
             note: cmp && `${vs}: ${cmp.active_users} ${cmp.active_users === 1 ? "person" : "people"}`,
           },
-          {
-            label: notUsedLabel(period),
-            value: totals.unused_apps,
-            icon: PackageX,
-            tone: totals.unused_apps > 0 ? "warning" : "default",
-            onClick: showUnused,
-            cta: view === "table" && unused ? "Showing list" : "Review list",
-            active: view === "table" && unused,
-            hint: `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`}. A short period lists most apps; choose a longer one for license reviews. Helper components such as updaters and crash reporters aren't counted. Click to see the list.`,
-          },
+          (() => {
+            const n = searching ? totals.unused_installs : totals.unused_apps;
+            const showing = view === "table" && unused && (!searching || group === "app_user");
+            const when = period === "1" ? "today" : yesterday ? "yesterday" : `in the last ${PERIODS[period]}`;
+            return {
+              label: searching ? installsNotUsedLabel(period) : notUsedLabel(period),
+              value: n,
+              icon: PackageX,
+              tone: n > 0 ? "warning" : "default",
+              // Nothing to list at 0: no link, so it can't open an empty list.
+              onClick: n > 0 ? showUnused : undefined,
+              cta: n > 0 ? (showing ? "Showing list" : "Review list") : undefined,
+              active: n > 0 && showing,
+              hint: searching
+                ? `Devices where a matching third-party app is installed but wasn't used with keyboard or mouse ${when}, one per device and app. Helper components aren't counted.${n > 0 ? " Click to see them." : ""}`
+                : `Third-party apps installed ${scoped ? "on this device " : ""}but not used with keyboard or mouse ${when}. A short period lists most apps; choose a longer one for license reviews. Helper components such as updaters and crash reporters aren't counted.${n > 0 ? " Click to see the list." : ""}`,
+            } satisfies HeadlineStat;
+          })(),
         ]
       : undefined;
   // Badge apps marked as infrastructure in the table, so they aren't re-audited.
@@ -236,7 +254,30 @@ export function UsageExplorer({
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[14rem] flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search an app, e.g. Photoshop" className="pl-8" aria-label="Search apps" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && q) {
+                e.preventDefault();
+                setQ("");
+              }
+            }}
+            placeholder="Search an app, e.g. Photoshop"
+            className="pl-8 pr-8"
+            aria-label="Search apps"
+          />
+          {q && (
+            <button
+              type="button"
+              onClick={() => setQ("")}
+              aria-label="Clear search"
+              title="Clear search (Esc)"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         {view === "table" && (
           <Segmented value={group} onChange={setGroup} options={Object.entries(GROUPS).map(([v, l]) => ({ value: v as UsageGroup, label: l }))} />
@@ -355,6 +396,7 @@ export function UsageExplorer({
                   unused={unused}
                   // Apps nobody opens never reach the dashboard's idle ranking, so this is where they can be marked.
                   onInfrastructure={unused && can("devices.write") ? (app, mark) => infra.mutate({ app, mark }) : undefined}
+                  onPickApp={(app) => pickApp(app, true)}
                 />
               ) : (
                 <ByUserTable
@@ -439,6 +481,8 @@ function AppCell({
   notInstalled,
   onInfrastructure,
   scoped,
+  onPick,
+  pickHint,
 }: {
   app: string;
   infra: Set<string>;
@@ -446,14 +490,29 @@ function AppCell({
   /** Set in the Not used list for owners and admins: mark or unmark the app as infrastructure. */
   onInfrastructure?: InfraAction;
   scoped?: boolean;
+  /** Makes the name a link to the app's devices. */
+  onPick?: (app: string) => void;
+  pickHint?: string;
 }) {
   const marked = infra.has(app.toLowerCase());
   return (
     <TD className="font-medium">
       <span className="flex max-w-[26rem] items-center gap-2">
-        <span className="min-w-0 truncate" title={app}>
-          {app}
-        </span>
+        {onPick ? (
+          <button
+            type="button"
+            onClick={() => onPick(app)}
+            title={pickHint ?? app}
+            className="group/pick flex min-w-0 items-center gap-0.5 rounded text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <span className="min-w-0 truncate underline-offset-2 group-hover/pick:underline">{app}</span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-60 group-hover/pick:text-primary group-hover/pick:opacity-100" aria-hidden />
+          </button>
+        ) : (
+          <span className="min-w-0 truncate" title={app}>
+            {app}
+          </span>
+        )}
         {infra.has(app.toLowerCase()) && (
           <Badge variant="neutral" className="shrink-0" title="Marked as infrastructure: open by design, so its open time isn't ranked as idle">
             Infrastructure
@@ -509,6 +568,7 @@ function ByAppTable({
   noActive,
   unused,
   onInfrastructure,
+  onPickApp,
 }: {
   items: FleetAppRow[];
   infra: Set<string>;
@@ -516,6 +576,8 @@ function ByAppTable({
   noActive: boolean;
   unused: boolean;
   onInfrastructure?: InfraAction;
+  /** Opens the app's devices in "By app and user". */
+  onPickApp?: (app: string) => void;
 }) {
   const { sort, onSort } = useTableSort<AppSortKey>(APP_TEXT_KEYS, unused ? "last" : "active");
   const rows = useMemo(() => {
@@ -571,7 +633,14 @@ function ByAppTable({
       <TBody>
         {rows.map((u) => (
           <TR key={u.app} className={onInfrastructure ? "group" : undefined}>
-            <AppCell app={u.app} infra={infra} onInfrastructure={onInfrastructure} scoped={scoped} />
+            <AppCell
+              app={u.app}
+              infra={infra}
+              onInfrastructure={onInfrastructure}
+              scoped={scoped}
+              onPick={onPickApp}
+              pickHint={unused ? `See the devices where ${u.app} wasn't used` : `See every device with ${u.app}, used or not`}
+            />
             <ActiveCell seconds={u.active_seconds} used={u.users > 0} noActive={noActive} />
             {!unused && (
               <TD className="whitespace-nowrap text-right tabular text-muted-foreground max-sm:pl-6">{u.users ? formatHours(u.minutes * 60) : "—"}</TD>
@@ -641,7 +710,9 @@ function ByUserTable({
           <TH>{head("App", "app")}</TH>
           {!scoped && <TH>{head("Device", "device")}</TH>}
           {/* Nobody used the app on a Not used row, so this shows who signs in on the device instead. */}
-          <TH title={unused ? "The account signed in on the device" : undefined}>{head(unused ? "Device user" : "User", "user")}</TH>
+          <TH title={unused ? "The account signed in on the device" : "Who used the app. On a Not used row: the account signed in on that device."}>
+            {head(unused ? "Device user" : "User", "user")}
+          </TH>
           <TH className="text-right" title={ACTIVE_HINT}>
             {head("Active", "active")}
           </TH>

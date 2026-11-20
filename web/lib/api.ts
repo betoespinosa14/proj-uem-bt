@@ -25,6 +25,7 @@ export const PERMISSIONS = [
   "alerts.write",
   "audit.read",
   "settings.write",
+  "kb.read",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -892,6 +893,22 @@ export const api = {
     markInfrastructure: (app: string) => put<void>("/api/usage/infrastructure", { app }),
     unmarkInfrastructure: (app: string) => del<void>(withQuery("/api/usage/infrastructure", { app })),
   },
+  kb: {
+    list: () => get<{ sections: string[]; articles: KBArticle[] }>("/api/kb"),
+  },
+};
+
+export type KBArticle = {
+  slug: string;
+  /** Path in the repo, e.g. "docs/kb/backups.md". */
+  file: string;
+  title: string;
+  section: string;
+  order: number;
+  summary: string;
+  /** YYYY-MM-DD the article was last checked against the system. */
+  reviewed: string;
+  body: string;
 };
 
 export function errorMessage(err: unknown): string {
@@ -927,4 +944,5 @@ export const qk = {
   webhooks: ["webhooks"] as const,
   org: ["org"] as const,
   agentLatest: ["agents", "latest"] as const,
+  kb: ["kb"] as const,
 };

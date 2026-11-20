@@ -8,6 +8,7 @@ import {
   AppWindow,
   ChevronDown,
   Bell,
+  BookOpen,
   CalendarClock,
   FileCode2,
   FolderTree,
@@ -68,6 +69,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
       { href: "/users", label: "Users & roles", icon: Users, perm: "users.write" },
       { href: "/integrations", label: "Integrations", icon: Plug, perm: "webhooks.write" },
       { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/knowledge", label: "Knowledge base", icon: BookOpen, perm: "kb.read" },
     ],
   },
 ];

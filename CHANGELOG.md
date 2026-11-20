@@ -7,6 +7,21 @@ example, 2026.11.0 is the first release of November 2026. Each release is a git 
 report this version in the console. A build made between releases reports e.g. `2026.11.0-3-g60f25a5`: 3
 commits after 2026.11.0, at commit `60f25a5`.
 
+## 2026.11.50 (2026-11-20): Knowledge base
+
+Server and console; agents stay on 2026.11.29.
+
+### Added
+- **Knowledge base** (Administration → Knowledge base, owners and admins). Everything needed to run, fix and
+  hand over BEACON: what it is and a handover checklist, the architecture and every technology used, the
+  production server, network and DNS, releases, backups, enrollment, agent updates, installing from scratch,
+  development, an environment settings reference, troubleshooting guides, security notes and an FAQ for each
+  part of the console. Search covers titles and full text. Facts that aren't in the code (people, accounts,
+  the domain registrar, the router) are marked **To fill in**; no passwords are written down.
+- The articles are Markdown files in `docs/kb/`, so they're versioned with the code, readable on GitHub, and
+  ship with each release. A test checks every article's header and that links between articles work.
+- New permission `kb.read` (owners and admins). `GET /api/kb` and `GET /api/kb/{slug}`.
+
 ## 2026.11.49 (2026-11-19): Windows shortcuts out of "Not used"; leaner Not used columns
 
 Server and console; agents stay on 2026.11.29.

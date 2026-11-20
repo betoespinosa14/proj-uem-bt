@@ -8,6 +8,8 @@ A self-hostable, multi-tenant **Unified Endpoint Management** platform modeled o
 - **Control-plane API** (Go + PostgreSQL) with live updates over WebSockets.
 - **Lightweight agent** (a single static Go binary) for **Windows, macOS and Linux**.
 
+**Taking over BEACON?** Start with the knowledge base: the Markdown files in [`docs/kb/`](docs/kb/), also shown in the console under **Administration → Knowledge base** (owners and admins). It covers the technologies used, how the server is set up, releases, backups, recovery and FAQs.
+
 Milestone 1 (this repository) delivers enrollment, inventory, telemetry, remote commands and scripts, a compliance engine, scheduled tasks, an app blocklist, alerts, webhooks (SIEM/ITSM), RBAC and a tamper-evident audit log.
 
 ```
@@ -143,8 +145,8 @@ make build-agents   # build the agent downloads with that version
 
 Agents report their version to the server: it's shown on each device, and compliance rules can require
 a minimum, e.g. **Agent version ≥ 2026.11.0**. A build between releases reports e.g. `2026.11.0-3-g60f25a5`
-(3 commits after 2026.11.0, at commit `60f25a5`), with `-dirty` if it had uncommitted changes. Agents don't
-update themselves yet: re-run the install command on a device to upgrade it.
+(3 commits after 2026.11.0, at commit `60f25a5`), with `-dirty` if it had uncommitted changes. From 2026.11.7
+on, agents update themselves when you click **Update agents** in the console; older agents get a one-time script.
 
 ### Layout
 

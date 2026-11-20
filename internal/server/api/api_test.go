@@ -291,6 +291,22 @@ func TestRBACAndCSRF(t *testing.T) {
 	hd.do("PUT", "/api/usage/infrastructure", map[string]any{"app": "Parsec"}, 403, nil)
 	hd.do("POST", "/api/users", map[string]any{"email": "x@y.z", "role": "owner", "password": "correct-horse-1"}, 403, nil)
 
+	// The knowledge base (server setup and recovery notes) is for owners and admins.
+	hd.do("GET", "/api/kb", nil, 403, nil)
+	hd.do("GET", "/api/kb/backups", nil, 403, nil)
+	var kbList struct {
+		Sections []string `json:"sections"`
+		Articles []struct {
+			Slug, Title, Body string
+		} `json:"articles"`
+	}
+	owner.do("GET", "/api/kb", nil, 200, &kbList)
+	if len(kbList.Sections) == 0 || len(kbList.Articles) == 0 || kbList.Articles[0].Body == "" {
+		t.Fatalf("knowledge base list: %+v", kbList)
+	}
+	owner.do("GET", "/api/kb/"+kbList.Articles[0].Slug, nil, 200, nil)
+	owner.do("GET", "/api/kb/no-such-article", nil, 404, nil)
+
 	// Missing CSRF token is rejected even with a valid session.
 	saved := owner.csrf
 	owner.csrf = ""

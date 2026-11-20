@@ -6,16 +6,16 @@ Errors are returned as `{"error": "message"}` with an appropriate 4xx/5xx status
 List endpoints return `{"items": [...]}`. Timestamps are RFC3339 strings, IDs are UUID strings, and a nullable field is `null` when unset.
 
 ## Permissions
-`devices.read, devices.write, commands.run, scripts.write, compliance.write, tasks.write, enrollment.write, users.write, webhooks.write, alerts.write, audit.read, settings.write`
+`devices.read, devices.write, commands.run, scripts.write, compliance.write, tasks.write, enrollment.write, users.write, webhooks.write, alerts.write, audit.read, settings.write, kb.read`
 
 | role     | permissions |
 |----------|-------------|
 | owner    | all |
-| admin    | all except `settings.write` |
+| admin    | all except `settings.write` (so admins have `kb.read`) |
 | helpdesk | devices.read, commands.run, alerts.write |
 | auditor  | devices.read, audit.read |
 
-Every authenticated user can perform the read (GET) endpoints below, except the audit endpoints, which need `audit.read`. `GET /api/users` and `GET /api/webhooks` need `users.write` and `webhooks.write` respectively.
+Every authenticated user can perform the read (GET) endpoints below, except the audit endpoints, which need `audit.read`, and the knowledge base, which needs `kb.read`. `GET /api/users` and `GET /api/webhooks` need `users.write` and `webhooks.write` respectively.
 
 ## Auth
 - `POST /api/auth/signup` `{org_name, name, email, password}` → `Me`. This creates a new organization with the caller as its owner.
@@ -210,6 +210,12 @@ type FleetAppRow = { app: string; users: number;
 
 ## Org settings
 - `GET /api/org` → `Org`; `PATCH /api/org` `{name?, server_url?, usage_tracking?, idle_threshold_sec? (60–900)}` (settings.write). Changing `usage_tracking` or `idle_threshold_sec` re-pushes policy to online agents.
+
+## Knowledge base (kb.read)
+- `GET /api/kb` → `{sections: string[], articles: KBArticle[]}`, every article with its body. `KBArticle` is `{slug, file, title, section, order, summary, reviewed, body}`; `body` is Markdown.
+- `GET /api/kb/{slug}` → `KBArticle`, or 404.
+
+Articles are the Markdown files in `docs/kb/`, embedded into the server when it's built.
 
 ## Live updates
 `GET /api/live` is a WebSocket on the same origin that authenticates with the session cookie. The server pushes events as `{type, data}` messages:

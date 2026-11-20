@@ -101,11 +101,13 @@ const (
 	PermAlertsWrite     = "alerts.write"
 	PermAuditRead       = "audit.read"
 	PermSettingsWrite   = "settings.write"
+	PermKBRead          = "kb.read" // the Knowledge base: server setup and recovery notes
 )
 
 var AllPermissions = []string{
 	PermDevicesRead, PermDevicesWrite, PermCommandsRun, PermScriptsWrite, PermComplianceWrite, PermTasksWrite,
 	PermEnrollmentWrite, PermUsersWrite, PermWebhooksWrite, PermAlertsWrite, PermAuditRead, PermSettingsWrite,
+	PermKBRead,
 }
 
 var Roles = []string{"owner", "admin", "helpdesk", "auditor"}

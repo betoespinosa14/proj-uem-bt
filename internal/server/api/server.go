@@ -171,6 +171,9 @@ func (s *Server) Handler() http.Handler {
 			r.With(s.perm(auth.PermWebhooksWrite)).Delete("/webhooks/{id}", s.deleteWebhook)
 			r.With(s.perm(auth.PermWebhooksWrite)).Post("/webhooks/{id}/test", s.testWebhook)
 
+			r.With(s.perm(auth.PermKBRead)).Get("/kb", s.listKB)
+			r.With(s.perm(auth.PermKBRead)).Get("/kb/{slug}", s.getKB)
+
 			r.Get("/org", s.getOrg)
 			r.Get("/agents/latest", s.latestAgent)
 			r.With(s.perm(auth.PermSettingsWrite)).Patch("/org", s.updateOrg)
